@@ -111,8 +111,6 @@ rm cert/certificate.csr
 3. 以下の権限を追加
    - `Sites.FullControl.All`
      - SharePointサイトへのフルアクセス
-   - `Sites.Search.All`
-     - SharePoint検索へのアクセス
 4. 「管理者の同意を与える」をクリック
 
 #### 4. 必要な情報の取得
