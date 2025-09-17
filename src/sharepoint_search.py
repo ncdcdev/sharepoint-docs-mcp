@@ -65,7 +65,9 @@ class SharePointSearchClient:
                 "Authorization": f"Bearer {access_token}",
             }
 
-            response = requests.get(search_url, params=params, headers=headers, timeout=30)
+            response = requests.get(
+                search_url, params=params, headers=headers, timeout=30
+            )
             response.raise_for_status()
             search_results_json = response.json()
 
@@ -78,7 +80,10 @@ class SharePointSearchClient:
                     relevant_results = primary_results.get("RelevantResults", {})
 
                     # SharePointレスポンス構造に合わせて解析
-                    if "Table" in relevant_results and "Rows" in relevant_results["Table"]:
+                    if (
+                        "Table" in relevant_results
+                        and "Rows" in relevant_results["Table"]
+                    ):
                         rows = relevant_results["Table"]["Rows"].get("results", [])
                         for row in rows:
                             cells = row.get("Cells", {}).get("results", [])

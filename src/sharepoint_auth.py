@@ -24,28 +24,53 @@ class SharePointCertificateAuth:
         self,
         tenant_id: str,
         client_id: str,
-        certificate_path: str,
-        private_key_path: str,
         site_url: str,
+        certificate_path: str = "",
+        certificate_text: str = "",
+        private_key_path: str = "",
+        private_key_text: str = "",
     ):
         self.tenant_id = tenant_id
         self.client_id = client_id
-        self.certificate_path = Path(certificate_path)
-        self.private_key_path = Path(private_key_path)
         self.site_url = site_url
+
+        # 証明書：ファイルパスまたはテキスト
+        self.certificate_path = Path(certificate_path) if certificate_path else None
+        self.certificate_text = certificate_text
+
+        # 秘密鍵：ファイルパスまたはテキスト
+        self.private_key_path = Path(private_key_path) if private_key_path else None
+        self.private_key_text = private_key_text
+
         self._access_token = None
         self._token_expires_at = 0
 
     def _load_certificate(self) -> x509.Certificate:
         """PEM形式の証明書を読み込む"""
-        with open(self.certificate_path, "rb") as cert_file:
-            cert_data = cert_file.read()
+        if self.certificate_text:
+            cert_data = self.certificate_text.encode("utf-8")
+        elif self.certificate_path:
+            with open(self.certificate_path, "rb") as cert_file:
+                cert_data = cert_file.read()
+        else:
+            raise ValueError(
+                "Either certificate_path or certificate_text must be provided"
+            )
+
         return x509.load_pem_x509_certificate(cert_data)
 
     def _load_private_key(self) -> rsa.RSAPrivateKey:
         """PEM形式の秘密鍵を読み込む"""
-        with open(self.private_key_path, "rb") as key_file:
-            key_data = key_file.read()
+        if self.private_key_text:
+            key_data = self.private_key_text.encode("utf-8")
+        elif self.private_key_path:
+            with open(self.private_key_path, "rb") as key_file:
+                key_data = key_file.read()
+        else:
+            raise ValueError(
+                "Either private_key_path or private_key_text must be provided"
+            )
+
         return serialization.load_pem_private_key(key_data, password=None)
 
     def _get_certificate_thumbprint(self) -> str:
@@ -83,13 +108,15 @@ class SharePointCertificateAuth:
         client_assertion = self._create_client_assertion()
 
         # OAuth2 v2.0トークンエンドポイント
-        token_url = f"https://login.microsoftonline.com/{self.tenant_id}/oauth2/v2.0/token"
+        token_url = (
+            f"https://login.microsoftonline.com/{self.tenant_id}/oauth2/v2.0/token"
+        )
 
         # SharePointサイトのテナント名を取得
         from urllib.parse import urlparse
 
         parsed_url = urlparse(self.site_url)
-        tenant_name = parsed_url.netloc.split('.sharepoint.com')[0]
+        tenant_name = parsed_url.netloc.split(".sharepoint.com")[0]
         scope = f"https://{tenant_name}.sharepoint.com/.default"
 
         # リクエストパラメータ
