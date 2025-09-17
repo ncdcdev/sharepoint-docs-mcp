@@ -89,3 +89,54 @@ def some_function():
 - Handle transport-specific errors appropriately
 - Provide clear error messages for invalid transport selection
 - Use proper logging levels for different scenarios
+
+### 日本語文章でのMarkdownフォーマット
+
+日本語でドキュメントを作成する際は、以下のガイドラインに従う：
+
+#### 太字の使用を避ける
+**❌ Wrong**:
+```markdown
+- **機能名**: 機能の説明
+- **設定項目**: 設定の説明
+```
+
+**✅ Correct**:
+```markdown
+- 機能名
+  - 機能の説明
+- 設定項目
+  - 設定の説明
+```
+
+#### コロン「:」の使用を最小限にする
+文末のコロンは日本語として不自然なため、本当に必要な場合のみ使用する
+
+**❌ Wrong**:
+```markdown
+以下の設定を行います：
+必要な情報の取得：
+```
+
+**✅ Correct**:
+```markdown
+以下の設定を行います
+必要な情報の取得
+```
+
+#### 箇条書きでの構造化
+見出しと説明を区別する際は、説明部分を1段階深くインデントする
+
+**❌ Wrong**:
+```markdown
+- 項目名: 項目の説明
+- 別の項目名: 別の項目の説明
+```
+
+**✅ Correct**:
+```markdown
+- 項目名
+  - 項目の説明
+- 別の項目名
+  - 別の項目の説明
+```

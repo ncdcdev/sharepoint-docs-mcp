@@ -5,10 +5,13 @@ description = "SharePoint Search MCP Server"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "cryptography>=45.0.7",
     "fastmcp>=2.12.3",
     "httpx>=0.28.1",
     "mcp[cli]>=1.14.0",
+    "pyjwt>=2.10.1",
     "python-dotenv>=1.1.1",
+    "requests>=2.32.5",
     "typer[all]>=0.17.4",
 ]
 
@@ -57,7 +60,6 @@ ignore = [
     "B008",  # do not perform function calls in argument defaults
     "C901",  # too complex
     "UP035", # typing imports should be used for type annotations
-    "UP038", # isinstance with union syntax not needed for this codebase
 ]
 
 [tool.ruff.lint.per-file-ignores]
