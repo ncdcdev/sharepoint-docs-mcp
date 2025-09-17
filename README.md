@@ -1,85 +1,85 @@
 # SharePoint Docs MCP Server
 
-SharePointドキュメント検索機能を提供するModel Context Protocol (MCP) サーバーです。
-stdioとHTTPの両方のトランスポートに対応しています。
+A Model Context Protocol (MCP) server that provides SharePoint document search functionality.
+Supports both stdio and HTTP transports.
 
-認証はAzure ADの証明書ベース認証のみをサポートしています。
-その他の認証方式には対応していないのでご注意ください。
+Authentication is supported only via Azure AD certificate-based authentication.
+Please note that other authentication methods are not supported.
 
-## 機能
+## Features
 
-- SharePoint検索
-  - 証明書認証によるSharePointドキュメント検索
-- 証明書認証
-  - Azure AD証明書ベース認証をサポート
-- デュアルトランスポート対応
-  - stdio（デスクトップアプリ統合）とHTTP（ネットワークサービス）の両方をサポート
-- 適切なロギング
-  - stdioモードでstdout汚染を防ぐstderrベースのログ設定
+- SharePoint Search
+  - SharePoint document search with certificate authentication
+- Certificate Authentication
+  - Supports Azure AD certificate-based authentication
+- Dual Transport Support
+  - Supports both stdio (desktop app integration) and HTTP (network service)
+- Proper Logging
+  - stderr-based logging configuration to prevent stdout pollution in stdio mode
 
-### SharePoint機能
+### SharePoint Features
 
 - sharepoint_docs_search
-  - キーワードによるドキュメント検索
+  - Document search by keywords
 - sharepoint_docs_download
-  - 検索結果からファイルをダウンロード
+  - File download from search results
 
-## 必要要件
+## Requirements
 
-- Python 3.12以上
-- uv (パッケージマネージャー)
+- Python 3.12 or higher
+- uv (package manager)
 
-## インストール
+## Installation
 
 ```bash
-# リポジトリをクローン
+# Clone the repository
 git clone <repository-url>
 cd sharepoint-docs-mcp
 
-# 依存関係をインストール
+# Install dependencies
 uv sync --dev
 ```
 
-## SharePoint設定
+## SharePoint Configuration
 
-### 1. 環境変数の設定
+### 1. Environment Variables Setup
 
-`.env`ファイルを作成し、以下の設定を行います（`.env.example`を参考）：
+Create a `.env` file with the following configuration (refer to `.env.example`):
 
 ```bash
-# SharePoint設定
+# SharePoint configuration
 SHAREPOINT_BASE_URL=https://yourcompany.sharepoint.com
 SHAREPOINT_SITE_NAME=yoursite
 SHAREPOINT_TENANT_ID=your-tenant-id-here
 SHAREPOINT_CLIENT_ID=your-client-id-here
 
-# SHAREPOINT_SITE_NAME を空にするとテナント全体を検索対象にできます
+# Leave SHAREPOINT_SITE_NAME empty to search across the entire tenant
 # SHAREPOINT_SITE_NAME=
 
-# 証明書認証設定（ファイルパスまたはテキストのいずれかを指定）
-# 優先順位: 1. テキスト、2. ファイルパス
+# Certificate authentication configuration (specify either file path or text)
+# Priority: 1. Text, 2. File path
 
-# ファイルパスで指定する場合
+# Using file paths
 SHAREPOINT_CERTIFICATE_PATH=path/to/your/certificate.pem
 SHAREPOINT_PRIVATE_KEY_PATH=path/to/your/private_key.pem
 
-# または、テキストで直接指定する場合（Cloud Run等での利用）
-# テキストが設定されている場合、ファイルパスより優先されます
+# Or specify directly as text (for Cloud Run etc.)
+# Text settings take priority over file paths
 # SHAREPOINT_CERTIFICATE_TEXT="-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----"
 # SHAREPOINT_PRIVATE_KEY_TEXT="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"
 
-# 検索設定（オプション）
+# Search configuration (optional)
 SHAREPOINT_DEFAULT_MAX_RESULTS=20
 SHAREPOINT_ALLOWED_FILE_EXTENSIONS=pdf,docx,xlsx,pptx,txt,md
 
-# ツール説明文のカスタマイズ（オプション）
-# SHAREPOINT_SEARCH_TOOL_DESCRIPTION=社内文書を検索します
-# SHAREPOINT_DOWNLOAD_TOOL_DESCRIPTION=検索結果からファイルをダウンロードします
+# Tool description customization (optional)
+# SHAREPOINT_SEARCH_TOOL_DESCRIPTION=Search internal documents
+# SHAREPOINT_DOWNLOAD_TOOL_DESCRIPTION=Download files from search results
 ```
 
-### 2. 証明書の作成
+### 2. Certificate Creation
 
-証明書ベース認証用の自己署名証明書を作成します：
+Create a self-signed certificate for certificate-based authentication:
 
 ```bash
 mkdir -p cert
@@ -89,133 +89,134 @@ openssl x509 -req -in cert/certificate.csr -signkey cert/private_key.pem -out ce
 rm cert/certificate.csr
 ```
 
-作成されるファイル
+Generated files:
 - `cert/certificate.pem`
-  - 公開証明書（Azure ADにアップロード）
+  - Public certificate (upload to Azure AD)
 - `cert/private_key.pem`
-  - 秘密鍵（サーバーで使用）
+  - Private key (used by server)
 
-### 3. Azure AD証明書認証の設定
+### 3. Azure AD Certificate Authentication Setup
 
-#### 1. Azure ADアプリケーションの登録
-1. [Azure Portal](https://portal.azure.com/) → EntraID → アプリの登録
-2. 「新規登録」をクリック
-3. アプリケーション名を入力（例: SharePoint MCP Server）
-4. 登録ボタンをクリック
+#### 1. Azure AD Application Registration
+1. Go to [Azure Portal](https://portal.azure.com/) → Entra ID → App registrations
+2. Click "New registration"
+3. Enter application name (e.g., SharePoint MCP Server)
+4. Click "Register"
 
-#### 2. 証明書のアップロード
-1. 作成したアプリを選択 → 「証明書とシークレット」
-2. 「証明書」タブで「証明書のアップロード」をクリック
-3. 作成した `cert/certificate.pem` をアップロード
+#### 2. Certificate Upload
+1. Select the created app → "Certificates & secrets"
+2. Click "Upload certificate" in the "Certificates" tab
+3. Upload the created `cert/certificate.pem`
 
-#### 3. API権限の設定
-1. 「API権限」タブに移動
-2. 「権限の追加」→「Microsoft Graph」→「アプリケーションの権限」
-3. 以下の権限を追加
+#### 3. API Permissions Configuration
+1. Go to "API permissions" tab
+2. "Add a permission" → "Microsoft Graph" → "Application permissions"
+3. Add the following permissions:
    - `Sites.FullControl.All`
-     - SharePointサイトへのフルアクセス
-4. 「管理者の同意を与える」をクリック
+     - Full access to SharePoint sites
+4. Click "Grant admin consent"
 
-#### 4. 必要な情報の取得
-- テナントID
-  - 「概要」ページのディレクトリ（テナント）ID
-- クライアントID
-  - 「概要」ページのアプリケーション（クライアント）ID
+#### 4. Required Information Retrieval
+- Tenant ID
+  - Directory (tenant) ID from the "Overview" page
+- Client ID
+  - Application (client) ID from the "Overview" page
 
-### 4. ツール説明文のカスタマイズ（オプション）
+### 4. Tool Description Customization (Optional)
 
-MCPツールの説明文を日本語などにカスタマイズできます：
+You can customize MCP tool descriptions in Japanese or other languages:
 
-- `SHAREPOINT_SEARCH_TOOL_DESCRIPTION`: 検索ツールの説明文（デフォルト: "Search for documents in SharePoint"）
-- `SHAREPOINT_DOWNLOAD_TOOL_DESCRIPTION`: ダウンロードツールの説明文（デフォルト: "Download a file from SharePoint"）
+- `SHAREPOINT_SEARCH_TOOL_DESCRIPTION`: Search tool description (default: "Search for documents in SharePoint")
+- `SHAREPOINT_DOWNLOAD_TOOL_DESCRIPTION`: Download tool description (default: "Download a file from SharePoint")
 
-例：
+Example:
 ```bash
-SHAREPOINT_SEARCH_TOOL_DESCRIPTION=社内文書を検索します
-SHAREPOINT_DOWNLOAD_TOOL_DESCRIPTION=検索結果からファイルをダウンロードします
+SHAREPOINT_SEARCH_TOOL_DESCRIPTION=Search internal documents
+SHAREPOINT_DOWNLOAD_TOOL_DESCRIPTION=Download files from search results
 ```
 
-## 使用方法
+## Usage
 
-### MCPサーバーの起動
+### MCP Server Startup
 
-**stdioモード（デスクトップアプリ統合用）**
+**stdio mode (for desktop app integration)**
 ```bash
 uv run sharepoint-docs-mcp --transport stdio
 ```
 
-**HTTPモード（ネットワークサービス用）**
+**HTTP mode (for network services)**
 ```bash
 uv run sharepoint-docs-mcp --transport http --host 127.0.0.1 --port 8000
 ```
 
-**ヘルプの表示**
+**Show help**
 ```bash
 uv run sharepoint-docs-mcp --help
 ```
 
-### MCP Inspector での検証
+### MCP Inspector Verification
 
-**stdioモード**
-1. MCP Inspectorを開く
-2. 「Command」を選択
+**stdio mode**
+1. Open MCP Inspector
+2. Select "Command"
 3. Command: `uv`
 4. Arguments: `run,sharepoint-docs-mcp,--transport,stdio`
-5. Working Directory: プロジェクトのルートディレクトリ
-6. 「Connect」をクリック
+5. Working Directory: Project root directory
+6. Click "Connect"
 
-**HTTPモード**
-1. サーバーを起動: `uv run sharepoint-docs-mcp --transport http`
-2. MCP Inspectorで「URL」を選択
+**HTTP mode**
+1. Start server: `uv run sharepoint-docs-mcp --transport http`
+2. Select "URL" in MCP Inspector
 3. URL: `http://127.0.0.1:8000/mcp/`
-4. 「Connect」をクリック
+4. Click "Connect"
 
-### 開発用コマンド
+### Development Commands
 
-**コード品質チェック**
+**Code quality checks**
 ```bash
-# Lint（静的解析）
+# Lint (static analysis)
 uv run lint
 
-# 型チェック（ty）
+# Type checking (ty)
 uv run typecheck
 
-# 全体チェック（型チェック + lint）
+# All checks (type checking + lint)
 uv run check
 ```
 
-**コードフォーマット**
+**Code formatting**
 ```bash
-# フォーマットのみ
+# Format only
 uv run fmt
 
-# 自動修正 + フォーマット
+# Auto-fix + format
 uv run fix
 ```
 
-## プロジェクト構造
+## Project Structure
 
 ```
 sharepoint-docs-mcp/
 ├── src/
 │   ├── __init__.py
-│   ├── server.py       # MCPサーバーのコアロジック
-│   └── main.py         # CLIエントリポイント
-├── scripts.py          # 開発用ユーティリティコマンド
-├── pyproject.toml      # プロジェクト設定
-└── README.md
+│   ├── server.py       # MCP server core logic
+│   └── main.py         # CLI entry point
+├── scripts.py          # Development utility commands
+├── pyproject.toml      # Project configuration
+├── README.md           # English documentation
+└── README_ja.md        # Japanese documentation
 ```
 
-## Claude Desktop との統合
+## Claude Desktop Integration
 
-Claude Desktopと統合するには、設定ファイルを更新してください
+To integrate with Claude Desktop, update the configuration file:
 
 - Windows
   - `%APPDATA%/Claude/claude_desktop_config.json`
 - macOS
   - `~/Library/Application\ Support/Claude/claude_desktop_config.json`
 
-### 設定例1: 環境変数を直接指定
+### Configuration Example 1: Direct Environment Variables
 
 ```json
 {
@@ -237,7 +238,7 @@ Claude Desktopと統合するには、設定ファイルを更新してくださ
 }
 ```
 
-### 設定例2: .envファイルを使用（推奨）
+### Configuration Example 2: Using .env File (Recommended)
 
 ```json
 {
@@ -251,65 +252,64 @@ Claude Desktopと統合するには、設定ファイルを更新してくださ
 }
 ```
 
-この場合、プロジェクトルートの`.env`ファイルに設定を記載します。
+In this case, place the configuration in the `.env` file at the project root.
 
+## Development
 
-## 開発
+### Code Quality Tools
 
-### コード品質ツール
+- **ruff**: Fast Python linter and formatter
+- **ty**: Fast type checker (pre-release version)
 
-- **ruff**: 高速なPythonリンター・フォーマッター
-- **ty**: 高速型チェッカー（プレリリース版）
+### Configuration Files
 
-### 設定ファイル
+- `pyproject.toml`: Project configuration, dependencies, development tool settings
+- ruff configuration: Code style and rule settings
+- ty configuration: Detailed type checking settings
 
-- `pyproject.toml`: プロジェクト設定、依存関係、開発ツールの設定
-- ruff設定: コードスタイル、ルール設定
-- ty設定: 型チェックの詳細設定
+## Troubleshooting
 
-## トラブルシューティング
+### Common Issues
 
-### よくある問題
-
-#### 1. 認証エラー
+#### 1. Authentication Errors
 ```
 SharePoint configuration is invalid: SHAREPOINT_TENANT_ID is required
 ```
-- `.env`ファイルが正しく設定されているか確認
-- 環境変数が正しく読み込まれているか確認
+- Check if `.env` file is configured correctly
+- Verify environment variables are loaded properly
 
-#### 2. 証明書エラー
+#### 2. Certificate Errors
 ```
 Certificate file not found: path/to/certificate.pem
 ```
-- 証明書ファイルのパスが正しいか確認
-- 証明書が正しく作成されているか確認
-- ファイルの読み取り権限があるか確認
+- Verify certificate file path is correct
+- Check if certificate is created properly
+- Ensure file read permissions are granted
 
-#### 3. API権限エラー
+#### 3. API Permission Errors
 ```
 Access token request failed
 ```
-- Azure ADアプリの権限設定を確認
-- 管理者の同意が行われているか確認
-- クライアントIDとテナントIDが正しいか確認
+- Check Azure AD app permission settings
+- Verify admin consent has been granted
+- Confirm client ID and tenant ID are correct
 
-#### 4. 設定確認コマンド
+#### 4. Configuration Check Command
 ```bash
-# 設定ステータスを確認（MCP Inspector使用）
-# get_sharepoint_config_status ツールを実行
+# Check configuration status (using MCP Inspector)
+# Execute get_sharepoint_config_status tool
 ```
 
-### デバッグ方法
+### Debugging Methods
 
-#### MCP Inspectorを使用
+#### Using MCP Inspector
 ```bash
 npx @modelcontextprotocol/inspector uv run sharepoint-docs-mcp --transport stdio
 ```
 
-#### ログレベルの調整
-サーバー起動時に詳細なログが出力されます。エラーの詳細は標準エラー出力に表示されます。
+#### Log Level Adjustment
+Detailed logs are output when starting the server. Error details are displayed in standard error output.
 
-## ライセンス
+## License
 
-MIT License - 詳細は[LICENSE](LICENSE)ファイルを参照してください。
+MIT License - See [LICENSE](LICENSE) file for details.
