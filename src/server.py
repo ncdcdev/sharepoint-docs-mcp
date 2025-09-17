@@ -165,6 +165,7 @@ def sharepoint_docs_download(file_path: str) -> str:
         raise RuntimeError(error_msg) from e
 
 
-# カスタム説明でツールを登録
-mcp.tool(description=config.search_tool_description)(sharepoint_docs_search)
-mcp.tool(description=config.download_tool_description)(sharepoint_docs_download)
+def register_tools():
+    """MCPツールを登録"""
+    mcp.tool(description=config.search_tool_description)(sharepoint_docs_search)
+    mcp.tool(description=config.download_tool_description)(sharepoint_docs_download)
