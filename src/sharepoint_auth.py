@@ -26,11 +26,13 @@ class SharePointCertificateAuth:
         client_id: str,
         certificate_path: str,
         private_key_path: str,
+        site_url: str,
     ):
         self.tenant_id = tenant_id
         self.client_id = client_id
         self.certificate_path = Path(certificate_path)
         self.private_key_path = Path(private_key_path)
+        self.site_url = site_url
         self._access_token = None
         self._token_expires_at = 0
 
@@ -65,8 +67,8 @@ class SharePointCertificateAuth:
         # JWTペイロード
         now = int(time.time())
         payload = {
-            "aud": f"https://login.microsoftonline.com/{self.tenant_id}/oauth2/token",
-            "exp": now + 600,  # 10分後に期限切れ
+            "aud": f"https://login.microsoftonline.com/{self.tenant_id}/oauth2/v2.0/token",
+            "exp": now + 300,  # 5分後に期限切れ
             "iss": self.client_id,
             "jti": str(uuid.uuid4()),
             "nbf": now,
@@ -80,8 +82,15 @@ class SharePointCertificateAuth:
         """アクセストークンを要求"""
         client_assertion = self._create_client_assertion()
 
-        # OAuth2トークンエンドポイント
-        token_url = f"https://login.microsoftonline.com/{self.tenant_id}/oauth2/token"
+        # OAuth2 v2.0トークンエンドポイント
+        token_url = f"https://login.microsoftonline.com/{self.tenant_id}/oauth2/v2.0/token"
+
+        # SharePointサイトのテナント名を取得
+        from urllib.parse import urlparse
+
+        parsed_url = urlparse(self.site_url)
+        tenant_name = parsed_url.netloc.split('.sharepoint.com')[0]
+        scope = f"https://{tenant_name}.sharepoint.com/.default"
 
         # リクエストパラメータ
         data = {
@@ -89,7 +98,7 @@ class SharePointCertificateAuth:
             "client_id": self.client_id,
             "client_assertion_type": "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
             "client_assertion": client_assertion,
-            "resource": "https://graph.microsoft.com/",
+            "scope": scope,
         }
 
         headers = {"Content-Type": "application/x-www-form-urlencoded"}

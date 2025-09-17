@@ -56,6 +56,7 @@ def _get_sharepoint_client() -> SharePointSearchClient:
             client_id=config.client_id,
             certificate_path=config.certificate_path,
             private_key_path=config.private_key_path,
+            site_url=config.site_url,
         )
 
         # SharePointクライアントを初期化
