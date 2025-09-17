@@ -1,0 +1,70 @@
+[project]
+name = "sharepoint-search-mcp"
+version = "0.1.0"
+description = "SharePoint Search MCP Server"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastmcp>=2.12.3",
+    "httpx>=0.28.1",
+    "mcp[cli]>=1.14.0",
+    "python-dotenv>=1.1.1",
+    "typer[all]>=0.17.4",
+]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.8.0",
+    "ty>=0.0.1a16",
+]
+
+[project.scripts]
+sharepoint-search-mcp = "src.main:app"
+lint = "scripts:lint"
+fmt = "scripts:format"
+fix = "scripts:fix"
+typecheck = "scripts:type_check"
+check = "scripts:check"
+
+[tool.uv]
+package = true
+
+
+[tool.ty]
+# ty設定 - 高速型チェッカー
+[tool.ty.environment]
+python-version = "3.12"
+
+[tool.ty.src]
+exclude = [".venv/**"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "UP",  # pyupgrade
+]
+ignore = [
+    "E501",  # line too long, handled by black
+    "B008",  # do not perform function calls in argument defaults
+    "C901",  # too complex
+    "UP035", # typing imports should be used for type annotations
+    "UP038", # isinstance with union syntax not needed for this codebase
+]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
