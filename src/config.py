@@ -37,6 +37,14 @@ class SharePointConfig:
             os.getenv("SHAREPOINT_ALLOWED_FILE_EXTENSIONS", "pdf,docx,xlsx,pptx,txt")
         )
 
+        # ツール説明文のカスタマイズ
+        self.search_tool_description = os.getenv(
+            "SHAREPOINT_SEARCH_TOOL_DESCRIPTION", "Search for documents in SharePoint"
+        )
+        self.download_tool_description = os.getenv(
+            "SHAREPOINT_DOWNLOAD_TOOL_DESCRIPTION", "Download a file from SharePoint"
+        )
+
     @property
     def site_url(self) -> str:
         """サイトURLを取得（サイト名が指定されている場合のみ）"""
