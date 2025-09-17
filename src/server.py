@@ -166,6 +166,6 @@ def sharepoint_docs_download(file_path: str) -> str:
 
 
 def register_tools():
-    """MCPツールを登録"""
+    """Register MCP tools"""
     mcp.tool(description=config.search_tool_description)(sharepoint_docs_search)
     mcp.tool(description=config.download_tool_description)(sharepoint_docs_download)
