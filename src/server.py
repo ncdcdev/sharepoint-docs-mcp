@@ -165,5 +165,3 @@ def sharepoint_docs_download(file_path: str) -> str:
         error_msg = f"SharePoint file download failed: {str(e)}"
         logging.error(error_msg)
         raise RuntimeError(error_msg) from e
-
-

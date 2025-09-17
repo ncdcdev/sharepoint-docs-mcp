@@ -41,6 +41,9 @@ class SharePointSearchClient:
         # 検索クエリの構築
         search_query = query
 
+        # フルURLを使用してサイトを絞り込み
+        search_query += f" AND site:{self.site_url}"
+
         # ファイル拡張子フィルターを追加
         if file_extensions:
             ext_filter = " OR ".join(
@@ -140,6 +143,7 @@ class SharePointSearchClient:
 
             # SharePointのファイルパスからサーバー相対URLを抽出
             from urllib.parse import unquote, urlparse
+
             parsed_url = urlparse(file_path)
 
             # サーバー相対パスを取得（/sites/... の形式）
