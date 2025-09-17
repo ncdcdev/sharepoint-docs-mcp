@@ -1,7 +1,7 @@
 [project]
-name = "sharepoint-search-mcp"
+name = "sharepoint-docs-mcp"
 version = "0.1.0"
-description = "SharePoint Search MCP Server"
+description = "SharePoint Document Search MCP Server"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
@@ -22,7 +22,7 @@ dev = [
 ]
 
 [project.scripts]
-sharepoint-search-mcp = "src.main:app"
+sharepoint-docs-mcp = "src.main:app"
 lint = "scripts:lint"
 fmt = "scripts:format"
 fix = "scripts:fix"
