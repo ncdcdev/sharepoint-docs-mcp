@@ -5,7 +5,8 @@ SharePoint検索機能モジュール
 import logging
 from typing import Any
 
-import requests
+from office365.runtime.auth.token_response import TokenResponse
+from office365.sharepoint.client_context import ClientContext
 
 from .sharepoint_auth import SharePointCertificateAuth
 
@@ -19,22 +20,18 @@ class SharePointSearchClient:
         self.site_url = site_url.rstrip("/")
         self.auth = auth
 
-    def _make_request(
-        self, url: str, params: dict[str, Any] | None = None
-    ) -> dict[str, Any]:
-        """SharePoint APIにリクエストを送信"""
-        access_token = self.auth.get_access_token()
-        headers = {
-            "Authorization": f"Bearer {access_token}",
-            "Accept": "application/json",
-            "Content-Type": "application/json",
-        }
+    def _get_sp_context(self) -> ClientContext:
+        """SharePointコンテキストを取得"""
+        def token_func():
+            """トークンコールバック関数"""
+            access_token = self.auth.get_access_token()
+            if not access_token:
+                raise ValueError("Failed to get access token with certificate")
+            return TokenResponse(access_token=access_token, token_type="Bearer")
 
-        logger.info(f"Making request to SharePoint API: {url}")
-        response = requests.get(url, headers=headers, params=params, timeout=30)
-        response.raise_for_status()
-
-        return response.json()
+        context = ClientContext(self.site_url)
+        context.with_access_token(token_func)
+        return context
 
     def search_documents(
         self,
@@ -53,11 +50,12 @@ class SharePointSearchClient:
         Returns:
             検索結果のリスト
         """
-        # 検索APIエンドポイント
-        search_url = f"{self.site_url}/_api/search/query"
+        logger.info(f"Searching for documents containing: {query}")
 
-        # 検索クエリの構築
-        search_query = f"'{query}' AND path:{self.site_url}"
+        sp_context = self._get_sp_context()
+
+        # 検索クエリの構築 - まずは単純なクエリから開始
+        search_query = query
 
         # ファイル拡張子フィルターを追加
         if file_extensions:
@@ -66,60 +64,104 @@ class SharePointSearchClient:
             )
             search_query += f" AND ({ext_filter})"
 
-        # 検索パラメータ
-        params = {
-            "querytext": search_query,
-            "rowlimit": max_results,
-            "selectproperties": "Title,Path,Size,LastModifiedTime,FileExtension,HitHighlightedSummary,Author",
-            "trimduplicates": "false",
-        }
-
-        logger.info(f"Searching SharePoint with query: {search_query}")
-
         try:
-            result = self._make_request(search_url, params)
+            # まず基本的な接続をテスト
+            logger.info("Testing basic SharePoint connection...")
+            try:
+                test_response = sp_context.web.context.execute_request_direct("web/title")
+                logger.info(f"Basic connection test successful: {test_response}")
+            except Exception as e:
+                logger.warning(f"Basic connection test failed: {e}")
 
-            # 検索結果を解析
-            search_results = []
-            primary_results = (
-                result.get("d", {}).get("query", {}).get("PrimaryQueryResult", {})
-            )
-            relevant_results = primary_results.get("RelevantResults", {})
-            rows = relevant_results.get("Table", {}).get("Rows", {}).get("results", [])
+            # SharePoint Search APIを正しい形式で呼び出し
+            access_token = self.auth.get_access_token()
 
-            for row in rows:
-                cells = row.get("Cells", {}).get("results", [])
-                doc_info = {}
+            import requests
 
-                # セルからプロパティを抽出
-                for cell in cells:
-                    key = cell.get("Key", "")
-                    value = cell.get("Value", "")
+            # SharePoint REST APIの正しい構文（パラメータを単一引用符で囲む）
+            params = {
+                "querytext": f"'{search_query}'",  # 単一引用符で囲む
+                "selectproperties": "'Title,Path,Size,LastModifiedTime,FileExtension,HitHighlightedSummary'"  # 単一引用符で囲む
+            }
 
-                    if key == "Title":
-                        doc_info["title"] = value
-                    elif key == "Path":
-                        doc_info["path"] = value
-                    elif key == "Size":
-                        doc_info["size"] = int(value) if value else 0
-                    elif key == "LastModifiedTime":
-                        doc_info["last_modified"] = value
-                    elif key == "FileExtension":
-                        doc_info["file_extension"] = value
-                    elif key == "HitHighlightedSummary":
-                        doc_info["summary"] = value
-                    elif key == "Author":
-                        doc_info["author"] = value
+            search_url = f"{self.site_url}/_api/search/query"
 
-                if doc_info.get("path"):  # パスが存在する場合のみ結果に含める
-                    search_results.append(doc_info)
+            headers = {
+                'Accept': 'application/json;odata=verbose',
+                'Authorization': f'Bearer {access_token}'
+            }
 
-            logger.info(f"Found {len(search_results)} documents")
-            return search_results
+            logger.info(f"Sending GET request to: {search_url}")
+            logger.info(f"Params: {params}")
 
-        except requests.RequestException as e:
-            logger.error(f"SharePoint search request failed: {e}")
-            raise
+            response = requests.get(search_url, params=params, headers=headers, timeout=30)
+
+            logger.info(f"Response status: {response.status_code}")
+            if response.status_code != 200:
+                logger.error(f"Response content: {response.text}")
+
+            response.raise_for_status()
+            search_results_json = response.json()
+
+            logger.info(f"Response JSON structure: {list(search_results_json.keys()) if isinstance(search_results_json, dict) else type(search_results_json)}")
+            logger.info(f"Content of 'd': {search_results_json.get('d', 'Not found')}")
+
+            results = []
+            # JSONレスポンスの解析 - SharePoint OData形式
+            if isinstance(search_results_json, dict) and 'd' in search_results_json:
+                d_content = search_results_json['d']
+                logger.info(f"Type of 'd' content: {type(d_content)}")
+
+                if isinstance(d_content, dict):
+                    logger.info(f"Keys in 'd': {list(d_content.keys())}")
+
+                    # OData v3形式
+                    if 'PrimaryQueryResult' in d_content:
+                        primary_results = d_content['PrimaryQueryResult']
+                        relevant_results = primary_results.get('RelevantResults', {})
+                    # クエリ結果が直接d以下にある場合
+                    elif 'query' in d_content:
+                        primary_results = d_content['query'].get('PrimaryQueryResult', {})
+                        relevant_results = primary_results.get('RelevantResults', {})
+                    else:
+                        # その他の構造の場合、デバッグ情報を出力
+                        logger.info(f"Unexpected response structure in 'd': {list(d_content.keys())}")
+                        relevant_results = {}
+                else:
+                    logger.error(f"'d' is not a dict but {type(d_content)}: {d_content}")
+                    relevant_results = {}
+
+                # レスポンス解析の修正 - 'Rows'の中に'results'配列がある
+                if 'Table' in relevant_results and 'Rows' in relevant_results['Table']:
+                    rows = relevant_results['Table']['Rows'].get('results', [])
+                    for row in rows:
+                        cells = row.get('Cells', {}).get('results', [])
+                        result_item = {}
+
+                        # セル情報を解析
+                        for cell in cells:
+                            key = cell['Key']
+                            value = cell['Value']
+
+                            if key == 'Title':
+                                result_item['title'] = value
+                            elif key == 'Path':
+                                result_item['path'] = value
+                            elif key == 'Size':
+                                result_item['size'] = value
+                            elif key == 'LastModifiedTime':
+                                result_item['modified'] = value
+                            elif key == 'FileExtension':
+                                result_item['extension'] = value
+                            elif key == 'HitHighlightedSummary':
+                                result_item['summary'] = value
+
+                        if result_item:
+                            results.append(result_item)
+
+            logger.info(f"Found {len(results)} search results")
+            return results
+
         except Exception as e:
-            logger.error(f"SharePoint search failed: {e}")
-            raise
+            logger.error(f"Search failed: {str(e)}")
+            return [{"error": f"Search failed: {str(e)}"}]
