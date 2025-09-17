@@ -20,9 +20,11 @@ class SharePointConfig:
         self.tenant_id = os.getenv("SHAREPOINT_TENANT_ID", "")
         self.client_id = os.getenv("SHAREPOINT_CLIENT_ID", "")
 
-        # 証明書認証設定
+        # 証明書認証設定（ファイルパスまたはテキスト）
         self.certificate_path = os.getenv("SHAREPOINT_CERTIFICATE_PATH", "")
+        self.certificate_text = os.getenv("SHAREPOINT_CERTIFICATE_TEXT", "")
         self.private_key_path = os.getenv("SHAREPOINT_PRIVATE_KEY_PATH", "")
+        self.private_key_text = os.getenv("SHAREPOINT_PRIVATE_KEY_TEXT", "")
 
         # 検索設定
         self.default_max_results = int(
@@ -51,14 +53,20 @@ class SharePointConfig:
         if not self.client_id:
             errors.append("SHAREPOINT_CLIENT_ID is required")
 
-        if not self.certificate_path:
-            errors.append("SHAREPOINT_CERTIFICATE_PATH is required")
-        elif not Path(self.certificate_path).exists():
+        # 証明書：ファイルパスまたはテキストのいずれかが必要
+        if not self.certificate_path and not self.certificate_text:
+            errors.append(
+                "Either SHAREPOINT_CERTIFICATE_PATH or SHAREPOINT_CERTIFICATE_TEXT is required"
+            )
+        elif self.certificate_path and not Path(self.certificate_path).exists():
             errors.append(f"Certificate file not found: {self.certificate_path}")
 
-        if not self.private_key_path:
-            errors.append("SHAREPOINT_PRIVATE_KEY_PATH is required")
-        elif not Path(self.private_key_path).exists():
+        # 秘密鍵：ファイルパスまたはテキストのいずれかが必要
+        if not self.private_key_path and not self.private_key_text:
+            errors.append(
+                "Either SHAREPOINT_PRIVATE_KEY_PATH or SHAREPOINT_PRIVATE_KEY_TEXT is required"
+            )
+        elif self.private_key_path and not Path(self.private_key_path).exists():
             errors.append(f"Private key file not found: {self.private_key_path}")
 
         return errors
