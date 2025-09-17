@@ -1,7 +1,10 @@
 # SharePoint Docs MCP Server
 
-SharePointドキュメント検索機能を提供するModel Context Protocol (MCP) サーバーです。stdioとHTTPの両方のトランスポートに対応しています。
-認証はAzure ADの証明書ベース認証のみをサポートしています。その他の認証方式には対応していないのでご注意ください。
+SharePointドキュメント検索機能を提供するModel Context Protocol (MCP) サーバーです。
+stdioとHTTPの両方のトランスポートに対応しています。
+
+認証はAzure ADの証明書ベース認証のみをサポートしています。
+その他の認証方式には対応していないのでご注意ください。
 
 ## 機能
 
