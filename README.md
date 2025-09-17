@@ -139,24 +139,40 @@ SHAREPOINT_DOWNLOAD_TOOL_DESCRIPTION=検索結果からファイルをダウン�
 
 ### MCPサーバーの起動
 
-**stdioモード（デスクトップアプリ統合用）:**
+**stdioモード（デスクトップアプリ統合用）**
 ```bash
 uv run sharepoint-docs-mcp --transport stdio
 ```
 
-**HTTPモード（ネットワークサービス用）:**
+**HTTPモード（ネットワークサービス用）**
 ```bash
 uv run sharepoint-docs-mcp --transport http --host 127.0.0.1 --port 8000
 ```
 
-**ヘルプの表示:**
+**ヘルプの表示**
 ```bash
 uv run sharepoint-docs-mcp --help
 ```
 
+### MCP Inspector での検証
+
+**stdioモード**
+1. MCP Inspectorを開く
+2. 「Command」を選択
+3. Command: `uv`
+4. Arguments: `run,sharepoint-docs-mcp,--transport,stdio`
+5. Working Directory: プロジェクトのルートディレクトリ
+6. 「Connect」をクリック
+
+**HTTPモード**
+1. サーバーを起動: `uv run sharepoint-docs-mcp --transport http`
+2. MCP Inspectorで「URL」を選択
+3. URL: `http://127.0.0.1:8000/mcp/`
+4. 「Connect」をクリック
+
 ### 開発用コマンド
 
-**コード品質チェック:**
+**コード品質チェック**
 ```bash
 # Lint（静的解析）
 uv run lint
@@ -168,7 +184,7 @@ uv run typecheck
 uv run check
 ```
 
-**コードフォーマット:**
+**コードフォーマット**
 ```bash
 # フォーマットのみ
 uv run fmt
@@ -237,21 +253,6 @@ Claude Desktopと統合するには、設定ファイルを更新してくださ
 
 この場合、プロジェクトルートの`.env`ファイルに設定を記載します。
 
-## MCP Inspector での検証
-
-### stdioモード
-1. MCP Inspectorを開く
-2. 「Command」を選択
-3. Command: `uv`
-4. Arguments: `run,sharepoint-docs-mcp,--transport,stdio`
-5. Working Directory: プロジェクトのルートディレクトリ
-6. 「Connect」をクリック
-
-### HTTPモード
-1. サーバーを起動: `uv run sharepoint-docs-mcp --transport http`
-2. MCP Inspectorで「URL」を選択
-3. URL: `http://127.0.0.1:8000/mcp/`
-4. 「Connect」をクリック
 
 ## 開発
 
