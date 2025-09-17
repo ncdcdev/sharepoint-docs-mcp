@@ -44,9 +44,13 @@ uv sync --dev
 
 ```bash
 # SharePoint設定
-SHAREPOINT_SITE_URL=https://yourcompany.sharepoint.com/sites/yoursite
+SHAREPOINT_BASE_URL=https://yourcompany.sharepoint.com
+SHAREPOINT_SITE_NAME=yoursite
 SHAREPOINT_TENANT_ID=your-tenant-id-here
 SHAREPOINT_CLIENT_ID=your-client-id-here
+
+# SHAREPOINT_SITE_NAME を空にするとテナント全体を検索対象にできます
+# SHAREPOINT_SITE_NAME=
 
 # 証明書認証設定（ファイルパスまたはテキストのいずれかを指定）
 # 優先順位: 1. テキスト、2. ファイルパス
@@ -186,7 +190,8 @@ Claude Desktopと統合するには、設定ファイルを更新してくださ
       "args": ["run", "sharepoint-docs-mcp", "--transport", "stdio"],
       "cwd": "/path/to/sharepoint-docs-mcp",
       "env": {
-        "SHAREPOINT_SITE_URL": "https://yourcompany.sharepoint.com/sites/yoursite",
+        "SHAREPOINT_BASE_URL": "https://yourcompany.sharepoint.com",
+        "SHAREPOINT_SITE_NAME": "yoursite",
         "SHAREPOINT_TENANT_ID": "your-tenant-id-here",
         "SHAREPOINT_CLIENT_ID": "your-client-id-here",
         "SHAREPOINT_CERTIFICATE_PATH": "./cert/certificate.pem",
