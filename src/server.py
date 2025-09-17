@@ -1,5 +1,4 @@
 import logging
-import platform
 import sys
 from typing import Any
 
@@ -73,7 +72,7 @@ def _get_sharepoint_client() -> SharePointSearchClient:
 
 
 @mcp.tool
-def search_sharepoint_documents(
+def sharepoint_docs_search(
     query: str,
     max_results: int = 20,
     file_extensions: list[str] | None = None,
@@ -134,15 +133,35 @@ def search_sharepoint_documents(
 
 
 @mcp.tool
-def get_system_info() -> dict[str, str]:
+def sharepoint_docs_download(file_path: str) -> str:
     """
-    現在のシステムの基本情報を取得します。
+    SharePointからファイルをダウンロードします。
+
+    Args:
+        file_path: ダウンロードするファイルのフルパス（sharepoint_docs_searchの結果から取得）
 
     Returns:
-        PythonのバージョンとOSプラットフォームを含む辞書。
+        ダウンロードしたファイルの内容（Base64エンコード済み文字列）
     """
-    logging.info("Executing get_system_info tool.")
-    return {
-        "python_version": sys.version,
-        "platform": platform.platform(),
-    }
+    logging.info(f"Downloading SharePoint file: {file_path}")
+
+    try:
+        client = _get_sharepoint_client()
+
+        # ファイルをダウンロード
+        file_content = client.download_file(file_path)
+
+        # Base64エンコードして返す
+        import base64
+
+        encoded_content = base64.b64encode(file_content).decode("utf-8")
+
+        logging.info(
+            f"SharePoint file download completed. Size: {len(file_content)} bytes"
+        )
+        return encoded_content
+
+    except Exception as e:
+        error_msg = f"SharePoint file download failed: {str(e)}"
+        logging.error(error_msg)
+        raise RuntimeError(error_msg) from e
