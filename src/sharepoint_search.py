@@ -41,8 +41,11 @@ class SharePointSearchClient:
         # 検索クエリの構築
         search_query = query
 
-        # フルURLを使用してサイトを絞り込み
-        search_query += f" AND site:{self.site_url}"
+        # サイトが指定されている場合のみ絞り込み
+        from .config import config
+
+        if config.is_site_specific:
+            search_query += f" AND site:{self.site_url}"
 
         # ファイル拡張子フィルターを追加
         if file_extensions:
@@ -149,9 +152,25 @@ class SharePointSearchClient:
             # サーバー相対パスを取得（/sites/... の形式）
             server_relative_url = unquote(parsed_url.path)
 
+            # ファイルのパスから適切なサイトURLを決定
+            from .config import config
+
+            if config.is_site_specific:
+                # 特定サイト設定の場合はそのサイトのAPIを使用
+                api_base_url = self.site_url
+            else:
+                # テナント全体設定の場合はファイルパスからサイトを特定
+                path_segments = server_relative_url.split("/")
+                if len(path_segments) >= 3 and path_segments[1] == "sites":
+                    site_name = path_segments[2]
+                    api_base_url = f"{config.base_url}/sites/{site_name}"
+                else:
+                    # サイト形式でない場合はベースURLを使用
+                    api_base_url = config.base_url
+
             # SharePoint REST APIを使用してファイルをダウンロード
             # /_api/web/GetFileByServerRelativeUrl('path')/$value
-            download_url = f"{self.site_url}/_api/web/GetFileByServerRelativeUrl('{server_relative_url}')/$value"
+            download_url = f"{api_base_url}/_api/web/GetFileByServerRelativeUrl('{server_relative_url}')/$value"
 
             logger.info(f"Using download URL: {download_url}")
 

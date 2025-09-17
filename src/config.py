@@ -16,7 +16,10 @@ class SharePointConfig:
 
     def __init__(self):
         # SharePoint設定
-        self.site_url = os.getenv("SHAREPOINT_SITE_URL", "")
+        self.base_url = os.getenv(
+            "SHAREPOINT_BASE_URL", ""
+        )  # https://company.sharepoint.com
+        self.site_name = os.getenv("SHAREPOINT_SITE_NAME", "")  # sitename（オプション）
         self.tenant_id = os.getenv("SHAREPOINT_TENANT_ID", "")
         self.client_id = os.getenv("SHAREPOINT_CLIENT_ID", "")
 
@@ -34,6 +37,18 @@ class SharePointConfig:
             os.getenv("SHAREPOINT_ALLOWED_FILE_EXTENSIONS", "pdf,docx,xlsx,pptx,txt")
         )
 
+    @property
+    def site_url(self) -> str:
+        """サイトURLを取得（サイト名が指定されている場合のみ）"""
+        if self.site_name:
+            return f"{self.base_url}/sites/{self.site_name}"
+        return self.base_url
+
+    @property
+    def is_site_specific(self) -> bool:
+        """特定のサイトに限定されているかどうか"""
+        return bool(self.site_name)
+
     def _parse_file_extensions(self, extensions_str: str) -> list[str]:
         """ファイル拡張子文字列をリストに変換"""
         if not extensions_str:
@@ -44,8 +59,8 @@ class SharePointConfig:
         """設定の検証を行い、エラーメッセージのリストを返す"""
         errors = []
 
-        if not self.site_url:
-            errors.append("SHAREPOINT_SITE_URL is required")
+        if not self.base_url:
+            errors.append("SHAREPOINT_BASE_URL is required")
 
         if not self.tenant_id:
             errors.append("SHAREPOINT_TENANT_ID is required")
