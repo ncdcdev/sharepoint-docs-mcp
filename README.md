@@ -285,4 +285,4 @@ npx @modelcontextprotocol/inspector uv run sharepoint-docs-mcp --transport stdio
 
 ## ライセンス
 
-[ライセンスを記載]
+MIT License - 詳細は[LICENSE](LICENSE)ファイルを参照してください。
