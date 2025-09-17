@@ -1,5 +1,4 @@
 import logging
-import platform
 import sys
 from typing import Any
 
@@ -168,16 +167,3 @@ def sharepoint_docs_download(file_path: str) -> str:
         raise RuntimeError(error_msg) from e
 
 
-@mcp.tool
-def get_system_info() -> dict[str, str]:
-    """
-    現在のシステムの基本情報を取得します。
-
-    Returns:
-        PythonのバージョンとOSプラットフォームを含む辞書。
-    """
-    logging.info("Executing get_system_info tool.")
-    return {
-        "python_version": sys.version,
-        "platform": platform.platform(),
-    }
