@@ -1,6 +1,6 @@
-# SharePoint Search MCP Server
+# SharePoint Docs MCP Server
 
-SharePoint検索機能を提供するModel Context Protocol (MCP) サーバーです。stdioとHTTPの両方のトランスポートに対応しています。
+SharePointドキュメント検索機能を提供するModel Context Protocol (MCP) サーバーです。stdioとHTTPの両方のトランスポートに対応しています。
 
 ## 機能
 
@@ -28,7 +28,7 @@ SharePoint検索機能を提供するModel Context Protocol (MCP) サーバー�
 ```bash
 # リポジトリをクローン
 git clone <repository-url>
-cd sharepoint-search-mcp
+cd sharepoint-docs-mcp
 
 # 依存関係をインストール
 uv sync --dev
@@ -108,17 +108,17 @@ rm cert/certificate.csr
 
 **stdioモード（デスクトップアプリ統合用）:**
 ```bash
-uv run sharepoint-search-mcp --transport stdio
+uv run sharepoint-docs-mcp --transport stdio
 ```
 
 **HTTPモード（ネットワークサービス用）:**
 ```bash
-uv run sharepoint-search-mcp --transport http --host 127.0.0.1 --port 8000
+uv run sharepoint-docs-mcp --transport http --host 127.0.0.1 --port 8000
 ```
 
 **ヘルプの表示:**
 ```bash
-uv run sharepoint-search-mcp --help
+uv run sharepoint-docs-mcp --help
 ```
 
 ### 開発用コマンド
@@ -147,7 +147,7 @@ uv run fix
 ## プロジェクト構造
 
 ```
-sharepoint-search-mcp/
+sharepoint-docs-mcp/
 ├── src/
 │   ├── __init__.py
 │   ├── server.py       # MCPサーバーのコアロジック
@@ -173,8 +173,8 @@ Claude Desktopと統合するには、設定ファイルを更新してくださ
   "mcpServers": {
     "sharepoint-search": {
       "command": "uv",
-      "args": ["run", "sharepoint-search-mcp", "--transport", "stdio"],
-      "cwd": "/path/to/sharepoint-search-mcp",
+      "args": ["run", "sharepoint-docs-mcp", "--transport", "stdio"],
+      "cwd": "/path/to/sharepoint-docs-mcp",
       "env": {
         "SHAREPOINT_SITE_URL": "https://yourcompany.sharepoint.com/sites/yoursite",
         "SHAREPOINT_TENANT_ID": "your-tenant-id-here",
@@ -194,8 +194,8 @@ Claude Desktopと統合するには、設定ファイルを更新してくださ
   "mcpServers": {
     "sharepoint-search": {
       "command": "uv",
-      "args": ["run", "sharepoint-search-mcp", "--transport", "stdio"],
-      "cwd": "/path/to/sharepoint-search-mcp"
+      "args": ["run", "sharepoint-docs-mcp", "--transport", "stdio"],
+      "cwd": "/path/to/sharepoint-docs-mcp"
     }
   }
 }
@@ -209,12 +209,12 @@ Claude Desktopと統合するには、設定ファイルを更新してくださ
 1. MCP Inspectorを開く
 2. 「Command」を選択
 3. Command: `uv`
-4. Arguments: `run,sharepoint-search-mcp,--transport,stdio`
+4. Arguments: `run,sharepoint-docs-mcp,--transport,stdio`
 5. Working Directory: プロジェクトのルートディレクトリ
 6. 「Connect」をクリック
 
 ### HTTPモード
-1. サーバーを起動: `uv run sharepoint-search-mcp --transport http`
+1. サーバーを起動: `uv run sharepoint-docs-mcp --transport http`
 2. MCP Inspectorで「URL」を選択
 3. URL: `http://127.0.0.1:8000/mcp/`
 4. 「Connect」をクリック
@@ -269,7 +269,7 @@ Access token request failed
 
 #### MCP Inspectorを使用
 ```bash
-npx @modelcontextprotocol/inspector uv run sharepoint-search-mcp --transport stdio
+npx @modelcontextprotocol/inspector uv run sharepoint-docs-mcp --transport stdio
 ```
 
 #### ログレベルの調整

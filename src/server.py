@@ -10,7 +10,7 @@ from .sharepoint_auth import SharePointCertificateAuth
 from .sharepoint_search import SharePointSearchClient
 
 # MCPサーバーインスタンスを作成
-mcp = FastMCP(name="SharePointSearchMCP")
+mcp = FastMCP(name="SharePointDocsMCP")
 
 # SharePointクライアントのグローバルインスタンス
 _sharepoint_client: SharePointSearchClient | None = None
