@@ -71,14 +71,13 @@ def _get_sharepoint_client() -> SharePointSearchClient:
     return _sharepoint_client
 
 
-@mcp.tool
 def sharepoint_docs_search(
     query: str,
     max_results: int = 20,
     file_extensions: list[str] | None = None,
 ) -> list[dict[str, Any]]:
-    f"""
-    {config.search_tool_description}
+    """
+    Search for documents in SharePoint
 
     Args:
         query: 検索クエリ（キーワード）
@@ -132,10 +131,9 @@ def sharepoint_docs_search(
         raise RuntimeError(error_msg) from e
 
 
-@mcp.tool
 def sharepoint_docs_download(file_path: str) -> str:
-    f"""
-    {config.download_tool_description}
+    """
+    Download a file from SharePoint
 
     Args:
         file_path: ダウンロードするファイルのフルパス（sharepoint_docs_searchの結果から取得）
@@ -165,3 +163,9 @@ def sharepoint_docs_download(file_path: str) -> str:
         error_msg = f"SharePoint file download failed: {str(e)}"
         logging.error(error_msg)
         raise RuntimeError(error_msg) from e
+
+
+def register_tools():
+    """Register MCP tools"""
+    mcp.tool(description=config.search_tool_description)(sharepoint_docs_search)
+    mcp.tool(description=config.download_tool_description)(sharepoint_docs_download)

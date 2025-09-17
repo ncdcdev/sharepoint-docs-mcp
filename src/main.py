@@ -1,6 +1,6 @@
 import typer
 
-from .server import mcp, setup_logging
+from .server import mcp, register_tools, setup_logging
 
 # typerアプリケーションを作成
 app = typer.Typer()
@@ -26,6 +26,7 @@ def main(
     import logging
 
     setup_logging()
+    register_tools()
 
     if transport == "stdio":
         logging.info("Starting MCP server with stdio transport...")
