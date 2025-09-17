@@ -15,8 +15,10 @@ SharePointドキュメント検索機能を提供するModel Context Protocol (M
 
 ### SharePoint機能
 
-- search_sharepoint_documents
+- sharepoint_docs_search
   - キーワードによるドキュメント検索
+- sharepoint_docs_download
+  - 検索結果からファイルをダウンロード
 
 ## 必要要件
 

@@ -116,3 +116,47 @@ class SharePointSearchClient:
         except Exception as e:
             logger.error(f"Search failed: {str(e)}")
             raise
+
+    def download_file(self, file_path: str) -> bytes:
+        """
+        SharePointからファイルをダウンロード
+
+        Args:
+            file_path: ファイルのフルパス（search_documentsの結果から取得）
+
+        Returns:
+            ファイルの内容（bytes）
+        """
+        logger.info(f"Downloading file: {file_path}")
+
+        try:
+            # アクセストークンを取得
+            access_token = self.auth.get_access_token()
+
+            headers = {
+                "Authorization": f"Bearer {access_token}",
+                "Accept": "application/json;odata=verbose",
+            }
+
+            # SharePointのファイルパスからサーバー相対URLを抽出
+            from urllib.parse import unquote, urlparse
+            parsed_url = urlparse(file_path)
+
+            # サーバー相対パスを取得（/sites/... の形式）
+            server_relative_url = unquote(parsed_url.path)
+
+            # SharePoint REST APIを使用してファイルをダウンロード
+            # /_api/web/GetFileByServerRelativeUrl('path')/$value
+            download_url = f"{self.site_url}/_api/web/GetFileByServerRelativeUrl('{server_relative_url}')/$value"
+
+            logger.info(f"Using download URL: {download_url}")
+
+            response = requests.get(download_url, headers=headers, timeout=60)
+            response.raise_for_status()
+
+            logger.info(f"Successfully downloaded file: {file_path}")
+            return response.content
+
+        except Exception as e:
+            logger.error(f"File download failed: {str(e)}")
+            raise

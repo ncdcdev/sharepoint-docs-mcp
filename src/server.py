@@ -73,7 +73,7 @@ def _get_sharepoint_client() -> SharePointSearchClient:
 
 
 @mcp.tool
-def search_sharepoint_documents(
+def sharepoint_docs_search(
     query: str,
     max_results: int = 20,
     file_extensions: list[str] | None = None,
@@ -129,6 +129,41 @@ def search_sharepoint_documents(
 
     except Exception as e:
         error_msg = f"SharePoint search failed: {str(e)}"
+        logging.error(error_msg)
+        raise RuntimeError(error_msg) from e
+
+
+@mcp.tool
+def sharepoint_docs_download(file_path: str) -> str:
+    """
+    SharePointからファイルをダウンロードします。
+
+    Args:
+        file_path: ダウンロードするファイルのフルパス（sharepoint_docs_searchの結果から取得）
+
+    Returns:
+        ダウンロードしたファイルの内容（Base64エンコード済み文字列）
+    """
+    logging.info(f"Downloading SharePoint file: {file_path}")
+
+    try:
+        client = _get_sharepoint_client()
+
+        # ファイルをダウンロード
+        file_content = client.download_file(file_path)
+
+        # Base64エンコードして返す
+        import base64
+
+        encoded_content = base64.b64encode(file_content).decode("utf-8")
+
+        logging.info(
+            f"SharePoint file download completed. Size: {len(file_content)} bytes"
+        )
+        return encoded_content
+
+    except Exception as e:
+        error_msg = f"SharePoint file download failed: {str(e)}"
         logging.error(error_msg)
         raise RuntimeError(error_msg) from e
 
