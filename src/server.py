@@ -77,8 +77,8 @@ def sharepoint_docs_search(
     max_results: int = 20,
     file_extensions: list[str] | None = None,
 ) -> list[dict[str, Any]]:
-    """
-    SharePointでドキュメントを検索します。
+    f"""
+    {config.search_tool_description}
 
     Args:
         query: 検索クエリ（キーワード）
@@ -134,8 +134,8 @@ def sharepoint_docs_search(
 
 @mcp.tool
 def sharepoint_docs_download(file_path: str) -> str:
-    """
-    SharePointからファイルをダウンロードします。
+    f"""
+    {config.download_tool_description}
 
     Args:
         file_path: ダウンロードするファイルのフルパス（sharepoint_docs_searchの結果から取得）

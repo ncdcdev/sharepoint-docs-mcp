@@ -62,6 +62,7 @@ select = [
 ignore = [
     "E501",  # line too long, handled by black
     "B008",  # do not perform function calls in argument defaults
+    "B021",  # f-string used as docstring
     "C901",  # too complex
     "UP035", # typing imports should be used for type annotations
 ]

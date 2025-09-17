@@ -68,6 +68,10 @@ SHAREPOINT_PRIVATE_KEY_PATH=path/to/your/private_key.pem
 # 検索設定（オプション）
 SHAREPOINT_DEFAULT_MAX_RESULTS=20
 SHAREPOINT_ALLOWED_FILE_EXTENSIONS=pdf,docx,xlsx,pptx,txt,md
+
+# ツール説明文のカスタマイズ（オプション）
+# SHAREPOINT_SEARCH_TOOL_DESCRIPTION=社内文書を検索します
+# SHAREPOINT_DOWNLOAD_TOOL_DESCRIPTION=検索結果からファイルをダウンロードします
 ```
 
 ### 2. 証明書の作成
@@ -116,6 +120,19 @@ rm cert/certificate.csr
   - 「概要」ページのディレクトリ（テナント）ID
 - クライアントID
   - 「概要」ページのアプリケーション（クライアント）ID
+
+### 4. ツール説明文のカスタマイズ（オプション）
+
+MCPツールの説明文を日本語などにカスタマイズできます：
+
+- `SHAREPOINT_SEARCH_TOOL_DESCRIPTION`: 検索ツールの説明文（デフォルト: "Search for documents in SharePoint"）
+- `SHAREPOINT_DOWNLOAD_TOOL_DESCRIPTION`: ダウンロードツールの説明文（デフォルト: "Download a file from SharePoint"）
+
+例：
+```bash
+SHAREPOINT_SEARCH_TOOL_DESCRIPTION=社内文書を検索します
+SHAREPOINT_DOWNLOAD_TOOL_DESCRIPTION=検索結果からファイルをダウンロードします
+```
 
 ## 使用方法
 
