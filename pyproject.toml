@@ -20,6 +20,11 @@ dev = [
     "ruff>=0.8.0",
     "ty>=0.0.1a16",
 ]
+test = [
+    "pytest>=8.0.0",
+    "pytest-cov>=4.0.0",
+    "pytest-mock>=3.12.0",
+]
 
 [project.scripts]
 sharepoint-docs-mcp = "src.main:app"
@@ -28,6 +33,7 @@ fmt = "scripts:format"
 fix = "scripts:fix"
 typecheck = "scripts:type_check"
 check = "scripts:check"
+test = "scripts:test"
 
 [tool.uv]
 package = true
@@ -74,3 +80,21 @@ quote-style = "double"
 indent-style = "space"
 skip-magic-trailing-comma = false
 line-ending = "auto"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"
+python_classes = "Test*"
+python_functions = "test_*"
+addopts = [
+    "--strict-markers",
+    "--strict-config",
+    "--cov=src",
+    "--cov-report=term-missing",
+    "--cov-report=html",
+]
+markers = [
+    "unit: Unit tests",
+    "integration: Integration tests",
+    "slow: Slow running tests",
+]
