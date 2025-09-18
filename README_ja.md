@@ -21,6 +21,7 @@ stdioとHTTPの両方のトランスポートに対応しています。
 
 - sharepoint_docs_search
   - キーワードによるドキュメント検索
+  - レスポンス形式オプション（詳細/簡潔）でトークン効率を改善
 - sharepoint_docs_download
   - 検索結果からファイルをダウンロード
 

@@ -21,6 +21,7 @@ Please note that other authentication methods are not supported.
 
 - sharepoint_docs_search
   - Document search by keywords
+  - Response format options (detailed/compact) for token efficiency
 - sharepoint_docs_download
   - File download from search results
 

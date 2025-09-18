@@ -39,7 +39,8 @@ class SharePointConfig:
 
         # ツール説明文のカスタマイズ
         self.search_tool_description = os.getenv(
-            "SHAREPOINT_SEARCH_TOOL_DESCRIPTION", "Search for documents in SharePoint"
+            "SHAREPOINT_SEARCH_TOOL_DESCRIPTION",
+            "Search for documents in SharePoint. Use response_format='compact' for token-efficient results with only title, path, and extension.",
         )
         self.download_tool_description = os.getenv(
             "SHAREPOINT_DOWNLOAD_TOOL_DESCRIPTION", "Download a file from SharePoint"
