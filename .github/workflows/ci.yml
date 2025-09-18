@@ -30,6 +30,8 @@ jobs:
         uv sync --dev --group test
 
     - name: Run quality checks (type check + lint + tests)
+      env:
+        PYTHONPATH: ${{ github.workspace }}
       run: |
         uv run check
 
