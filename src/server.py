@@ -76,24 +76,21 @@ def sharepoint_docs_search(
     query: str,
     max_results: int = 20,
     file_extensions: list[str] | None = None,
+    response_format: str = "detailed",
 ) -> list[dict[str, Any]]:
     """
-    Search for documents in SharePoint
+    Search for documents in SharePoint with response format options
 
     Args:
-        query: 検索クエリ（キーワード）
-        max_results: 返す最大結果数（デフォルト: 20）
-        file_extensions: 検索対象のファイル拡張子のリスト（例: ["pdf", "docx"]）
+        query: Search keywords
+        max_results: Maximum number of results to return (default: 20, max: 100)
+        file_extensions: List of file extensions to search (e.g., ["pdf", "docx"])
+        response_format: Response format - "detailed" (default) or "compact"
 
     Returns:
-        検索結果のリスト。各結果は以下のキーを含む辞書：
-        - title: ドキュメントのタイトル
-        - path: ドキュメントのパス
-        - size: ファイルサイズ（バイト）
-        - last_modified: 最終更新日時
-        - file_extension: ファイル拡張子
-        - summary: ハイライトされた要約
-        - author: 作成者
+        List of search results. Each result contains:
+        - Detailed format: all available fields (title, path, size, modified, extension, summary)
+        - Compact format: essential fields only (title, path, extension)
     """
     logging.info(f"Searching SharePoint documents with query: '{query}'")
 
@@ -113,15 +110,28 @@ def sharepoint_docs_search(
         else:
             allowed_extensions = None
 
-        # 最大結果数の制限
-        max_results = min(max_results, 100)  # 最大100件に制限
+        # Limit maximum results
+        max_results = min(max_results, 100)
 
-        # 検索実行
+        # Execute search
         results = client.search_documents(
             query=query,
             max_results=max_results,
             file_extensions=allowed_extensions,
         )
+
+        # Apply response format filtering
+        if response_format == "compact":
+            # Return only essential fields for compact format
+            filtered_results = []
+            for result in results:
+                compact_result = {
+                    "title": result.get("title", "Unknown"),
+                    "path": result.get("path", ""),
+                    "extension": result.get("extension", ""),
+                }
+                filtered_results.append(compact_result)
+            results = filtered_results
 
         logging.info(f"SharePoint search completed. Found {len(results)} documents")
         return results
