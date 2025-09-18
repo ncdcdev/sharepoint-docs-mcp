@@ -94,6 +94,14 @@ def sharepoint_docs_search(
     """
     logging.info(f"Searching SharePoint documents with query: '{query}'")
 
+    # Validate response_format parameter
+    valid_formats = ["detailed", "compact"]
+    if response_format not in valid_formats:
+        logging.warning(
+            f"Invalid response_format '{response_format}'. Defaulting to 'detailed'"
+        )
+        response_format = "detailed"
+
     try:
         client = _get_sharepoint_client()
 
