@@ -307,7 +307,7 @@ In this case, place the configuration in the `.env` file at the project root.
 }
 ```
 
-This configuration runs the MCP server directly from GitHub without requiring you to clone the repository locally.
+This configuration runs the MCP server directly from GitHub without requiring you to clone the repository locally. Note that `SHAREPOINT_CERTIFICATE_PATH` and `SHAREPOINT_PRIVATE_KEY_PATH` must be absolute paths to your files.
 
 ## Development
 
