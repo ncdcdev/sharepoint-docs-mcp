@@ -1,0 +1,61 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [ main ]
+  push:
+    branches: [ main ]
+
+jobs:
+  quality-check:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.12"]
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@b75a909f75acd358c2196fb9a5f1299a9a8868a4 # v6.7.0
+      with:
+        version: "latest"
+
+    - name: Set up Python ${{ matrix.python-version }}
+      run: uv python install ${{ matrix.python-version }}
+
+    - name: Install dependencies
+      run: |
+        uv sync --dev --group test
+
+    - name: Run type checking
+      run: |
+        uv run typecheck
+
+    - name: Run linting
+      run: |
+        uv run lint
+
+    - name: Run tests
+      run: |
+        uv run test --cov=src --cov-report=xml --cov-report=term-missing
+
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
+      if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+      with:
+        fail_ci_if_error: false
+        verbose: true
+      env:
+        CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+    - name: Generate coverage report summary
+      if: always()
+      run: |
+        if [ -f coverage.xml ]; then
+          echo "Coverage report generated successfully"
+          grep -o 'line-rate="[0-9.]*"' coverage.xml | head -1 | cut -d'"' -f2 | awk '{printf "Coverage: %.1f%%\n", $1*100}' || echo "Coverage: Report generated"
+        else
+          echo "Coverage report not found"
+        fi
