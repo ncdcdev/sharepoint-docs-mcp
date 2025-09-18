@@ -307,7 +307,7 @@ Claude Desktopと統合するには、設定ファイルを更新してくださ
 }
 ```
 
-この設定では、リポジトリをローカルにクローンすることなく、GitHubから直接MCPサーバーを実行できます。
+この設定では、リポジトリをローカルにクローンすることなく、GitHubから直接MCPサーバーを実行できます。`SHAREPOINT_CERTIFICATE_PATH`と`SHAREPOINT_PRIVATE_KEY_PATH`には、ファイルへの絶対パスを指定する必要がある点にご注意ください。
 
 
 ## 開発
