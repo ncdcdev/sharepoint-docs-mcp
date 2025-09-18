@@ -18,6 +18,10 @@ from .error_messages import handle_sharepoint_error
 
 logger = logging.getLogger(__name__)
 
+# Constants for token management
+TOKEN_EXPIRY_MARGIN_SECONDS = 300  # 5 minutes margin before token expiry
+JWT_LIFETIME_SECONDS = 300  # JWT valid for 5 minutes
+
 
 class SharePointCertificateAuth:
     """SharePoint証明書認証クラス"""
@@ -105,7 +109,7 @@ class SharePointCertificateAuth:
             now = int(time.time())
             payload = {
                 "aud": f"https://login.microsoftonline.com/{self.tenant_id}/oauth2/v2.0/token",
-                "exp": now + 300,  # 5分後に期限切れ
+                "exp": now + JWT_LIFETIME_SECONDS,
                 "iss": self.client_id,
                 "jti": str(uuid.uuid4()),
                 "nbf": now,
@@ -165,9 +169,11 @@ class SharePointCertificateAuth:
                 logger.info("Access token expired or not found, requesting new token")
                 token_data = self._request_access_token()
                 self._access_token = token_data["access_token"]
-                # 期限切れ時刻を設定（実際の期限より5分早く設定してマージンを持たせる）
+                # Set expiration time with margin to prevent token expiry during use
                 self._token_expires_at = (
-                    current_time + int(token_data["expires_in"]) - 300
+                    current_time
+                    + int(token_data["expires_in"])
+                    - TOKEN_EXPIRY_MARGIN_SECONDS
                 )
 
             return self._access_token

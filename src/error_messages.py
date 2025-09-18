@@ -1,13 +1,13 @@
 """
-SharePoint検索MCPサーバー用のエラーメッセージ定義
-AIエージェント向けに自然言語でわかりやすいエラーメッセージを提供
+Error message definitions for SharePoint Search MCP Server
+Provides natural language error messages that are easy for AI agents to understand
 """
 
 from enum import Enum
 
 
 class ErrorCategory(Enum):
-    """エラーカテゴリの定義"""
+    """Error category definitions"""
 
     AUTHENTICATION = "authentication"
     AUTHORIZATION = "authorization"
@@ -19,7 +19,7 @@ class ErrorCategory(Enum):
 
 
 class SharePointError(Exception):
-    """SharePoint操作用のカスタム例外クラス"""
+    """Custom exception class for SharePoint operations"""
 
     def __init__(
         self,
@@ -35,130 +35,135 @@ class SharePointError(Exception):
         super().__init__(self.get_formatted_message())
 
     def get_formatted_message(self) -> str:
-        """AIエージェント向けにフォーマットされたエラーメッセージを取得"""
+        """Get formatted error message for AI agents"""
         return f"{self.message} {self.solution}"
 
 
 def get_authentication_error(original_error: Exception) -> SharePointError:
-    """認証エラーのメッセージを生成"""
+    """Generate authentication error message"""
     error_str = str(original_error).lower()
 
     if "certificate" in error_str or "private_key" in error_str:
         return SharePointError(
             category=ErrorCategory.AUTHENTICATION,
-            message="証明書または秘密鍵の読み込みに失敗しました。",
-            solution="証明書ファイルのパスと秘密鍵ファイルのパス、またはそれらの内容が正しく設定されているか確認してください。",
+            message="Failed to load certificate or private key.",
+            solution="Please verify that the certificate file path and private key file path, or their contents, are correctly configured.",
             original_error=original_error,
         )
     elif "401" in error_str or "unauthorized" in error_str:
         return SharePointError(
             category=ErrorCategory.AUTHENTICATION,
-            message="SharePointへの認証に失敗しました。",
-            solution="テナントID、クライアントID、証明書の設定を確認し、アプリの登録状況を管理者にお問い合わせください。",
+            message="SharePoint authentication failed.",
+            solution="Please verify the tenant ID, client ID, and certificate settings, and contact your administrator about the app registration status.",
             original_error=original_error,
         )
     else:
         return SharePointError(
             category=ErrorCategory.AUTHENTICATION,
-            message="認証処理中にエラーが発生しました。",
-            solution="設定を確認するか、管理者にお問い合わせください。",
+            message="An error occurred during authentication.",
+            solution="Please check your configuration or contact your administrator.",
             original_error=original_error,
         )
 
 
 def get_authorization_error(original_error: Exception) -> SharePointError:
-    """権限エラーのメッセージを生成"""
+    """Generate authorization error message"""
     return SharePointError(
         category=ErrorCategory.AUTHORIZATION,
-        message="SharePointへのアクセスが拒否されました。",
-        solution="アプリの権限設定を確認するか、管理者にSharePointサイトへのアクセス権限を依頼してください。",
+        message="Access to SharePoint was denied.",
+        solution="Please check the app permissions or request SharePoint site access from your administrator.",
         original_error=original_error,
     )
 
 
 def get_network_error(original_error: Exception) -> SharePointError:
-    """ネットワークエラーのメッセージを生成"""
+    """Generate network error message"""
     error_str = str(original_error).lower()
 
     if "timeout" in error_str:
         return SharePointError(
             category=ErrorCategory.NETWORK,
-            message="SharePointサーバーへの接続がタイムアウトしました。",
-            solution="ネットワーク接続を確認するか、しばらく時間をおいて再度お試しください。",
+            message="Connection to SharePoint server timed out.",
+            solution="Please check your network connection or try again after a few moments.",
             original_error=original_error,
         )
     elif "connection" in error_str:
         return SharePointError(
             category=ErrorCategory.NETWORK,
-            message="SharePointサーバーに接続できませんでした。",
-            solution="インターネット接続とサイトURLを確認してください。",
+            message="Could not connect to SharePoint server.",
+            solution="Please verify your internet connection and site URL.",
             original_error=original_error,
         )
     else:
         return SharePointError(
             category=ErrorCategory.NETWORK,
-            message="ネットワーク通信中にエラーが発生しました。",
-            solution="ネットワーク接続を確認してから再度お試しください。",
+            message="A network communication error occurred.",
+            solution="Please check your network connection and try again.",
             original_error=original_error,
         )
 
 
 def get_search_query_error(original_error: Exception) -> SharePointError:
-    """検索クエリエラーのメッセージを生成"""
+    """Generate search query error message"""
     return SharePointError(
         category=ErrorCategory.SEARCH_QUERY,
-        message="検索クエリの処理中にエラーが発生しました。",
-        solution="検索キーワードを変更するか、より具体的な検索条件を指定してください。",
+        message="An error occurred while processing the search query.",
+        solution="Please try different search keywords or specify more specific search criteria.",
         original_error=original_error,
     )
 
 
 def get_file_not_found_error(
-    file_path: str, original_error: Exception
+    file_path: str | None, original_error: Exception
 ) -> SharePointError:
-    """ファイル不存在エラーのメッセージを生成"""
+    """Generate file not found error message"""
+    if file_path:
+        message = f"The specified file was not found: {file_path}"
+    else:
+        message = "The requested file was not found."
+
     return SharePointError(
         category=ErrorCategory.FILE_NOT_FOUND,
-        message=f"指定されたファイルが見つかりませんでした: {file_path}",
-        solution="ファイルパスが正しいか確認するか、最新の検索結果から正しいパスを取得してください。",
+        message=message,
+        solution="Please verify the file path is correct or obtain the correct path from the latest search results.",
         original_error=original_error,
     )
 
 
 def get_configuration_error(original_error: Exception) -> SharePointError:
-    """設定エラーのメッセージを生成"""
+    """Generate configuration error message"""
     return SharePointError(
         category=ErrorCategory.CONFIGURATION,
-        message="SharePointの設定に問題があります。",
-        solution="環境変数の設定を確認し、必要な設定項目がすべて正しく設定されているか確認してください。",
+        message="There is a problem with the SharePoint configuration.",
+        solution="Please check the environment variable settings and ensure all required configuration items are correctly set.",
         original_error=original_error,
     )
 
 
 def get_unknown_error(original_error: Exception) -> SharePointError:
-    """不明なエラーのメッセージを生成"""
+    """Generate unknown error message"""
     return SharePointError(
         category=ErrorCategory.UNKNOWN,
-        message="予期しないエラーが発生しました。",
-        solution="設定を確認するか、管理者にお問い合わせください。",
+        message="An unexpected error occurred.",
+        solution="Please check your configuration or contact your administrator.",
         original_error=original_error,
     )
 
 
 def handle_sharepoint_error(error: Exception, context: str = "") -> SharePointError:
     """
-    SharePoint関連のエラーを適切なカテゴリに分類し、自然言語メッセージを生成
+    Classify SharePoint-related errors into appropriate categories and generate natural language messages
 
     Args:
-        error: 発生した例外
-        context: エラーが発生したコンテキスト（"auth", "search", "download"など）
+        error: The exception that occurred
+        context: The context where the error occurred ("auth", "search", "download", etc.)
 
     Returns:
-        SharePointError: 自然言語化されたエラー
+        SharePointError: Naturalized error message
     """
     error_str = str(error).lower()
 
-    # HTTPステータスコードによる分類
+    # Classification by HTTP status code
     if hasattr(error, "response") and hasattr(error.response, "status_code"):
         status_code = error.response.status_code
         if status_code == 401:
@@ -166,9 +171,9 @@ def handle_sharepoint_error(error: Exception, context: str = "") -> SharePointEr
         elif status_code == 403:
             return get_authorization_error(error)
         elif status_code == 404 and context == "download":
-            return get_file_not_found_error("", error)
+            return get_file_not_found_error(None, error)
 
-    # エラーメッセージの内容による分類
+    # Classification by error message content
     if any(
         keyword in error_str
         for keyword in ["certificate", "private_key", "jwt", "token", "auth"]
@@ -192,7 +197,7 @@ def handle_sharepoint_error(error: Exception, context: str = "") -> SharePointEr
         any(keyword in error_str for keyword in ["not found", "404"])
         and context == "download"
     ):
-        return get_file_not_found_error("", error)
+        return get_file_not_found_error(None, error)
     elif any(
         keyword in error_str
         for keyword in ["config", "validation", "missing", "required"]
