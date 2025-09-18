@@ -185,3 +185,6 @@ Desktop.ini
 .temp/
 temp/
 cert/
+
+.claude/
+.ruff_cache/
