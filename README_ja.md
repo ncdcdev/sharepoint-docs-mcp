@@ -32,9 +32,21 @@ stdioとHTTPの両方のトランスポートに対応しています。
 
 ## インストール
 
+### 方法1: uvxで直接実行（推奨）
+
+```bash
+# GitHubから直接実行（クローン不要）
+uvx --from git+https://github.com/ncdcdev/sharepoint-docs-mcp sharepoint-docs-mcp --transport stdio
+
+# HTTPモードの場合
+uvx --from git+https://github.com/ncdcdev/sharepoint-docs-mcp sharepoint-docs-mcp --transport http --host 127.0.0.1 --port 8000
+```
+
+### 方法2: 開発環境セットアップ
+
 ```bash
 # リポジトリをクローン
-git clone <repository-url>
+git clone https://github.com/ncdcdev/sharepoint-docs-mcp
 cd sharepoint-docs-mcp
 
 # 依存関係をインストール
@@ -241,7 +253,7 @@ Claude Desktopと統合するには、設定ファイルを更新してくださ
 ```json
 {
   "mcpServers": {
-    "sharepoint-search": {
+    "sharepoint-docs": {
       "command": "uv",
       "args": ["run", "sharepoint-docs-mcp", "--transport", "stdio"],
       "cwd": "/path/to/sharepoint-docs-mcp",
@@ -263,7 +275,7 @@ Claude Desktopと統合するには、設定ファイルを更新してくださ
 ```json
 {
   "mcpServers": {
-    "sharepoint-search": {
+    "sharepoint-docs": {
       "command": "uv",
       "args": ["run", "sharepoint-docs-mcp", "--transport", "stdio"],
       "cwd": "/path/to/sharepoint-docs-mcp"
@@ -273,6 +285,29 @@ Claude Desktopと統合するには、設定ファイルを更新してくださ
 ```
 
 この場合、プロジェクトルートの`.env`ファイルに設定を記載します。
+
+### 設定例3: uvxを使用（クローン不要）
+
+```json
+{
+  "mcpServers": {
+    "sharepoint-docs": {
+      "command": "uvx",
+      "args": ["--from", "git+https://github.com/ncdcdev/sharepoint-docs-mcp", "sharepoint-docs-mcp", "--transport", "stdio"],
+      "env": {
+        "SHAREPOINT_BASE_URL": "https://yourcompany.sharepoint.com",
+        "SHAREPOINT_SITE_NAME": "yoursite",
+        "SHAREPOINT_TENANT_ID": "your-tenant-id-here",
+        "SHAREPOINT_CLIENT_ID": "your-client-id-here",
+        "SHAREPOINT_CERTIFICATE_PATH": "/path/to/certificate.pem",
+        "SHAREPOINT_PRIVATE_KEY_PATH": "/path/to/private_key.pem"
+      }
+    }
+  }
+}
+```
+
+この設定では、リポジトリをローカルにクローンすることなく、GitHubから直接MCPサーバーを実行できます。`SHAREPOINT_CERTIFICATE_PATH`と`SHAREPOINT_PRIVATE_KEY_PATH`には、ファイルへの絶対パスを指定する必要がある点にご注意ください。
 
 
 ## 開発

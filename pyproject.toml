@@ -4,6 +4,19 @@ version = "0.1.0"
 description = "SharePoint Document Search MCP Server"
 readme = "README.md"
 requires-python = ">=3.12"
+authors = [
+    {name = "ncdcdev", email = "contact@ncdc.co.jp"}
+]
+license = {file = "LICENSE"}
+keywords = ["mcp", "sharepoint", "search", "protocol"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
 dependencies = [
     "cryptography>=45.0.7",
     "fastmcp>=2.12.3",
@@ -19,8 +32,6 @@ dependencies = [
 dev = [
     "ruff>=0.8.0",
     "ty>=0.0.1a16",
-]
-test = [
     "pytest>=8.0.0",
     "pytest-cov>=4.0.0",
     "pytest-mock>=3.12.0",
@@ -34,6 +45,11 @@ fix = "scripts:fix"
 typecheck = "scripts:type_check"
 check = "scripts:check"
 test = "scripts:test"
+
+[project.urls]
+Homepage = "https://github.com/ncdcdev/sharepoint-docs-mcp"
+Repository = "https://github.com/ncdcdev/sharepoint-docs-mcp.git"
+Issues = "https://github.com/ncdcdev/sharepoint-docs-mcp/issues"
 
 [tool.uv]
 package = true
