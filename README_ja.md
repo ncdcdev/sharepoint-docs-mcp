@@ -173,6 +173,15 @@ uv run sharepoint-docs-mcp --help
 
 ### 開発用コマンド
 
+**テスト**
+```bash
+# テスト実行
+uv run test
+
+# カバレッジレポート付きテスト実行
+uv run test --cov=src --cov-report=html
+```
+
 **コード品質チェック**
 ```bash
 # Lint（静的解析）
@@ -181,7 +190,7 @@ uv run lint
 # 型チェック（ty）
 uv run typecheck
 
-# 全体チェック（型チェック + lint）
+# 全体チェック（型チェック + lint + テスト）
 uv run check
 ```
 
@@ -200,11 +209,22 @@ uv run fix
 sharepoint-docs-mcp/
 ├── src/
 │   ├── __init__.py
-│   ├── server.py       # MCPサーバーのコアロジック
-│   └── main.py         # CLIエントリポイント
-├── scripts.py          # 開発用ユーティリティコマンド
-├── pyproject.toml      # プロジェクト設定
-└── README.md
+│   ├── server.py            # MCPサーバーのコアロジック
+│   ├── main.py              # CLIエントリポイント
+│   ├── config.py            # 設定管理
+│   ├── sharepoint_auth.py   # Azure AD認証
+│   ├── sharepoint_search.py # SharePoint検索クライアント
+│   └── error_messages.py    # エラーハンドリング
+├── tests/
+│   ├── __init__.py
+│   ├── conftest.py          # テストフィクスチャとモック
+│   ├── test_config.py       # 設定管理のテスト
+│   ├── test_server.py       # サーバー機能のテスト
+│   └── test_error_messages.py # エラーハンドリングのテスト
+├── scripts.py               # 開発用ユーティリティコマンド
+├── pyproject.toml           # プロジェクト設定と依存関係
+├── README.md                # 英語ドキュメント
+└── README_ja.md             # 日本語ドキュメント
 ```
 
 ## Claude Desktop との統合
@@ -257,6 +277,13 @@ Claude Desktopと統合するには、設定ファイルを更新してくださ
 
 ## 開発
 
+### テストフレームワーク
+
+- **pytest**: フィクスチャとモック機能を持つPythonテストフレームワーク
+- **pytest-cov**: コードカバレッジレポート
+- **pytest-mock**: 強化されたモック機能
+- 主要機能をカバーする24のユニットテスト（カバレッジ48%）
+
 ### コード品質ツール
 
 - **ruff**: 高速なPythonリンター・フォーマッター
@@ -265,6 +292,7 @@ Claude Desktopと統合するには、設定ファイルを更新してくださ
 ### 設定ファイル
 
 - `pyproject.toml`: プロジェクト設定、依存関係、開発ツールの設定
+- pytest設定: テスト発見とカバレッジ設定
 - ruff設定: コードスタイル、ルール設定
 - ty設定: 型チェックの詳細設定
 

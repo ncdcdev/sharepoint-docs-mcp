@@ -173,6 +173,15 @@ uv run sharepoint-docs-mcp --help
 
 ### Development Commands
 
+**Testing**
+```bash
+# Run tests
+uv run test
+
+# Run tests with coverage report
+uv run test --cov=src --cov-report=html
+```
+
 **Code quality checks**
 ```bash
 # Lint (static analysis)
@@ -181,7 +190,7 @@ uv run lint
 # Type checking (ty)
 uv run typecheck
 
-# All checks (type checking + lint)
+# All checks (type checking + lint + tests)
 uv run check
 ```
 
@@ -200,12 +209,22 @@ uv run fix
 sharepoint-docs-mcp/
 ├── src/
 │   ├── __init__.py
-│   ├── server.py       # MCP server core logic
-│   └── main.py         # CLI entry point
-├── scripts.py          # Development utility commands
-├── pyproject.toml      # Project configuration
-├── README.md           # English documentation
-└── README_ja.md        # Japanese documentation
+│   ├── server.py            # MCP server core logic
+│   ├── main.py              # CLI entry point
+│   ├── config.py            # Configuration management
+│   ├── sharepoint_auth.py   # Azure AD authentication
+│   ├── sharepoint_search.py # SharePoint search client
+│   └── error_messages.py    # Error handling
+├── tests/
+│   ├── __init__.py
+│   ├── conftest.py          # Test fixtures and mocks
+│   ├── test_config.py       # Configuration tests
+│   ├── test_server.py       # Server functionality tests
+│   └── test_error_messages.py # Error handling tests
+├── scripts.py               # Development utility commands
+├── pyproject.toml           # Project configuration and dependencies
+├── README.md                # English documentation
+└── README_ja.md             # Japanese documentation
 ```
 
 ## Claude Desktop Integration
@@ -257,6 +276,13 @@ In this case, place the configuration in the `.env` file at the project root.
 
 ## Development
 
+### Testing Framework
+
+- **pytest**: Python testing framework with fixtures and mocking
+- **pytest-cov**: Code coverage reporting
+- **pytest-mock**: Enhanced mocking capabilities
+- 24 unit tests covering core functionality (48% coverage)
+
 ### Code Quality Tools
 
 - **ruff**: Fast Python linter and formatter
@@ -265,6 +291,7 @@ In this case, place the configuration in the `.env` file at the project root.
 ### Configuration Files
 
 - `pyproject.toml`: Project configuration, dependencies, development tool settings
+- pytest configuration: Test discovery and coverage settings
 - ruff configuration: Code style and rule settings
 - ty configuration: Detailed type checking settings
 

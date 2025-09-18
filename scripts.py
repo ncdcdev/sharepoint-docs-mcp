@@ -56,15 +56,34 @@ def type_check():
 
 
 
+def test():
+    """
+    pytestでテストを実行する
+    """
+    print("🧪 テストを実行中...")
+    cmd = ["pytest", "-v"]
+    result = subprocess.run(cmd)
+
+    if result.returncode == 0:
+        print("✅ すべてのテストが成功しました！")
+    else:
+        print("❌ テストが失敗しました")
+
+    exit(result.returncode)
+
+
 def check():
     """
-    型チェック、Lintを同時に実行する（修正はしない）
+    型チェック、Lint、テストを同時に実行する（修正はしない）
     """
     print("🔍 型チェックを実行中...")
     type_result = subprocess.run(["ty", "check"] + QUALITY_CHECK_DIRS, capture_output=True)
 
     print("📝 Lintを実行中...")
     lint_result = subprocess.run(["ruff", "check"] + QUALITY_CHECK_DIRS, capture_output=True)
+
+    print("🧪 テストを実行中...")
+    test_result = subprocess.run(["pytest", "-v", "--tb=short"], capture_output=True)
 
     # 結果をまとめて表示
     print("\n" + "=" * 50)
@@ -73,9 +92,11 @@ def check():
 
     type_status = "✅ PASS" if type_result.returncode == 0 else "❌ FAIL"
     lint_status = "✅ PASS" if lint_result.returncode == 0 else "❌ FAIL"
+    test_status = "✅ PASS" if test_result.returncode == 0 else "❌ FAIL"
 
     print(f"型チェック: {type_status}")
     print(f"Lint:       {lint_status}")
+    print(f"テスト:     {test_status}")
 
     # エラーがある場合は詳細を表示
     if type_result.returncode != 0:
@@ -88,8 +109,13 @@ def check():
         print(lint_result.stdout.decode())
         print(lint_result.stderr.decode())
 
+    if test_result.returncode != 0:
+        print("\n🧪 テストエラー:")
+        print(test_result.stdout.decode())
+        print(test_result.stderr.decode())
+
     # いずれかが失敗した場合は非ゼロで終了
-    if any(result.returncode != 0 for result in [type_result, lint_result]):
+    if any(result.returncode != 0 for result in [type_result, lint_result, test_result]):
         exit(1)
     else:
         print("\n🎉 すべてのチェックが成功しました！")
