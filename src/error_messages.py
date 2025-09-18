@@ -159,7 +159,7 @@ def handle_sharepoint_error(error: Exception, context: str = "") -> SharePointEr
         context: The context where the error occurred ("auth", "search", "download", etc.)
 
     Returns:
-        SharePointError: Naturalized error message
+        SharePointError: Natural language error message
     """
     error_str = str(error).lower()
 
