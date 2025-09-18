@@ -7,6 +7,7 @@ from typing import Any
 
 import requests
 
+from .error_messages import handle_sharepoint_error
 from .sharepoint_auth import SharePointCertificateAuth
 
 logger = logging.getLogger(__name__)
@@ -121,7 +122,7 @@ class SharePointSearchClient:
 
         except Exception as e:
             logger.error(f"Search failed: {str(e)}")
-            raise
+            raise handle_sharepoint_error(e, "search") from e
 
     def download_file(self, file_path: str) -> bytes:
         """
@@ -182,4 +183,4 @@ class SharePointSearchClient:
 
         except Exception as e:
             logger.error(f"File download failed: {str(e)}")
-            raise
+            raise handle_sharepoint_error(e, "download") from e
