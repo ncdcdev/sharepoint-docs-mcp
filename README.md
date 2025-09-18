@@ -1,5 +1,7 @@
 # SharePoint Docs MCP Server
 
+> [🇯🇵 日本語版はこちら](README_ja.md)
+
 A Model Context Protocol (MCP) server that provides SharePoint document search functionality.
 Supports both stdio and HTTP transports.
 
