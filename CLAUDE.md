@@ -4,21 +4,27 @@ Claude Code instructions for this MCP server project.
 
 ## Project Overview
 
-A SharePoint Search MCP (Model Context Protocol) server that supports both stdio and HTTP transports.
+SharePoint Document Search MCP (Model Context Protocol) server with Azure AD certificate authentication.
+Supports both stdio and HTTP transports for flexible integration.
 
 ### Technology Stack
 
-- **FastMCP**: MCP server framework
-- **Typer**: CLI interface
-- **Tools**: ruff, ty
+- FastMCP
+  - MCP server framework
+- Typer
+  - CLI interface
+- Azure AD certificate authentication
+  - Certificate-based authentication for SharePoint
+- Quality tools
+  - ruff (linting/formatting), ty (type checking)
 
 ## Development Commands
 
 ### Setup
 ```bash
 uv sync --dev           # Install dependencies
-uv run sharepoint-search-mcp --transport stdio   # Start stdio mode
-uv run sharepoint-search-mcp --transport http    # Start HTTP mode
+uv run sharepoint-docs-mcp --transport stdio   # Start stdio mode
+uv run sharepoint-docs-mcp --transport http    # Start HTTP mode
 ```
 
 ### Quality Checks
@@ -77,22 +83,58 @@ def some_function():
     return something()
 ```
 
-### MCP Development
+### Project-Specific Guidelines
 
+#### MCP Development
 - Use proper logging setup to avoid stdout contamination in stdio mode
 - Log to stderr only in stdio transport mode
 - Follow FastMCP patterns for tool decoration and type hints
 - Document tools clearly for LLM consumption
 
-### Error Handling
+#### SharePoint Integration
+- Always validate environment configuration before client initialization
+- Handle authentication errors with natural language messages
+- Support both file-based and text-based certificate configuration
+- Implement proper error handling for SharePoint API calls
 
+#### Response Format Feature
+- Support both "detailed" and "compact" response formats for token efficiency
+- Always validate response_format parameter with proper fallback to "detailed"
+- Use compact format for reduced token usage when full details not needed
+
+#### Error Handling
 - Handle transport-specific errors appropriately
 - Provide clear error messages for invalid transport selection
 - Use proper logging levels for different scenarios
+- Implement natural language error messages for better UX
+
+## Project Files Structure
+
+### Core Files
+- `src/main.py`
+  - CLI entry point with typer
+- `src/server.py`
+  - MCP server core logic and tool implementations
+- `src/config.py`
+  - Environment configuration management
+- `src/sharepoint_auth.py`
+  - Azure AD certificate authentication
+- `src/sharepoint_search.py`
+  - SharePoint search client implementation
+- `src/error_messages.py`
+  - Natural language error message handling
+
+### Available MCP Tools
+- `sharepoint_docs_search`
+  - Search SharePoint documents with keyword queries
+  - Support for file extension filtering
+  - Response format options (detailed/compact)
+- `sharepoint_docs_download`
+  - Download files from SharePoint using search results
 
 ### 日本語文章でのMarkdownフォーマット
 
-日本語でドキュメントを作成する際は、以下のガイドラインに従う：
+日本語でドキュメントを作成する際は、以下のガイドラインに従う
 
 #### 太字の使用を避ける
 **❌ Wrong**:
@@ -112,31 +154,5 @@ def some_function():
 #### コロン「:」の使用を最小限にする
 文末のコロンは日本語として不自然なため、本当に必要な場合のみ使用する
 
-**❌ Wrong**:
-```markdown
-以下の設定を行います：
-必要な情報の取得：
-```
-
-**✅ Correct**:
-```markdown
-以下の設定を行います
-必要な情報の取得
-```
-
 #### 箇条書きでの構造化
 見出しと説明を区別する際は、説明部分を1段階深くインデントする
-
-**❌ Wrong**:
-```markdown
-- 項目名: 項目の説明
-- 別の項目名: 別の項目の説明
-```
-
-**✅ Correct**:
-```markdown
-- 項目名
-  - 項目の説明
-- 別の項目名
-  - 別の項目の説明
-```
