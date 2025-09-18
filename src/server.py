@@ -5,6 +5,7 @@ from typing import Any
 from fastmcp import FastMCP
 
 from .config import config
+from .error_messages import handle_sharepoint_error
 from .sharepoint_auth import SharePointCertificateAuth
 from .sharepoint_search import SharePointSearchClient
 
@@ -126,9 +127,8 @@ def sharepoint_docs_search(
         return results
 
     except Exception as e:
-        error_msg = f"SharePoint search failed: {str(e)}"
-        logging.error(error_msg)
-        raise RuntimeError(error_msg) from e
+        logging.error(f"SharePoint search failed: {str(e)}")
+        raise handle_sharepoint_error(e, "search") from e
 
 
 def sharepoint_docs_download(file_path: str) -> str:
@@ -160,9 +160,8 @@ def sharepoint_docs_download(file_path: str) -> str:
         return encoded_content
 
     except Exception as e:
-        error_msg = f"SharePoint file download failed: {str(e)}"
-        logging.error(error_msg)
-        raise RuntimeError(error_msg) from e
+        logging.error(f"SharePoint file download failed: {str(e)}")
+        raise handle_sharepoint_error(e, "download") from e
 
 
 def register_tools():
