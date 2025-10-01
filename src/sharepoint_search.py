@@ -40,13 +40,24 @@ class SharePointSearchClient:
         logger.info(f"Searching for documents containing: {query}")
 
         # 検索クエリの構築
-        search_query = query
-
-        # サイトが指定されている場合のみ絞り込み
         from .config import config
 
-        if config.is_site_specific:
-            search_query += f" AND site:{self.site_url}"
+        search_query = self._build_search_query(query, config)
+        logger.info(f"Built search query: {search_query}")
+
+        # OneDrive設定のデバッグ情報
+        if config.include_onedrive:
+            onedrive_targets = config.get_onedrive_targets()
+            logger.info(f"OneDrive targets: {len(onedrive_targets)} found")
+            for target in onedrive_targets:
+                logger.info(
+                    f"OneDrive target: {target['email']} -> {target['onedrive_path']}"
+                )
+
+        # サイト設定のデバッグ情報
+        logger.info(f"Sites: {config.sites}")
+        logger.info(f"Is site specific: {config.is_site_specific}")
+        logger.info(f"Has multiple targets: {config.has_multiple_targets}")
 
         # ファイル拡張子フィルターを追加
         if file_extensions:
@@ -65,7 +76,14 @@ class SharePointSearchClient:
                 "selectproperties": "'Title,Path,Size,LastModifiedTime,FileExtension,HitHighlightedSummary'",
             }
 
-            search_url = f"{self.site_url}/_api/search/query"
+            # OneDrive検索を含む場合はベースURL、サイト固有検索の場合はサイトURLを使用
+            if config.include_onedrive or not config.is_site_specific:
+                search_url = f"{config.base_url}/_api/search/query"
+            else:
+                search_url = f"{self.site_url}/_api/search/query"
+
+            logger.info(f"Search URL: {search_url}")
+            logger.info(f"Search parameters: {params}")
 
             headers = {
                 "Accept": "application/json;odata=verbose",
@@ -75,22 +93,38 @@ class SharePointSearchClient:
             response = requests.get(
                 search_url, params=params, headers=headers, timeout=30
             )
+            logger.info(f"Response status: {response.status_code}")
+
             response.raise_for_status()
             search_results_json = response.json()
+            logger.info(
+                f"Response received, keys: {search_results_json.keys() if isinstance(search_results_json, dict) else 'Not a dict'}"
+            )
 
             results = []
             # JSONレスポンスの解析
             if isinstance(search_results_json, dict) and "d" in search_results_json:
                 d_content = search_results_json["d"]
+                logger.info(
+                    f"d_content keys: {d_content.keys() if isinstance(d_content, dict) else 'Not a dict'}"
+                )
+
                 if isinstance(d_content, dict) and "query" in d_content:
                     primary_results = d_content["query"].get("PrimaryQueryResult", {})
                     relevant_results = primary_results.get("RelevantResults", {})
+                    logger.info(
+                        f"RelevantResults keys: {relevant_results.keys() if isinstance(relevant_results, dict) else 'Not a dict'}"
+                    )
 
+                    # 結果の総数をログ出力
+                    total_rows = relevant_results.get("TotalRows", 0)
+                    logger.info(f"Total rows from SharePoint: {total_rows}")
                     # SharePointレスポンス構造に合わせて解析
                     if (
                         "Table" in relevant_results
                         and "Rows" in relevant_results["Table"]
                     ):
+                        logger.info("Found Table and Rows in results")
                         rows = relevant_results["Table"]["Rows"].get("results", [])
                         for row in rows:
                             cells = row.get("Cells", {}).get("results", [])
@@ -116,6 +150,12 @@ class SharePointSearchClient:
 
                             if result_item:
                                 results.append(result_item)
+                    else:
+                        logger.warning("No Table/Rows found in relevant_results")
+                else:
+                    logger.warning("No 'query' key in d_content")
+            else:
+                logger.warning("No 'd' key in search results or not a dict")
 
             logger.info(f"Found {len(results)} search results")
             return results
@@ -123,6 +163,66 @@ class SharePointSearchClient:
         except Exception as e:
             logger.error(f"Search failed: {str(e)}")
             raise handle_sharepoint_error(e, "search") from e
+
+    def _build_search_query(self, query: str, config) -> str:
+        """検索クエリを構築（OneDriveと複数サイト対応）"""
+        search_query = query
+
+        # サイトフィルターを構築
+        site_filters = self._build_site_filters(config)
+
+        if site_filters:
+            search_query += f" AND ({site_filters})"
+
+        return search_query
+
+    def _build_site_filters(self, config) -> str:
+        """サイトフィルターを構築"""
+        filters = []
+
+        # OneDriveフィルターを追加
+        onedrive_filters = self._build_onedrive_filters(config)
+        filters.extend(onedrive_filters)
+
+        # SharePointサイトフィルターを追加
+        sharepoint_filters = self._build_sharepoint_filters(config)
+        filters.extend(sharepoint_filters)
+
+        return " OR ".join(filters) if filters else ""
+
+    def _build_onedrive_filters(self, config) -> list[str]:
+        """OneDrive用のフィルターを構築"""
+        if not config.include_onedrive:
+            return []
+
+        filters = []
+        onedrive_targets = config.get_onedrive_targets()
+
+        # OneDriveのベースURLを構築（-myサフィックス付きドメイン）
+        onedrive_base_url = config.base_url.replace(".sharepoint.com", "-my.sharepoint.com")
+
+        for target in onedrive_targets:
+            onedrive_path = target["onedrive_path"]
+            full_path = f"{onedrive_base_url}/{onedrive_path}"
+            filters.append(f'path:"{full_path}"')
+
+        return filters
+
+    def _build_sharepoint_filters(self, config) -> list[str]:
+        """SharePointサイト用のフィルターを構築"""
+        filters = []
+
+        # 特定サイトの場合
+        if config.is_site_specific:
+            filters.append(f'site:"{config.site_url}"')
+
+        # 複数サイトの場合
+        elif config.sites:
+            for site_name in config.sites:
+                site_url = f"{config.base_url}/sites/{site_name}"
+                filters.append(f'site:"{site_url}"')
+
+        return filters
 
     def download_file(self, file_path: str) -> bytes:
         """

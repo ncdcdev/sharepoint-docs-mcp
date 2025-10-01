@@ -23,9 +23,20 @@ Please note that other authentication methods are not supported.
 
 - sharepoint_docs_search
   - Document search by keywords
+  - Support for both SharePoint sites and OneDrive
+  - Multiple search targets (sites, OneDrive folders, or mixed)
   - Response format options (detailed/compact) for token efficiency
 - sharepoint_docs_download
   - File download from search results
+
+### OneDrive Support
+
+This server supports searching both SharePoint sites and OneDrive content with flexible configuration:
+
+- **OneDrive Integration**: Search specific users' OneDrive content
+- **Folder-level targeting**: Search specific folders within OneDrive
+- **Mixed search**: Combine SharePoint sites and OneDrive in a single search
+- **Flexible configuration**: Simple environment variable setup
 
 ## Requirements
 
@@ -64,12 +75,21 @@ Create a `.env` file with the following configuration (refer to `.env.example`):
 ```bash
 # SharePoint configuration
 SHAREPOINT_BASE_URL=https://yourcompany.sharepoint.com
-SHAREPOINT_SITE_NAME=yoursite
 SHAREPOINT_TENANT_ID=your-tenant-id-here
 SHAREPOINT_CLIENT_ID=your-client-id-here
 
-# Leave SHAREPOINT_SITE_NAME empty to search across the entire tenant
-# SHAREPOINT_SITE_NAME=
+# Search targets (multiple targets supported, comma-separated)
+# @onedrive: Include OneDrive in search (requires SHAREPOINT_ONEDRIVE_PATHS)
+# @all: Search entire tenant (not recommended for security reasons)
+# site-name: Specific SharePoint site
+# Example: @onedrive,team-site,project-alpha
+SHAREPOINT_SITE_NAME=yoursite
+
+# OneDrive configuration (optional)
+# Format: user@domain.com[:/folder/path][,user2@domain.com[:/folder/path]]...
+# Examples:
+# SHAREPOINT_ONEDRIVE_PATHS=user@company.com,manager@company.com:/Documents/Important
+# SHAREPOINT_ONEDRIVE_PATHS=user1@company.com:/Documents/Projects,user2@company.com:/Documents/Archive
 
 # Certificate authentication configuration (specify either file path or text)
 # Priority: 1. Text, 2. File path
@@ -215,6 +235,58 @@ uv run fmt
 
 # Auto-fix + format
 uv run fix
+```
+
+## Usage Examples
+
+### SharePoint Site Search Only
+```bash
+# Search specific SharePoint site
+SHAREPOINT_SITE_NAME=team-site
+
+# Search multiple SharePoint sites
+SHAREPOINT_SITE_NAME=team-site,project-alpha,hr-docs
+```
+
+### OneDrive Search Only
+```bash
+# Search specific users' OneDrive (entire OneDrive)
+SHAREPOINT_ONEDRIVE_PATHS=user1@company.com,user2@company.com
+SHAREPOINT_SITE_NAME=@onedrive
+
+# Search specific folders in OneDrive
+SHAREPOINT_ONEDRIVE_PATHS=manager@company.com:/Documents/Important,user@company.com:/Documents/Projects
+SHAREPOINT_SITE_NAME=@onedrive
+```
+
+### Mixed Search (OneDrive + SharePoint)
+```bash
+# Search OneDrive and SharePoint sites together
+SHAREPOINT_ONEDRIVE_PATHS=user1@company.com:/Documents/Projects,manager@company.com:/Documents/Important
+SHAREPOINT_SITE_NAME=@onedrive,team-site,project-alpha
+```
+
+### Common Use Cases
+
+**Executive Team Setup**
+```bash
+# Search executive OneDrive folders and board documents
+SHAREPOINT_ONEDRIVE_PATHS=ceo@company.com:/Documents/Executive,cfo@company.com:/Documents/Finance
+SHAREPOINT_SITE_NAME=@onedrive,executive-team,board-documents
+```
+
+**Project Team Setup**
+```bash
+# Search project members' work folders and team sites
+SHAREPOINT_ONEDRIVE_PATHS=pm@company.com:/Documents/ProjectA,dev@company.com:/Documents/ProjectA
+SHAREPOINT_SITE_NAME=@onedrive,project-a-team,project-a-docs
+```
+
+**Sales Team Setup**
+```bash
+# Search sales OneDrive folders and customer sites
+SHAREPOINT_ONEDRIVE_PATHS=sales1@company.com:/Documents/Customers,sales2@company.com:/Documents/Proposals
+SHAREPOINT_SITE_NAME=@onedrive,sales-team,customer-portal
 ```
 
 ## Project Structure

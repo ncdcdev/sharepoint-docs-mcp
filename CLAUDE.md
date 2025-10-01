@@ -127,10 +127,43 @@ def some_function():
 ### Available MCP Tools
 - `sharepoint_docs_search`
   - Search SharePoint documents with keyword queries
+  - Support for OneDrive and SharePoint mixed search
+  - Multiple search targets (sites, OneDrive folders, or combination)
   - Support for file extension filtering
   - Response format options (detailed/compact)
 - `sharepoint_docs_download`
   - Download files from SharePoint using search results
+
+## OneDrive対応機能
+
+### 環境変数
+```bash
+# OneDriveユーザーとフォルダーの指定
+SHAREPOINT_ONEDRIVE_PATHS=user@domain.com[:/folder/path][,user2@domain.com[:/folder/path]]...
+
+# 検索対象の指定（@onedriveキーワード使用）
+SHAREPOINT_SITE_NAME=@onedrive,site1,site2
+```
+
+### 設定例
+```bash
+# OneDriveのみ検索
+SHAREPOINT_ONEDRIVE_PATHS=user1@company.com,user2@company.com:/Documents/重要書類
+SHAREPOINT_SITE_NAME=@onedrive
+
+# OneDriveとSharePointサイトの混合検索
+SHAREPOINT_ONEDRIVE_PATHS=manager@company.com:/Documents/経営資料
+SHAREPOINT_SITE_NAME=@onedrive,executive-team,board-documents
+
+# 複数SharePointサイトのみ
+SHAREPOINT_SITE_NAME=site1,site2,site3
+```
+
+### 技術的特徴
+- SharePoint REST APIのKQLクエリを使用
+- pathフィルターとsiteフィルターの組み合わせ
+- メールアドレスからOneDriveパスへの自動変換
+- フォルダーレベルまでの詳細指定対応
 
 ### 日本語文章でのMarkdownフォーマット
 
