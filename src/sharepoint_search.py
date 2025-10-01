@@ -285,7 +285,9 @@ class SharePointSearchClient:
 
         # 方式2: GetFileByServerRelativeUrl（フォールバック）
         try:
-            download_url = f"{api_base_url}/_api/web/GetFileByServerRelativeUrl('{server_relative_url}')/$value"
+            # シングルクォートをエスケープ（SharePoint REST API仕様）
+            escaped_path = server_relative_url.replace("'", "''")
+            download_url = f"{api_base_url}/_api/web/GetFileByServerRelativeUrl('{escaped_path}')/$value"
             response = requests.get(download_url, headers=headers, timeout=60)
             response.raise_for_status()
             return response.content
