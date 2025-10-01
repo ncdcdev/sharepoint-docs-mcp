@@ -127,8 +127,8 @@ def get_file_not_found_error(
 
     # OneDriveファイルの場合は特別なメッセージを提供
     error_str = str(original_error).lower()
-    if file_path and ("/personal/" in file_path or "-my.sharepoint.com" in file_path):
-        solution = "This appears to be a OneDrive personal file. The system tried multiple download methods including OpenBinaryStream and GetFileByServerRelativePath. Please verify the file still exists and you have access permissions."
+    if is_onedrive_file:
+        solution = "This appears to be a OneDrive personal file. The system tried multiple download methods including GetFileByServerRelativePath and GetFileByServerRelativeUrl. Please verify the file still exists and you have access permissions."
     elif "all download methods failed" in error_str:
         solution = "Multiple download methods were attempted but all failed. This could be due to special characters in the filename, permission issues, or the file being moved. Please try searching for the file again to get an updated path."
     else:

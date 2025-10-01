@@ -63,7 +63,7 @@ class SharePointSearchClient:
             }
 
             # OneDrive検索を含む場合はベースURL、サイト固有検索の場合はサイトURLを使用
-            if global_config.include_onedrive or not global_config.is_site_specific:
+            if not global_config.is_site_specific:
                 search_url = f"{global_config.base_url}/_api/search/query"
             else:
                 search_url = f"{self.site_url}/_api/search/query"
@@ -180,12 +180,8 @@ class SharePointSearchClient:
         """SharePointサイト用のフィルターを構築"""
         filters = []
 
-        # 特定サイトの場合
-        if config.is_site_specific:
-            filters.append(f'site:"{config.site_url}"')
-
-        # 複数サイトの場合
-        elif config.sites:
+        # サイト指定がある場合
+        if config.sites:
             for site_name in config.sites:
                 site_url = f"{config.base_url}/sites/{site_name}"
                 filters.append(f'site:"{site_url}"')
@@ -226,17 +222,15 @@ class SharePointSearchClient:
 
             if is_onedrive_file:
                 # OneDriveファイルの場合は個人用サイトのAPIエンドポイントを使用
-                personal_path_match = server_relative_url.split("/")
-                if (
-                    len(personal_path_match) >= 3
-                    and personal_path_match[1] == "personal"
-                ):
-                    personal_site_name = personal_path_match[2]
-                    api_base_url = f"{global_config.base_url.replace('.sharepoint.com', '-my.sharepoint.com')}/personal/{personal_site_name}"
+                onedrive_base_url = global_config.base_url.replace(
+                    ".sharepoint.com", "-my.sharepoint.com"
+                )
+                if len(path_segments) >= 3:
+                    personal_site_name = path_segments[2]
+                    api_base_url = f"{onedrive_base_url}/personal/{personal_site_name}"
                 else:
-                    api_base_url = global_config.base_url.replace(
-                        ".sharepoint.com", "-my.sharepoint.com"
-                    )
+                    # 通常は発生しないが、フォールバックとして-my.sharepoint.comドメインを使用
+                    api_base_url = onedrive_base_url
             elif global_config.is_site_specific:
                 # 特定サイト設定の場合はそのサイトのAPIを使用
                 api_base_url = self.site_url
@@ -266,12 +260,9 @@ class SharePointSearchClient:
         except Exception as e:
             logger.error(f"File download failed: {str(e)}")
             # OneDriveファイルかどうかを判定してエラーメッセージを調整
-            if "/personal/" in file_path:
-                raise handle_sharepoint_error(
-                    e, "download", is_onedrive_file=True
-                ) from e
-            else:
-                raise handle_sharepoint_error(e, "download") from e
+            raise handle_sharepoint_error(
+                e, "download", is_onedrive_file=is_onedrive_file
+            ) from e
 
     def _download_onedrive_file(
         self, api_base_url: str, server_relative_url: str, headers: dict
@@ -282,7 +273,9 @@ class SharePointSearchClient:
         """
         # 方式1: GetFileByServerRelativePath（特殊文字に強い）
         try:
-            encoded_path = quote(server_relative_url, safe="/")
+            # シングルクォートをエスケープ（SharePoint REST API仕様）
+            escaped_path = server_relative_url.replace("'", "''")
+            encoded_path = quote(escaped_path, safe="/")
             download_url = f"{api_base_url}/_api/web/GetFileByServerRelativePath(decodedUrl=@f)/$value?@f='{encoded_path}'"
             response = requests.get(download_url, headers=headers, timeout=60)
             response.raise_for_status()
@@ -309,7 +302,9 @@ class SharePointSearchClient:
         """
         # 方式1: GetFileByServerRelativeUrl（標準API）
         try:
-            download_url = f"{api_base_url}/_api/web/GetFileByServerRelativeUrl('{server_relative_url}')/$value"
+            # シングルクォートをエスケープ（SharePoint REST API仕様）
+            escaped_path = server_relative_url.replace("'", "''")
+            download_url = f"{api_base_url}/_api/web/GetFileByServerRelativeUrl('{escaped_path}')/$value"
             response = requests.get(download_url, headers=headers, timeout=60)
             response.raise_for_status()
             return response.content
@@ -318,7 +313,9 @@ class SharePointSearchClient:
 
         # 方式2: GetFileByServerRelativePath（フォールバック）
         try:
-            encoded_path = quote(server_relative_url, safe="/")
+            # シングルクォートをエスケープ（SharePoint REST API仕様）
+            escaped_path = server_relative_url.replace("'", "''")
+            encoded_path = quote(escaped_path, safe="/")
             download_url = f"{api_base_url}/_api/web/GetFileByServerRelativePath(decodedUrl=@f)/$value?@f='{encoded_path}'"
             response = requests.get(download_url, headers=headers, timeout=60)
             response.raise_for_status()
