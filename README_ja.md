@@ -1,5 +1,7 @@
 # SharePoint Docs MCP Server
 
+> [🇬🇧 English version](README.md)
+
 SharePointドキュメント検索機能を提供するModel Context Protocol (MCP) サーバーです。
 stdioとHTTPの両方のトランスポートに対応しています。
 
@@ -21,9 +23,26 @@ stdioとHTTPの両方のトランスポートに対応しています。
 
 - sharepoint_docs_search
   - キーワードによるドキュメント検索
+  - SharePointサイトとOneDriveの両方に対応
+  - 複数検索対象（サイト、OneDriveフォルダー、混在）のサポート
+  - ファイル拡張子フィルタリング（pdf、docx、xlsx等）
   - レスポンス形式オプション（詳細/簡潔）でトークン効率を改善
 - sharepoint_docs_download
   - 検索結果からファイルをダウンロード
+  - SharePoint/OneDriveファイルに応じた自動メソッド選択
+
+### OneDrive対応
+
+SharePointサイトとOneDriveコンテンツの両方を柔軟な設定で検索できます
+
+- OneDrive統合
+  - 特定ユーザーのOneDriveコンテンツを検索
+- フォルダーレベルの対象指定
+  - OneDrive内の特定フォルダーを検索
+- 混在検索
+  - SharePointサイトとOneDriveを1つの検索で組み合わせ
+- 柔軟な設定
+  - シンプルな環境変数による設定
 
 ## 必要要件
 
@@ -62,12 +81,26 @@ uv sync --dev
 ```bash
 # SharePoint設定
 SHAREPOINT_BASE_URL=https://yourcompany.sharepoint.com
-SHAREPOINT_SITE_NAME=yoursite
 SHAREPOINT_TENANT_ID=your-tenant-id-here
 SHAREPOINT_CLIENT_ID=your-client-id-here
 
-# SHAREPOINT_SITE_NAME を空にするとテナント全体を検索対象にできます
-# SHAREPOINT_SITE_NAME=
+# 検索対象（複数指定可、カンマ区切り）
+# オプション:
+#   - @onedrive: OneDriveを検索に含める（SHAREPOINT_ONEDRIVE_PATHSが必要）
+#   - @all: テナント全体を検索（セキュリティ上推奨されません）
+#   - site-name: 特定のSharePointサイト名
+# 例:
+#   - 単一サイト: SHAREPOINT_SITE_NAME=team-site
+#   - 複数サイト: SHAREPOINT_SITE_NAME=team-site,project-alpha,hr-docs
+#   - OneDriveのみ: SHAREPOINT_SITE_NAME=@onedrive
+#   - 混在: SHAREPOINT_SITE_NAME=@onedrive,team-site,project-alpha
+SHAREPOINT_SITE_NAME=yoursite
+
+# OneDrive設定（オプション）
+# 形式: user@domain.com[:/folder/path][,user2@domain.com[:/folder/path]]...
+# 例:
+# SHAREPOINT_ONEDRIVE_PATHS=user@company.com,manager@company.com:/Documents/重要書類
+# SHAREPOINT_ONEDRIVE_PATHS=user1@company.com:/Documents/プロジェクト,user2@company.com:/Documents/アーカイブ
 
 # 証明書認証設定（ファイルパスまたはテキストのいずれかを指定）
 # 優先順位: 1. テキスト、2. ファイルパス
@@ -213,6 +246,58 @@ uv run fmt
 
 # 自動修正 + フォーマット
 uv run fix
+```
+
+## 使用例
+
+### SharePointサイトのみ検索
+```bash
+# 特定のSharePointサイトを検索
+SHAREPOINT_SITE_NAME=team-site
+
+# 複数のSharePointサイトを検索
+SHAREPOINT_SITE_NAME=team-site,project-alpha,hr-docs
+```
+
+### OneDriveのみ検索
+```bash
+# 特定ユーザーのOneDrive全体を検索
+SHAREPOINT_ONEDRIVE_PATHS=user1@company.com,user2@company.com
+SHAREPOINT_SITE_NAME=@onedrive
+
+# OneDrive内の特定フォルダーを検索
+SHAREPOINT_ONEDRIVE_PATHS=manager@company.com:/Documents/重要書類,user@company.com:/Documents/プロジェクト
+SHAREPOINT_SITE_NAME=@onedrive
+```
+
+### 混在検索（OneDrive + SharePoint）
+```bash
+# OneDriveとSharePointサイトを一緒に検索
+SHAREPOINT_ONEDRIVE_PATHS=user1@company.com:/Documents/プロジェクト,manager@company.com:/Documents/重要書類
+SHAREPOINT_SITE_NAME=@onedrive,team-site,project-alpha
+```
+
+### 一般的な使用例
+
+**経営層向け設定**
+```bash
+# 経営陣のOneDriveフォルダーと取締役会文書を検索
+SHAREPOINT_ONEDRIVE_PATHS=ceo@company.com:/Documents/経営資料,cfo@company.com:/Documents/財務
+SHAREPOINT_SITE_NAME=@onedrive,executive-team,board-documents
+```
+
+**プロジェクトチーム向け設定**
+```bash
+# プロジェクトメンバーの作業フォルダーとチームサイトを検索
+SHAREPOINT_ONEDRIVE_PATHS=pm@company.com:/Documents/ProjectA,dev@company.com:/Documents/ProjectA
+SHAREPOINT_SITE_NAME=@onedrive,project-a-team,project-a-docs
+```
+
+**営業チーム向け設定**
+```bash
+# 営業担当のOneDriveフォルダーと顧客サイトを検索
+SHAREPOINT_ONEDRIVE_PATHS=sales1@company.com:/Documents/顧客情報,sales2@company.com:/Documents/提案書
+SHAREPOINT_SITE_NAME=@onedrive,sales-team,customer-portal
 ```
 
 ## プロジェクト構造

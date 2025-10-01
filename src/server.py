@@ -1,3 +1,4 @@
+import base64
 import logging
 import sys
 from typing import Any
@@ -168,8 +169,6 @@ def sharepoint_docs_download(file_path: str) -> str:
         file_content = client.download_file(file_path)
 
         # Base64エンコードして返す
-        import base64
-
         encoded_content = base64.b64encode(file_content).decode("utf-8")
 
         logging.info(

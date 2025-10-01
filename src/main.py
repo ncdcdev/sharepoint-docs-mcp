@@ -1,3 +1,5 @@
+import logging
+
 import typer
 
 from .server import mcp, register_tools, setup_logging
@@ -23,8 +25,6 @@ def main(
     """
     stdioまたはhttpトランスポートでMCPサーバーを起動します。
     """
-    import logging
-
     setup_logging()
     register_tools()
 

@@ -114,7 +114,7 @@ def get_search_query_error(original_error: Exception) -> SharePointError:
 
 
 def get_file_not_found_error(
-    file_path: str | None, original_error: Exception
+    file_path: str | None, original_error: Exception, is_onedrive_file: bool = False
 ) -> SharePointError:
     """Generate file not found error message"""
     if file_path:
@@ -122,10 +122,22 @@ def get_file_not_found_error(
     else:
         message = "The requested file was not found."
 
+    if is_onedrive_file:
+        message += " This appears to be a OneDrive file."
+
+    # OneDriveファイルの場合は特別なメッセージを提供
+    error_str = str(original_error).lower()
+    if is_onedrive_file:
+        solution = "This appears to be a OneDrive personal file. The system tried multiple download methods including GetFileByServerRelativePath and GetFileByServerRelativeUrl. Please verify the file still exists and you have access permissions."
+    elif "all download methods failed" in error_str:
+        solution = "Multiple download methods were attempted but all failed. This could be due to special characters in the filename, permission issues, or the file being moved. Please try searching for the file again to get an updated path."
+    else:
+        solution = "Please verify the file path is correct or obtain the correct path from the latest search results."
+
     return SharePointError(
         category=ErrorCategory.FILE_NOT_FOUND,
         message=message,
-        solution="Please verify the file path is correct or obtain the correct path from the latest search results.",
+        solution=solution,
         original_error=original_error,
     )
 
@@ -150,7 +162,9 @@ def get_unknown_error(original_error: Exception) -> SharePointError:
     )
 
 
-def handle_sharepoint_error(error: Exception, context: str = "") -> SharePointError:
+def handle_sharepoint_error(
+    error: Exception, context: str = "", is_onedrive_file: bool = False
+) -> SharePointError:
     """
     Classify SharePoint-related errors into appropriate categories and generate natural language messages
 
@@ -171,7 +185,7 @@ def handle_sharepoint_error(error: Exception, context: str = "") -> SharePointEr
         elif status_code == 403:
             return get_authorization_error(error)
         elif status_code == 404 and context == "download":
-            return get_file_not_found_error(None, error)
+            return get_file_not_found_error(None, error, is_onedrive_file)
 
     # Classification by error message content
     if any(

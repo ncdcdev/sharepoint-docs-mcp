@@ -20,6 +20,9 @@ class SharePointConfig:
             "SHAREPOINT_BASE_URL", ""
         )  # https://company.sharepoint.com
         self.site_name = os.getenv("SHAREPOINT_SITE_NAME", "")  # sitename（オプション）
+
+        # OneDrive設定
+        self.onedrive_paths = os.getenv("SHAREPOINT_ONEDRIVE_PATHS", "")
         self.tenant_id = os.getenv("SHAREPOINT_TENANT_ID", "")
         self.client_id = os.getenv("SHAREPOINT_CLIENT_ID", "")
 
@@ -56,13 +59,103 @@ class SharePointConfig:
     @property
     def is_site_specific(self) -> bool:
         """特定のサイトに限定されているかどうか"""
-        return bool(self.site_name)
+        return bool(self.site_name) and not self.has_multiple_targets
+
+    @property
+    def has_multiple_targets(self) -> bool:
+        """複数サイトまたはOneDriveを含む検索かどうか"""
+        if not self.site_name:
+            return False
+
+        # 特別キーワードを含めた全サイトリストをチェック
+        all_sites = [site.strip() for site in self.site_name.split(",") if site.strip()]
+        return self.include_onedrive or len(self.sites) > 1 or "@all" in all_sites
+
+    @property
+    def include_onedrive(self) -> bool:
+        """OneDrive検索が含まれるかどうか"""
+        if not self.site_name:
+            return False
+        sites_with_keywords = [
+            site.strip() for site in self.site_name.split(",") if site.strip()
+        ]
+        return "@onedrive" in sites_with_keywords and bool(self.onedrive_paths)
+
+    @property
+    def sites(self) -> list[str]:
+        """検索対象サイトのリスト（@onedriveなど特別キーワードを除く）"""
+        if not self.site_name:
+            return []
+
+        sites = [site.strip() for site in self.site_name.split(",") if site.strip()]
+        # 特別キーワードを除外
+        return [site for site in sites if not site.startswith("@")]
 
     def _parse_file_extensions(self, extensions_str: str) -> list[str]:
         """ファイル拡張子文字列をリストに変換"""
         if not extensions_str:
             return []
         return [ext.strip().lower() for ext in extensions_str.split(",") if ext.strip()]
+
+    def parse_onedrive_paths(self) -> list[dict[str, str]]:
+        """OneDriveパス設定を解析してユーザーとフォルダー情報を返す"""
+        if not self.onedrive_paths:
+            return []
+
+        result = []
+        entries = [
+            entry.strip() for entry in self.onedrive_paths.split(",") if entry.strip()
+        ]
+
+        for entry in entries:
+            if ":" in entry:
+                # user@domain.com:/folder/path形式
+                email, folder_path = entry.split(":", 1)
+                email = email.strip()
+                folder_path = folder_path.strip()
+            else:
+                # user@domain.com形式（ユーザー全体）
+                email = entry.strip()
+                folder_path = ""
+
+            # メールアドレス形式の簡易チェック
+            if "@" not in email:
+                continue
+
+            # OneDriveパスを構築
+            onedrive_path = self._email_to_onedrive_path(email, folder_path)
+
+            result.append(
+                {
+                    "email": email,
+                    "folder_path": folder_path,
+                    "onedrive_path": onedrive_path,
+                }
+            )
+
+        return result
+
+    def _email_to_onedrive_path(self, email: str, folder_path: str = "") -> str:
+        """メールアドレスをOneDriveパスに変換"""
+        # user@company.com → user_company_com
+        onedrive_user = email.replace("@", "_").replace(".", "_")
+
+        # personal/user_company_com[/folder/path]
+        onedrive_path = f"personal/{onedrive_user}"
+        if folder_path:
+            # 先頭の/を除去
+            folder_path = folder_path.lstrip("/")
+            if folder_path:
+                onedrive_path = f"{onedrive_path}/{folder_path}"
+
+        return onedrive_path
+
+    def get_onedrive_targets(self) -> list[dict[str, str]]:
+        """OneDrive検索対象を取得"""
+        if not self.include_onedrive:
+            return []
+
+        return self.parse_onedrive_paths()
 
     def validate(self) -> list[str]:
         """設定の検証を行い、エラーメッセージのリストを返す"""

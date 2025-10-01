@@ -101,3 +101,205 @@ class TestSharePointConfig:
             config = SharePointConfig()
 
             assert config.site_url == "https://test.sharepoint.com"
+
+
+class TestOneDriveConfig:
+    """OneDrive設定のテスト"""
+
+    def test_parse_onedrive_paths_basic(self):
+        """基本的なOneDriveパス解析のテスト"""
+        env_vars = {
+            "SHAREPOINT_BASE_URL": "https://test.sharepoint.com",
+            "SHAREPOINT_ONEDRIVE_PATHS": "user1@company.com,user2@company.com:/Documents/Projects",
+            "SHAREPOINT_SITE_NAME": "@onedrive",
+        }
+
+        with patch.dict(os.environ, env_vars, clear=True):
+            config = SharePointConfig()
+            targets = config.parse_onedrive_paths()
+
+            assert len(targets) == 2
+            
+            # user1@company.com（フォルダー指定なし）
+            assert targets[0]["email"] == "user1@company.com"
+            assert targets[0]["folder_path"] == ""
+            assert targets[0]["onedrive_path"] == "personal/user1_company_com"
+            
+            # user2@company.com:/Documents/Projects
+            assert targets[1]["email"] == "user2@company.com"
+            assert targets[1]["folder_path"] == "/Documents/Projects"
+            assert targets[1]["onedrive_path"] == "personal/user2_company_com/Documents/Projects"
+
+    def test_parse_onedrive_paths_empty(self):
+        """OneDriveパス設定が空の場合のテスト"""
+        env_vars = {
+            "SHAREPOINT_BASE_URL": "https://test.sharepoint.com",
+            "SHAREPOINT_ONEDRIVE_PATHS": "",
+            "SHAREPOINT_SITE_NAME": "@onedrive",
+        }
+
+        with patch.dict(os.environ, env_vars, clear=True):
+            config = SharePointConfig()
+            targets = config.parse_onedrive_paths()
+
+            assert targets == []
+
+    def test_email_to_onedrive_path_conversion(self):
+        """メールアドレスからOneDriveパスへの変換テスト"""
+        config = SharePointConfig()
+        
+        # 基本的な変換
+        path = config._email_to_onedrive_path("user@company.com")
+        assert path == "personal/user_company_com"
+        
+        # フォルダーパス付き
+        path = config._email_to_onedrive_path("user@company.com", "/Documents/Projects")
+        assert path == "personal/user_company_com/Documents/Projects"
+        
+        # 先頭スラッシュの除去
+        path = config._email_to_onedrive_path("user@company.com", "Documents/Projects")
+        assert path == "personal/user_company_com/Documents/Projects"
+        
+        # onmicrosoft.com ドメイン
+        path = config._email_to_onedrive_path("admin@company.onmicrosoft.com", "/Documents")
+        assert path == "personal/admin_company_onmicrosoft_com/Documents"
+
+    def test_include_onedrive_property(self):
+        """include_onedriveプロパティのテスト"""
+        # OneDriveが含まれる場合
+        env_vars = {
+            "SHAREPOINT_BASE_URL": "https://test.sharepoint.com",
+            "SHAREPOINT_ONEDRIVE_PATHS": "user1@company.com",
+            "SHAREPOINT_SITE_NAME": "@onedrive,team-site",
+        }
+
+        with patch.dict(os.environ, env_vars, clear=True):
+            config = SharePointConfig()
+            assert config.include_onedrive is True
+
+        # @onedriveがあるがパス設定がない場合
+        env_vars = {
+            "SHAREPOINT_BASE_URL": "https://test.sharepoint.com",
+            "SHAREPOINT_ONEDRIVE_PATHS": "",
+            "SHAREPOINT_SITE_NAME": "@onedrive,team-site",
+        }
+
+        with patch.dict(os.environ, env_vars, clear=True):
+            config = SharePointConfig()
+            assert config.include_onedrive is False
+
+        # @onedriveがない場合
+        env_vars = {
+            "SHAREPOINT_BASE_URL": "https://test.sharepoint.com",
+            "SHAREPOINT_ONEDRIVE_PATHS": "user1@company.com",
+            "SHAREPOINT_SITE_NAME": "team-site",
+        }
+
+        with patch.dict(os.environ, env_vars, clear=True):
+            config = SharePointConfig()
+            assert config.include_onedrive is False
+
+    def test_sites_property_excludes_keywords(self):
+        """sitesプロパティが特別キーワードを除外することのテスト"""
+        env_vars = {
+            "SHAREPOINT_BASE_URL": "https://test.sharepoint.com",
+            "SHAREPOINT_SITE_NAME": "@onedrive,team-site,@all,project-alpha",
+        }
+
+        with patch.dict(os.environ, env_vars, clear=True):
+            config = SharePointConfig()
+            sites = config.sites
+
+            assert "team-site" in sites
+            assert "project-alpha" in sites
+            assert "@onedrive" not in sites
+            assert "@all" not in sites
+
+    def test_has_multiple_targets_property(self):
+        """has_multiple_targetsプロパティのテスト"""
+        # OneDriveが含まれる場合
+        env_vars = {
+            "SHAREPOINT_BASE_URL": "https://test.sharepoint.com",
+            "SHAREPOINT_ONEDRIVE_PATHS": "user1@company.com",
+            "SHAREPOINT_SITE_NAME": "@onedrive",
+        }
+
+        with patch.dict(os.environ, env_vars, clear=True):
+            config = SharePointConfig()
+            assert config.has_multiple_targets is True
+
+        # 複数サイトの場合
+        env_vars = {
+            "SHAREPOINT_BASE_URL": "https://test.sharepoint.com",
+            "SHAREPOINT_SITE_NAME": "site1,site2",
+        }
+
+        with patch.dict(os.environ, env_vars, clear=True):
+            config = SharePointConfig()
+            assert config.has_multiple_targets is True
+
+        # @allの場合
+        env_vars = {
+            "SHAREPOINT_BASE_URL": "https://test.sharepoint.com",
+            "SHAREPOINT_SITE_NAME": "@all",
+        }
+
+        with patch.dict(os.environ, env_vars, clear=True):
+            config = SharePointConfig()
+            assert config.has_multiple_targets is True
+
+        # 単一サイトの場合
+        env_vars = {
+            "SHAREPOINT_BASE_URL": "https://test.sharepoint.com",
+            "SHAREPOINT_SITE_NAME": "single-site",
+        }
+
+        with patch.dict(os.environ, env_vars, clear=True):
+            config = SharePointConfig()
+            assert config.has_multiple_targets is False
+
+    def test_get_onedrive_targets(self):
+        """get_onedrive_targetsメソッドのテスト"""
+        # OneDriveが有効な場合
+        env_vars = {
+            "SHAREPOINT_BASE_URL": "https://test.sharepoint.com",
+            "SHAREPOINT_ONEDRIVE_PATHS": "user1@company.com,user2@company.com:/Documents/Projects",
+            "SHAREPOINT_SITE_NAME": "@onedrive,team-site",
+        }
+
+        with patch.dict(os.environ, env_vars, clear=True):
+            config = SharePointConfig()
+            targets = config.get_onedrive_targets()
+
+            assert len(targets) == 2
+            assert targets[0]["email"] == "user1@company.com"
+            assert targets[1]["email"] == "user2@company.com"
+
+        # OneDriveが無効な場合
+        env_vars = {
+            "SHAREPOINT_BASE_URL": "https://test.sharepoint.com",
+            "SHAREPOINT_ONEDRIVE_PATHS": "user1@company.com",
+            "SHAREPOINT_SITE_NAME": "team-site",  # @onedriveなし
+        }
+
+        with patch.dict(os.environ, env_vars, clear=True):
+            config = SharePointConfig()
+            targets = config.get_onedrive_targets()
+
+            assert targets == []
+
+    def test_invalid_email_format_skipped(self):
+        """無効なメールアドレス形式がスキップされることのテスト"""
+        env_vars = {
+            "SHAREPOINT_BASE_URL": "https://test.sharepoint.com",
+            "SHAREPOINT_ONEDRIVE_PATHS": "invalid-email,user@company.com,another-invalid",
+            "SHAREPOINT_SITE_NAME": "@onedrive",
+        }
+
+        with patch.dict(os.environ, env_vars, clear=True):
+            config = SharePointConfig()
+            targets = config.parse_onedrive_paths()
+
+            # 有効なメールアドレスのみが含まれる
+            assert len(targets) == 1
+            assert targets[0]["email"] == "user@company.com"
