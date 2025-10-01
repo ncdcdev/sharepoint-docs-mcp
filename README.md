@@ -25,9 +25,11 @@ Please note that other authentication methods are not supported.
   - Document search by keywords
   - Support for both SharePoint sites and OneDrive
   - Multiple search targets (sites, OneDrive folders, or mixed)
+  - File extension filtering (pdf, docx, xlsx, etc.)
   - Response format options (detailed/compact) for token efficiency
 - sharepoint_docs_download
   - File download from search results
+  - Automatic method selection for SharePoint vs OneDrive files
 
 ### OneDrive Support
 
@@ -79,10 +81,15 @@ SHAREPOINT_TENANT_ID=your-tenant-id-here
 SHAREPOINT_CLIENT_ID=your-client-id-here
 
 # Search targets (multiple targets supported, comma-separated)
-# @onedrive: Include OneDrive in search (requires SHAREPOINT_ONEDRIVE_PATHS)
-# @all: Search entire tenant (not recommended for security reasons)
-# site-name: Specific SharePoint site
-# Example: @onedrive,team-site,project-alpha
+# Options:
+#   - @onedrive: Include OneDrive in search (requires SHAREPOINT_ONEDRIVE_PATHS)
+#   - @all: Search entire tenant (not recommended for security reasons)
+#   - site-name: Specific SharePoint site name(s)
+# Examples:
+#   - Single site: SHAREPOINT_SITE_NAME=team-site
+#   - Multiple sites: SHAREPOINT_SITE_NAME=team-site,project-alpha,hr-docs
+#   - OneDrive only: SHAREPOINT_SITE_NAME=@onedrive
+#   - Mixed: SHAREPOINT_SITE_NAME=@onedrive,team-site,project-alpha
 SHAREPOINT_SITE_NAME=yoursite
 
 # OneDrive configuration (optional)
