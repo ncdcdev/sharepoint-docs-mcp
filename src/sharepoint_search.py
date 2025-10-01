@@ -199,7 +199,9 @@ class SharePointSearchClient:
         onedrive_targets = config.get_onedrive_targets()
 
         # OneDriveのベースURLを構築（-myサフィックス付きドメイン）
-        onedrive_base_url = config.base_url.replace(".sharepoint.com", "-my.sharepoint.com")
+        onedrive_base_url = config.base_url.replace(
+            ".sharepoint.com", "-my.sharepoint.com"
+        )
 
         for target in onedrive_targets:
             onedrive_path = target["onedrive_path"]
@@ -242,7 +244,7 @@ class SharePointSearchClient:
 
             headers = {
                 "Authorization": f"Bearer {access_token}",
-                "Accept": "application/json;odata=verbose",
+                "Accept": "application/octet-stream",  # ファイルバイナリを要求
             }
 
             # SharePointのファイルパスからサーバー相対URLを抽出
@@ -256,12 +258,28 @@ class SharePointSearchClient:
             # ファイルのパスから適切なサイトURLを決定
             from .config import config
 
-            if config.is_site_specific:
+            # OneDriveファイルかどうかを判定
+            path_segments = server_relative_url.split("/")
+            is_onedrive_file = (
+                len(path_segments) >= 2 and path_segments[1] == "personal"
+            )
+
+            if is_onedrive_file:
+                # OneDriveファイルの場合は個人用サイトのAPIエンドポイントを使用
+                # /personal/user_domain_com の部分を抽出
+                personal_path_match = server_relative_url.split('/')
+                if len(personal_path_match) >= 3 and personal_path_match[1] == "personal":
+                    personal_site_name = personal_path_match[2]
+                    api_base_url = f"{config.base_url.replace('.sharepoint.com', '-my.sharepoint.com')}/personal/{personal_site_name}"
+                    # server_relative_urlはそのまま（/personal/user/Documents/... の形式を保持）
+                    # SharePointのAPIは完全なサーバー相対URLを期待している
+                else:
+                    api_base_url = config.base_url.replace(".sharepoint.com", "-my.sharepoint.com")
+            elif config.is_site_specific:
                 # 特定サイト設定の場合はそのサイトのAPIを使用
                 api_base_url = self.site_url
             else:
                 # テナント全体設定の場合はファイルパスからサイトを特定
-                path_segments = server_relative_url.split("/")
                 if len(path_segments) >= 3 and path_segments[1] == "sites":
                     site_name = path_segments[2]
                     api_base_url = f"{config.base_url}/sites/{site_name}"
@@ -269,18 +287,109 @@ class SharePointSearchClient:
                     # サイト形式でない場合はベースURLを使用
                     api_base_url = config.base_url
 
-            # SharePoint REST APIを使用してファイルをダウンロード
-            # /_api/web/GetFileByServerRelativeUrl('path')/$value
-            download_url = f"{api_base_url}/_api/web/GetFileByServerRelativeUrl('{server_relative_url}')/$value"
+            # ダウンロード前のデバッグ情報
+            logger.info(f"Download context - API base URL: {api_base_url}")
+            logger.info(f"Download context - Server relative URL: {server_relative_url}")
+            logger.info(f"Download context - Original file path: {file_path}")
 
-            logger.info(f"Using download URL: {download_url}")
+            # 複数の方法でファイルバイナリをダウンロード
+            download_methods = [
+                self._try_getfilebyserverrelativepath_download,  # 最も堅牢
+                self._try_getfilebyserverrelativeurl_download,  # 標準API
+                self._try_openbinarystream_download,  # OneDrive向け
+            ]
 
-            response = requests.get(download_url, headers=headers, timeout=60)
-            response.raise_for_status()
+            last_error = None
+            for i, method in enumerate(download_methods, 1):
+                try:
+                    logger.info(
+                        f"Attempting download method {i}/{len(download_methods)}: {method.__name__}"
+                    )
+                    result = method(api_base_url, server_relative_url, headers)
+                    if result:
+                        logger.info(
+                            f"Successfully downloaded file using {method.__name__}. Size: {len(result)} bytes"
+                        )
+                        return result
+                except Exception as e:
+                    last_error = e
+                    logger.warning(
+                        f"Download method {method.__name__} failed: {str(e)}"
+                    )
+                    # デバッグ用：詳細なエラー情報を出力
+                    if hasattr(e, 'response') and hasattr(e.response, 'status_code'):
+                        logger.warning(f"HTTP Status: {e.response.status_code}")
+                        if hasattr(e.response, 'text'):
+                            response_text = str(e.response.text)
+                            logger.warning(f"Response text (first 500 chars): {response_text[:500]}")
+                    continue
 
-            logger.info(f"Successfully downloaded file: {file_path}")
-            return response.content
+            # すべてのメソッドが失敗した場合
+            logger.error(f"All download methods failed. Last error: {str(last_error)}")
+            raise last_error or Exception("All download methods failed")
 
         except Exception as e:
             logger.error(f"File download failed: {str(e)}")
-            raise handle_sharepoint_error(e, "download") from e
+            # OneDriveファイルかどうかを判定してエラーメッセージを調整
+            if "/personal/" in file_path:
+                raise handle_sharepoint_error(
+                    e, "download", is_onedrive_file=True
+                ) from e
+            else:
+                raise handle_sharepoint_error(e, "download") from e
+
+    def _try_getfilebyserverrelativepath_download(
+        self, api_base_url: str, server_relative_url: str, headers: dict
+    ) -> bytes:
+        """GetFileByServerRelativePath()を使用したファイルバイナリダウンロード"""
+        from urllib.parse import quote
+
+        # パラメータエイリアシングを使用（特殊文字対応）
+        encoded_path = quote(server_relative_url, safe="/")
+        download_url = f"{api_base_url}/_api/web/GetFileByServerRelativePath(decodedUrl=@f)/$value?@f='{encoded_path}'"
+        logger.info(f"Trying GetFileByServerRelativePath: {download_url}")
+
+        response = requests.get(download_url, headers=headers, timeout=60)
+        response.raise_for_status()
+        return response.content
+
+    def _try_getfilebyserverrelativeurl_download(
+        self, api_base_url: str, server_relative_url: str, headers: dict
+    ) -> bytes:
+        """GetFileByServerRelativeUrl()を使用したファイルバイナリダウンロード"""
+        download_url = f"{api_base_url}/_api/web/GetFileByServerRelativeUrl('{server_relative_url}')/$value"
+        logger.info(f"Trying GetFileByServerRelativeUrl: {download_url}")
+
+        response = requests.get(download_url, headers=headers, timeout=60)
+        response.raise_for_status()
+        return response.content
+
+    def _try_openbinarystream_download(
+        self, api_base_url: str, server_relative_url: str, headers: dict
+    ) -> bytes:
+        """OpenBinaryStream()を使用したファイルバイナリダウンロード"""
+        from urllib.parse import quote
+
+        # 複数のURLエンコーディングを試行
+        url_variants = [
+            quote(server_relative_url, safe="/-_"),
+            server_relative_url,
+            server_relative_url.replace("#", "%23").replace("%", "%25"),
+        ]
+
+        for url_variant in url_variants:
+            try:
+                download_url = f"{api_base_url}/_api/web/GetFileByServerRelativeUrl('{url_variant}')/OpenBinaryStream()"
+                logger.info(f"Trying OpenBinaryStream: {download_url}")
+
+                response = requests.get(download_url, headers=headers, timeout=60)
+                logger.info(f"OpenBinaryStream response status: {response.status_code}")
+                if response.status_code == 200:
+                    return response.content
+                else:
+                    logger.warning(f"OpenBinaryStream failed with status {response.status_code}: {response.text[:200]}")
+            except Exception as e:
+                logger.warning(f"OpenBinaryStream exception for {url_variant}: {str(e)}")
+                continue
+
+        raise Exception("OpenBinaryStream failed for all URL variants")
