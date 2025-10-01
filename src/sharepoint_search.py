@@ -4,9 +4,11 @@ SharePoint検索機能モジュール
 
 import logging
 from typing import Any
+from urllib.parse import quote, unquote, urlparse
 
 import requests
 
+from .config import config as global_config
 from .error_messages import handle_sharepoint_error
 from .sharepoint_auth import SharePointCertificateAuth
 
@@ -40,24 +42,8 @@ class SharePointSearchClient:
         logger.info(f"Searching for documents containing: {query}")
 
         # 検索クエリの構築
-        from .config import config
-
-        search_query = self._build_search_query(query, config)
+        search_query = self._build_search_query(query, global_config)
         logger.info(f"Built search query: {search_query}")
-
-        # OneDrive設定のデバッグ情報
-        if config.include_onedrive:
-            onedrive_targets = config.get_onedrive_targets()
-            logger.info(f"OneDrive targets: {len(onedrive_targets)} found")
-            for target in onedrive_targets:
-                logger.info(
-                    f"OneDrive target: {target['email']} -> {target['onedrive_path']}"
-                )
-
-        # サイト設定のデバッグ情報
-        logger.info(f"Sites: {config.sites}")
-        logger.info(f"Is site specific: {config.is_site_specific}")
-        logger.info(f"Has multiple targets: {config.has_multiple_targets}")
 
         # ファイル拡張子フィルターを追加
         if file_extensions:
@@ -77,13 +63,12 @@ class SharePointSearchClient:
             }
 
             # OneDrive検索を含む場合はベースURL、サイト固有検索の場合はサイトURLを使用
-            if config.include_onedrive or not config.is_site_specific:
-                search_url = f"{config.base_url}/_api/search/query"
+            if global_config.include_onedrive or not global_config.is_site_specific:
+                search_url = f"{global_config.base_url}/_api/search/query"
             else:
                 search_url = f"{self.site_url}/_api/search/query"
 
             logger.info(f"Search URL: {search_url}")
-            logger.info(f"Search parameters: {params}")
 
             headers = {
                 "Accept": "application/json;odata=verbose",
@@ -93,38 +78,25 @@ class SharePointSearchClient:
             response = requests.get(
                 search_url, params=params, headers=headers, timeout=30
             )
-            logger.info(f"Response status: {response.status_code}")
-
             response.raise_for_status()
             search_results_json = response.json()
-            logger.info(
-                f"Response received, keys: {search_results_json.keys() if isinstance(search_results_json, dict) else 'Not a dict'}"
-            )
 
             results = []
             # JSONレスポンスの解析
             if isinstance(search_results_json, dict) and "d" in search_results_json:
                 d_content = search_results_json["d"]
-                logger.info(
-                    f"d_content keys: {d_content.keys() if isinstance(d_content, dict) else 'Not a dict'}"
-                )
 
                 if isinstance(d_content, dict) and "query" in d_content:
                     primary_results = d_content["query"].get("PrimaryQueryResult", {})
                     relevant_results = primary_results.get("RelevantResults", {})
-                    logger.info(
-                        f"RelevantResults keys: {relevant_results.keys() if isinstance(relevant_results, dict) else 'Not a dict'}"
-                    )
-
-                    # 結果の総数をログ出力
                     total_rows = relevant_results.get("TotalRows", 0)
                     logger.info(f"Total rows from SharePoint: {total_rows}")
+
                     # SharePointレスポンス構造に合わせて解析
                     if (
                         "Table" in relevant_results
                         and "Rows" in relevant_results["Table"]
                     ):
-                        logger.info("Found Table and Rows in results")
                         rows = relevant_results["Table"]["Rows"].get("results", [])
                         for row in rows:
                             cells = row.get("Cells", {}).get("results", [])
@@ -150,12 +122,6 @@ class SharePointSearchClient:
 
                             if result_item:
                                 results.append(result_item)
-                    else:
-                        logger.warning("No Table/Rows found in relevant_results")
-                else:
-                    logger.warning("No 'query' key in d_content")
-            else:
-                logger.warning("No 'd' key in search results or not a dict")
 
             logger.info(f"Found {len(results)} search results")
             return results
@@ -248,16 +214,10 @@ class SharePointSearchClient:
             }
 
             # SharePointのファイルパスからサーバー相対URLを抽出
-            from urllib.parse import unquote, urlparse
-
             parsed_url = urlparse(file_path)
-
-            # サーバー相対パスを取得（/sites/... の形式）
             server_relative_url = unquote(parsed_url.path)
 
             # ファイルのパスから適切なサイトURLを決定
-            from .config import config
-
             # OneDriveファイルかどうかを判定
             path_segments = server_relative_url.split("/")
             is_onedrive_file = (
@@ -266,67 +226,42 @@ class SharePointSearchClient:
 
             if is_onedrive_file:
                 # OneDriveファイルの場合は個人用サイトのAPIエンドポイントを使用
-                # /personal/user_domain_com の部分を抽出
-                personal_path_match = server_relative_url.split('/')
-                if len(personal_path_match) >= 3 and personal_path_match[1] == "personal":
+                personal_path_match = server_relative_url.split("/")
+                if (
+                    len(personal_path_match) >= 3
+                    and personal_path_match[1] == "personal"
+                ):
                     personal_site_name = personal_path_match[2]
-                    api_base_url = f"{config.base_url.replace('.sharepoint.com', '-my.sharepoint.com')}/personal/{personal_site_name}"
-                    # server_relative_urlはそのまま（/personal/user/Documents/... の形式を保持）
-                    # SharePointのAPIは完全なサーバー相対URLを期待している
+                    api_base_url = f"{global_config.base_url.replace('.sharepoint.com', '-my.sharepoint.com')}/personal/{personal_site_name}"
                 else:
-                    api_base_url = config.base_url.replace(".sharepoint.com", "-my.sharepoint.com")
-            elif config.is_site_specific:
+                    api_base_url = global_config.base_url.replace(
+                        ".sharepoint.com", "-my.sharepoint.com"
+                    )
+            elif global_config.is_site_specific:
                 # 特定サイト設定の場合はそのサイトのAPIを使用
                 api_base_url = self.site_url
             else:
                 # テナント全体設定の場合はファイルパスからサイトを特定
                 if len(path_segments) >= 3 and path_segments[1] == "sites":
                     site_name = path_segments[2]
-                    api_base_url = f"{config.base_url}/sites/{site_name}"
+                    api_base_url = f"{global_config.base_url}/sites/{site_name}"
                 else:
                     # サイト形式でない場合はベースURLを使用
-                    api_base_url = config.base_url
+                    api_base_url = global_config.base_url
 
-            # ダウンロード前のデバッグ情報
-            logger.info(f"Download context - API base URL: {api_base_url}")
-            logger.info(f"Download context - Server relative URL: {server_relative_url}")
-            logger.info(f"Download context - Original file path: {file_path}")
+            logger.info(f"Downloading from: {api_base_url}")
 
-            # 複数の方法でファイルバイナリをダウンロード
-            download_methods = [
-                self._try_getfilebyserverrelativepath_download,  # 最も堅牢
-                self._try_getfilebyserverrelativeurl_download,  # 標準API
-                self._try_openbinarystream_download,  # OneDrive向け
-            ]
-
-            last_error = None
-            for i, method in enumerate(download_methods, 1):
-                try:
-                    logger.info(
-                        f"Attempting download method {i}/{len(download_methods)}: {method.__name__}"
-                    )
-                    result = method(api_base_url, server_relative_url, headers)
-                    if result:
-                        logger.info(
-                            f"Successfully downloaded file using {method.__name__}. Size: {len(result)} bytes"
-                        )
-                        return result
-                except Exception as e:
-                    last_error = e
-                    logger.warning(
-                        f"Download method {method.__name__} failed: {str(e)}"
-                    )
-                    # デバッグ用：詳細なエラー情報を出力
-                    if hasattr(e, 'response') and hasattr(e.response, 'status_code'):
-                        logger.warning(f"HTTP Status: {e.response.status_code}")
-                        if hasattr(e.response, 'text'):
-                            response_text = str(e.response.text)
-                            logger.warning(f"Response text (first 500 chars): {response_text[:500]}")
-                    continue
-
-            # すべてのメソッドが失敗した場合
-            logger.error(f"All download methods failed. Last error: {str(last_error)}")
-            raise last_error or Exception("All download methods failed")
+            # SharePointとOneDriveで異なるダウンロード方式を使用
+            if is_onedrive_file:
+                # OneDrive用：GetFileByServerRelativePath（特殊文字対応）を優先
+                return self._download_onedrive_file(
+                    api_base_url, server_relative_url, headers
+                )
+            else:
+                # SharePoint用：GetFileByServerRelativeUrlを優先
+                return self._download_sharepoint_file(
+                    api_base_url, server_relative_url, headers
+                )
 
         except Exception as e:
             logger.error(f"File download failed: {str(e)}")
@@ -338,58 +273,56 @@ class SharePointSearchClient:
             else:
                 raise handle_sharepoint_error(e, "download") from e
 
-    def _try_getfilebyserverrelativepath_download(
+    def _download_onedrive_file(
         self, api_base_url: str, server_relative_url: str, headers: dict
     ) -> bytes:
-        """GetFileByServerRelativePath()を使用したファイルバイナリダウンロード"""
-        from urllib.parse import quote
+        """
+        OneDriveファイルのダウンロード
+        特殊文字対応のGetFileByServerRelativePathを優先し、失敗時にGetFileByServerRelativeUrlにフォールバック
+        """
+        # 方式1: GetFileByServerRelativePath（特殊文字に強い）
+        try:
+            encoded_path = quote(server_relative_url, safe="/")
+            download_url = f"{api_base_url}/_api/web/GetFileByServerRelativePath(decodedUrl=@f)/$value?@f='{encoded_path}'"
+            response = requests.get(download_url, headers=headers, timeout=60)
+            response.raise_for_status()
+            return response.content
+        except Exception as e:
+            logger.debug(f"GetFileByServerRelativePath failed: {str(e)}")
 
-        # パラメータエイリアシングを使用（特殊文字対応）
-        encoded_path = quote(server_relative_url, safe="/")
-        download_url = f"{api_base_url}/_api/web/GetFileByServerRelativePath(decodedUrl=@f)/$value?@f='{encoded_path}'"
-        logger.info(f"Trying GetFileByServerRelativePath: {download_url}")
+        # 方式2: GetFileByServerRelativeUrl（フォールバック）
+        try:
+            download_url = f"{api_base_url}/_api/web/GetFileByServerRelativeUrl('{server_relative_url}')/$value"
+            response = requests.get(download_url, headers=headers, timeout=60)
+            response.raise_for_status()
+            return response.content
+        except Exception as e:
+            logger.error(f"All OneDrive download methods failed: {str(e)}")
+            raise
 
-        response = requests.get(download_url, headers=headers, timeout=60)
-        response.raise_for_status()
-        return response.content
-
-    def _try_getfilebyserverrelativeurl_download(
+    def _download_sharepoint_file(
         self, api_base_url: str, server_relative_url: str, headers: dict
     ) -> bytes:
-        """GetFileByServerRelativeUrl()を使用したファイルバイナリダウンロード"""
-        download_url = f"{api_base_url}/_api/web/GetFileByServerRelativeUrl('{server_relative_url}')/$value"
-        logger.info(f"Trying GetFileByServerRelativeUrl: {download_url}")
+        """
+        SharePointファイルのダウンロード
+        GetFileByServerRelativeUrlを優先し、失敗時にGetFileByServerRelativePathにフォールバック
+        """
+        # 方式1: GetFileByServerRelativeUrl（標準API）
+        try:
+            download_url = f"{api_base_url}/_api/web/GetFileByServerRelativeUrl('{server_relative_url}')/$value"
+            response = requests.get(download_url, headers=headers, timeout=60)
+            response.raise_for_status()
+            return response.content
+        except Exception as e:
+            logger.debug(f"GetFileByServerRelativeUrl failed: {str(e)}")
 
-        response = requests.get(download_url, headers=headers, timeout=60)
-        response.raise_for_status()
-        return response.content
-
-    def _try_openbinarystream_download(
-        self, api_base_url: str, server_relative_url: str, headers: dict
-    ) -> bytes:
-        """OpenBinaryStream()を使用したファイルバイナリダウンロード"""
-        from urllib.parse import quote
-
-        # 複数のURLエンコーディングを試行
-        url_variants = [
-            quote(server_relative_url, safe="/-_"),
-            server_relative_url,
-            server_relative_url.replace("#", "%23").replace("%", "%25"),
-        ]
-
-        for url_variant in url_variants:
-            try:
-                download_url = f"{api_base_url}/_api/web/GetFileByServerRelativeUrl('{url_variant}')/OpenBinaryStream()"
-                logger.info(f"Trying OpenBinaryStream: {download_url}")
-
-                response = requests.get(download_url, headers=headers, timeout=60)
-                logger.info(f"OpenBinaryStream response status: {response.status_code}")
-                if response.status_code == 200:
-                    return response.content
-                else:
-                    logger.warning(f"OpenBinaryStream failed with status {response.status_code}: {response.text[:200]}")
-            except Exception as e:
-                logger.warning(f"OpenBinaryStream exception for {url_variant}: {str(e)}")
-                continue
-
-        raise Exception("OpenBinaryStream failed for all URL variants")
+        # 方式2: GetFileByServerRelativePath（フォールバック）
+        try:
+            encoded_path = quote(server_relative_url, safe="/")
+            download_url = f"{api_base_url}/_api/web/GetFileByServerRelativePath(decodedUrl=@f)/$value?@f='{encoded_path}'"
+            response = requests.get(download_url, headers=headers, timeout=60)
+            response.raise_for_status()
+            return response.content
+        except Exception as e:
+            logger.error(f"All SharePoint download methods failed: {str(e)}")
+            raise
