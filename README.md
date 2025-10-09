@@ -42,7 +42,7 @@ This server supports searching both SharePoint sites and OneDrive content with f
 
 ## Requirements
 
-- Python 3.12 or higher
+- Python 3.12
 - uv (package manager)
 
 ## Installation
