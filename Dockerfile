@@ -1,4 +1,4 @@
-FROM ghcr.io/astral-sh/uv:python3.13-bookworm
+FROM ghcr.io/astral-sh/uv:python3.12-bookworm
 
 # タイムゾーンを日本に設定
 ENV TZ=Asia/Tokyo
