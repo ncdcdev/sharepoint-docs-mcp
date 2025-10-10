@@ -1,10 +1,8 @@
 import base64
 import logging
-import secrets
 import sys
-import time
 from typing import Any
-from urllib.parse import urlencode, urlparse
+from urllib.parse import parse_qs, urlencode, urlparse, urlsplit, urlunsplit
 
 from fastmcp import FastMCP
 from fastmcp.server.auth import AccessToken, TokenVerifier
@@ -79,60 +77,38 @@ class AzureOIDCProxyForSharePoint(OIDCProxy):
         params: AuthorizationParams,
     ) -> str:
         """Override authorize to remove resource parameter (Azure AD v2.0 doesn't support it)"""
-        # Generate transaction ID for this authorization request
-        txn_id = secrets.token_urlsafe(32)
+        # Get the standard authorization URL from parent class
+        upstream_url = await super().authorize(client, params)
 
-        # Generate proxy's own PKCE parameters if forwarding is enabled
-        proxy_code_verifier = None
-        proxy_code_challenge = None
-        if self._forward_pkce and params.code_challenge:
-            proxy_code_verifier, proxy_code_challenge = self._generate_pkce_pair()
+        # Parse the URL and remove 'resource' parameter if present
+        # Azure AD v2.0 doesn't support RFC 8707 resource indicator
+        parsed = urlsplit(upstream_url)
+        query_params = parse_qs(parsed.query, keep_blank_values=True)
 
-        # Store transaction data for IdP callback processing
-        transaction_data = {
-            "client_id": client.client_id,
-            "client_redirect_uri": str(params.redirect_uri),
-            "client_state": params.state,
-            "code_challenge": params.code_challenge,
-            "code_challenge_method": getattr(params, "code_challenge_method", "S256"),
-            "scopes": params.scopes or [],
-            "created_at": time.time(),
-        }
+        # Remove 'resource' parameter if it exists
+        if "resource" in query_params:
+            del query_params["resource"]
 
-        # Store proxy's PKCE verifier if we're forwarding
-        if proxy_code_verifier:
-            transaction_data["proxy_code_verifier"] = proxy_code_verifier
+            # Rebuild query string (flatten lists since parse_qs returns lists)
+            new_query = urlencode(
+                {
+                    k: v[0] if isinstance(v, list) and len(v) == 1 else v
+                    for k, v in query_params.items()
+                }
+            )
 
-        self._oauth_transactions[txn_id] = transaction_data
-
-        # Build query parameters for upstream IdP authorization request
-        query_params: dict[str, Any] = {
-            "response_type": "code",
-            "client_id": self._upstream_client_id,
-            "redirect_uri": f"{str(self.base_url).rstrip('/')}{self._redirect_path}",
-            "state": txn_id,
-        }
-
-        # Add scopes
-        scopes_to_use = params.scopes or self.required_scopes or []
-        if scopes_to_use:
-            query_params["scope"] = " ".join(scopes_to_use)
-
-        # Forward proxy's PKCE challenge to upstream if enabled
-        if proxy_code_challenge:
-            query_params["code_challenge"] = proxy_code_challenge
-            query_params["code_challenge_method"] = "S256"
-
-        # NOTE: Intentionally NOT forwarding 'resource' parameter as Azure AD v2.0 doesn't support it
-        # The parent class (OAuthProxy) would add it here, but we skip it for Azure AD compatibility
-
-        # Add any extra authorization parameters configured for this proxy
-        if self._extra_authorize_params:
-            query_params.update(self._extra_authorize_params)
-
-        # Build the upstream authorization URL
-        separator = "&" if "?" in self._upstream_authorization_endpoint else "?"
-        upstream_url = f"{self._upstream_authorization_endpoint}{separator}{urlencode(query_params)}"
+            # Reconstruct the URL
+            upstream_url = str(
+                urlunsplit(
+                    (
+                        parsed.scheme,
+                        parsed.netloc,
+                        parsed.path,
+                        new_query,
+                        parsed.fragment,
+                    )
+                )
+            )
 
         return upstream_url
 
