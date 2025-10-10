@@ -3,24 +3,23 @@ SharePoint検索機能モジュール
 """
 
 import logging
-from typing import Any
+from typing import Any, Protocol
 from urllib.parse import quote, unquote, urlparse
 
 import requests
 
 from .config import config as global_config
 from .error_messages import handle_sharepoint_error
-from .sharepoint_auth import SharePointCertificateAuth
 
 logger = logging.getLogger(__name__)
 
-# 型ヒント用（OAuth認証クラスを遅延インポート）
-try:
-    from .sharepoint_oauth_auth import SharePointOAuthAuth
 
-    AuthClient = SharePointCertificateAuth | SharePointOAuthAuth
-except ImportError:
-    AuthClient = SharePointCertificateAuth
+class AuthClient(Protocol):
+    """認証クライアントのプロトコル（証明書認証/OAuth両対応）"""
+
+    def get_access_token(self) -> str:
+        """アクセストークンを取得"""
+        ...
 
 
 class SharePointSearchClient:

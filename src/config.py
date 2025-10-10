@@ -38,14 +38,8 @@ class SharePointConfig:
         # OAuth認証設定（oauthモード）
         self._oauth_client_id_env = os.getenv("SHAREPOINT_OAUTH_CLIENT_ID", "")
         self.oauth_client_secret = os.getenv("SHAREPOINT_OAUTH_CLIENT_SECRET", "")
-        self.oauth_redirect_uri = os.getenv(
-            "SHAREPOINT_OAUTH_REDIRECT_URI", "http://localhost:8000/oauth/callback"
-        )
         self.oauth_server_base_url = os.getenv(
             "SHAREPOINT_OAUTH_SERVER_BASE_URL", "http://localhost:8000"
-        )
-        self.token_cache_path = os.getenv(
-            "SHAREPOINT_TOKEN_CACHE_PATH", ".sharepoint_tokens.json"
         )
 
         # 検索設定

@@ -52,7 +52,7 @@ class AzureOIDCProxyForSharePoint(OIDCProxy):
 
     Azure AD v2.0 doesn't support the 'resource' parameter (RFC 8707).
     This custom provider overrides the authorize method to remove it and
-    uses AzureTokenVerifier for token validation.
+    uses SharePointTokenVerifier for token validation.
     """
 
     def get_token_verifier(
@@ -230,24 +230,24 @@ def setup_logging():
 def _get_auth_client() -> SharePointCertificateAuth | None:
     """認証クライアントを取得（証明書モードのみ）
 
-    OAuthモードの場合は、FastMCPのAzureProviderが認証を処理するため、
+    OAuthモードの場合は、FastMCPのOIDCProxyが認証を処理するため、
     個別の認証クライアントは不要（Noneを返す）。
     """
     if config.is_oauth_mode:
-        # OAuth mode: FastMCP's AzureProvider handles authentication
+        # OAuth mode: FastMCP's OIDCProxy handles authentication
         # Token will be retrieved from context in tool functions
         return None
-    else:
-        # Certificate mode: Use SharePointCertificateAuth
-        return SharePointCertificateAuth(
-            tenant_id=config.tenant_id,
-            client_id=config.client_id,
-            site_url=config.site_url,
-            certificate_path=config.certificate_path,
-            certificate_text=config.certificate_text,
-            private_key_path=config.private_key_path,
-            private_key_text=config.private_key_text,
-        )
+
+    # Certificate mode: Use SharePointCertificateAuth
+    return SharePointCertificateAuth(
+        tenant_id=config.tenant_id,
+        client_id=config.client_id,
+        site_url=config.site_url,
+        certificate_path=config.certificate_path,
+        certificate_text=config.certificate_text,
+        private_key_path=config.private_key_path,
+        private_key_text=config.private_key_text,
+    )
 
 
 def _get_sharepoint_client() -> SharePointSearchClient:
