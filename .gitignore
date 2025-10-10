@@ -191,3 +191,4 @@ cert/
 
 # OAuth token cache
 .sharepoint_tokens.json
+.vscode/
