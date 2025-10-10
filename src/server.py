@@ -80,37 +80,29 @@ class AzureOIDCProxyForSharePoint(OIDCProxy):
         # Get the standard authorization URL from parent class
         upstream_url = await super().authorize(client, params)
 
-        # Parse the URL and remove 'resource' parameter if present
-        # Azure AD v2.0 doesn't support RFC 8707 resource indicator
+        # Parse the URL to check for 'resource' parameter
         parsed = urlsplit(upstream_url)
         query_params = parse_qs(parsed.query, keep_blank_values=True)
 
-        # Remove 'resource' parameter if it exists
-        if "resource" in query_params:
-            del query_params["resource"]
+        # If 'resource' parameter doesn't exist, return URL as-is
+        if "resource" not in query_params:
+            return upstream_url
 
-            # Rebuild query string (flatten lists since parse_qs returns lists)
-            new_query = urlencode(
-                {
-                    k: v[0] if isinstance(v, list) and len(v) == 1 else v
-                    for k, v in query_params.items()
-                }
+        # Remove 'resource' parameter (Azure AD v2.0 doesn't support RFC 8707)
+        del query_params["resource"]
+
+        # Rebuild query string (parse_qs returns lists, so flatten with doseq=True)
+        new_query = urlencode(
+            {k: v[0] if len(v) == 1 else v for k, v in query_params.items()},
+            doseq=True,
+        )
+
+        # Reconstruct and return the URL
+        return str(
+            urlunsplit(
+                (parsed.scheme, parsed.netloc, parsed.path, new_query, parsed.fragment)
             )
-
-            # Reconstruct the URL
-            upstream_url = str(
-                urlunsplit(
-                    (
-                        parsed.scheme,
-                        parsed.netloc,
-                        parsed.path,
-                        new_query,
-                        parsed.fragment,
-                    )
-                )
-            )
-
-        return upstream_url
+        )
 
 
 class SimpleTokenAuth:
