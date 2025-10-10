@@ -28,6 +28,11 @@ class SharePointTokenVerifier(TokenVerifier):
     2. Token is issued directly by Azure AD (no third party)
     3. PKCE ensures token cannot be intercepted
     4. Token is only used within the same session
+
+    Note:
+        This is a simplified verifier that trusts the OAuth flow and does not perform
+        cryptographic validation of the token. No signature or claims are checked.
+        Use with caution and only in environments where the OAuth flow is strictly controlled.
     """
 
     async def verify_token(self, token: str) -> AccessToken | None:
