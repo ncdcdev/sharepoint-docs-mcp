@@ -5,8 +5,18 @@
 A Model Context Protocol (MCP) server that provides SharePoint document search functionality.
 Supports both stdio and HTTP transports.
 
-Authentication is supported only via Azure AD certificate-based authentication.
-Please note that other authentication methods are not supported.
+## Authentication Methods
+
+Two authentication methods are supported:
+
+- **Certificate Authentication** (Application Permissions)
+  - Uses Azure AD certificate-based authentication
+  - Supports both stdio and HTTP transports
+  - Recommended for server applications and automation
+- **OAuth Authentication** (User Permissions)
+  - Uses OAuth 2.0 Authorization Code Flow with PKCE
+  - HTTP transport only (browser-based authentication required)
+  - Recommended for user-delegated access scenarios
 
 ## Features
 
@@ -70,15 +80,22 @@ uv sync --dev
 
 ## SharePoint Configuration
 
+You can choose between **Certificate Authentication** (default) and **OAuth Authentication** by setting the `SHAREPOINT_AUTH_MODE` environment variable.
+
 ### 1. Environment Variables Setup
 
 Create a `.env` file with the following configuration (refer to `.env.example`):
+
+#### Common Configuration (Both Authentication Methods)
 
 ```bash
 # SharePoint configuration
 SHAREPOINT_BASE_URL=https://yourcompany.sharepoint.com
 SHAREPOINT_TENANT_ID=your-tenant-id-here
-SHAREPOINT_CLIENT_ID=your-client-id-here
+
+# Authentication mode ("certificate" or "oauth")
+# Default: certificate
+SHAREPOINT_AUTH_MODE=certificate
 
 # Search targets (multiple targets supported, comma-separated)
 # Options:
@@ -98,6 +115,27 @@ SHAREPOINT_SITE_NAME=yoursite
 # SHAREPOINT_ONEDRIVE_PATHS=user@company.com,manager@company.com:/Documents/Important
 # SHAREPOINT_ONEDRIVE_PATHS=user1@company.com:/Documents/Projects,user2@company.com:/Documents/Archive
 
+# OneDrive configuration (optional)
+# Format: user@domain.com[:/folder/path][,user2@domain.com[:/folder/path]]...
+# Examples:
+# SHAREPOINT_ONEDRIVE_PATHS=user@company.com,manager@company.com:/Documents/Important
+# SHAREPOINT_ONEDRIVE_PATHS=user1@company.com:/Documents/Projects,user2@company.com:/Documents/Archive
+
+# Search configuration (optional)
+SHAREPOINT_DEFAULT_MAX_RESULTS=20
+SHAREPOINT_ALLOWED_FILE_EXTENSIONS=pdf,docx,xlsx,pptx,txt,md
+
+# Tool description customization (optional)
+# SHAREPOINT_SEARCH_TOOL_DESCRIPTION=Search internal documents
+# SHAREPOINT_DOWNLOAD_TOOL_DESCRIPTION=Download files from search results
+```
+
+#### Certificate Authentication Configuration (SHAREPOINT_AUTH_MODE=certificate)
+
+```bash
+# Client ID for certificate authentication
+SHAREPOINT_CLIENT_ID=your-client-id-here
+
 # Certificate authentication configuration (specify either file path or text)
 # Priority: 1. Text, 2. File path
 
@@ -109,14 +147,30 @@ SHAREPOINT_PRIVATE_KEY_PATH=path/to/your/private_key.pem
 # Text settings take priority over file paths
 # SHAREPOINT_CERTIFICATE_TEXT="-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----"
 # SHAREPOINT_PRIVATE_KEY_TEXT="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"
+```
 
-# Search configuration (optional)
-SHAREPOINT_DEFAULT_MAX_RESULTS=20
-SHAREPOINT_ALLOWED_FILE_EXTENSIONS=pdf,docx,xlsx,pptx,txt,md
+#### OAuth Authentication Configuration (SHAREPOINT_AUTH_MODE=oauth)
 
-# Tool description customization (optional)
-# SHAREPOINT_SEARCH_TOOL_DESCRIPTION=Search internal documents
-# SHAREPOINT_DOWNLOAD_TOOL_DESCRIPTION=Download files from search results
+**Note**: OAuth authentication requires HTTP transport (`--transport http`)
+
+```bash
+# OAuth client ID (from Azure AD app registration)
+# If not set, falls back to SHAREPOINT_CLIENT_ID
+# Typically, only SHAREPOINT_CLIENT_ID is needed for both authentication modes
+SHAREPOINT_OAUTH_CLIENT_ID=your-oauth-client-id-here
+
+# OAuth client secret (from Azure AD app registration)
+# Required for OAuth mode - create in Azure AD app under "Certificates & secrets"
+SHAREPOINT_OAUTH_CLIENT_SECRET=your-oauth-client-secret-here
+
+# FastMCP server base URL (for OAuth callbacks)
+# Default: http://localhost:8000
+SHAREPOINT_OAUTH_SERVER_BASE_URL=http://localhost:8000
+
+# OAuth redirect URI (must match Azure AD app configuration)
+# Default: http://localhost:8000/auth/callback
+# Note: Changed from /oauth/callback to /auth/callback (FastMCP standard)
+SHAREPOINT_OAUTH_REDIRECT_URI=http://localhost:8000/auth/callback
 ```
 
 ### 2. Certificate Creation
@@ -137,32 +191,87 @@ Generated files:
 - `cert/private_key.pem`
   - Private key (used by server)
 
-### 3. Azure AD Certificate Authentication Setup
+### 3. Azure AD Application Setup
 
-#### 1. Azure AD Application Registration
+Choose the appropriate setup based on your authentication method:
+
+#### Option A: Certificate Authentication Setup (Application Permissions)
+
+**1. Azure AD Application Registration**
 1. Go to [Azure Portal](https://portal.azure.com/) → Entra ID → App registrations
 2. Click "New registration"
 3. Enter application name (e.g., SharePoint MCP Server)
 4. Click "Register"
 
-#### 2. Certificate Upload
+**2. Certificate Upload**
 1. Select the created app → "Certificates & secrets"
 2. Click "Upload certificate" in the "Certificates" tab
 3. Upload the created `cert/certificate.pem`
 
-#### 3. API Permissions Configuration
+**3. API Permissions Configuration**
 1. Go to "API permissions" tab
 2. "Add a permission" → "Microsoft Graph" → "Application permissions"
 3. Add the following permissions:
-   - `Sites.FullControl.All`
-     - Full access to SharePoint sites
+   - `Sites.FullControl.All` - Full access to SharePoint sites
 4. Click "Grant admin consent"
 
-#### 4. Required Information Retrieval
-- Tenant ID
-  - Directory (tenant) ID from the "Overview" page
-- Client ID
-  - Application (client) ID from the "Overview" page
+**4. Required Information**
+- Tenant ID: Directory (tenant) ID from the "Overview" page
+- Client ID: Application (client) ID from the "Overview" page
+
+#### Option B: OAuth Authentication Setup (User Permissions)
+
+**1. Azure AD Application Registration**
+1. Go to [Azure Portal](https://portal.azure.com/) → Entra ID → App registrations
+2. Click "New registration"
+3. Enter the following:
+   - Name: SharePoint MCP OAuth Client
+   - Supported account types: Single tenant
+   - Redirect URI: Web - `http://localhost:8000/auth/callback` (Note: Changed from /oauth/callback)
+4. Click "Register"
+
+**2. Client Secret Configuration**
+1. Select the created app → "Certificates & secrets"
+2. Click "New client secret"
+3. Add description (e.g., "MCP Server Secret")
+4. Set expiration period (e.g., 24 months)
+5. Click "Add"
+6. **Important**: Copy the secret value immediately (it won't be shown again)
+7. Save this value to `SHAREPOINT_OAUTH_CLIENT_SECRET` environment variable
+
+**3. Authentication Configuration**
+1. Select the created app → "Authentication"
+2. Under "Platform configurations", verify the redirect URI is set to `http://localhost:8000/auth/callback`
+3. Under "Advanced settings":
+   - Allow public client flows: No
+4. Save changes
+
+**4. API Permissions Configuration (Delegated Permissions)**
+1. Go to "API permissions" tab
+2. "Add a permission" → "SharePoint" → "Delegated permissions"
+3. Add the following permissions:
+   - `AllSites.Read` - Read items in all site collections
+   - `AllSites.Write` - Read and write items in all site collections (if file downloads are needed)
+   - `User.Read` - Read user profile (automatically added)
+4. Click "Grant admin consent" (admin consent required)
+
+**5. Required Information**
+- Tenant ID: Directory (tenant) ID from the "Overview" page
+- OAuth Client ID: Application (client) ID from the "Overview" page
+- OAuth Client Secret: Secret value from step 2
+
+**6. Authentication Flow**
+
+OAuth authentication in this MCP server is handled through **FastMCP's AzureProvider**, which implements a secure two-layer authentication:
+
+1. **MCP Client Authentication**: When an MCP client (e.g., Claude Desktop, MCP Inspector) connects, it authenticates with Microsoft Entra ID
+2. **SharePoint Access**: The authenticated user's token is used to access SharePoint APIs on their behalf
+
+**Important Notes**:
+- Authentication is performed through the MCP client's OAuth flow
+- No manual browser login is required - the MCP client handles the OAuth flow automatically
+- Tokens are managed by FastMCP and cached securely
+- The server uses the `/auth/callback` endpoint (FastMCP standard) for OAuth callbacks
 
 ### 4. Tool Description Customization (Optional)
 

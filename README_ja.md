@@ -5,8 +5,18 @@
 SharePointドキュメント検索機能を提供するModel Context Protocol (MCP) サーバーです。
 stdioとHTTPの両方のトランスポートに対応しています。
 
-認証はAzure ADの証明書ベース認証のみをサポートしています。
-その他の認証方式には対応していないのでご注意ください。
+## 認証方式
+
+2つの認証方式をサポートしています
+
+- **証明書認証**（アプリケーション権限）
+  - Azure AD証明書ベース認証を使用
+  - stdioとHTTPの両方のトランスポートに対応
+  - サーバーアプリケーションや自動化に推奨
+- **OAuth認証**（ユーザー権限）
+  - OAuth 2.0 Authorization Code Flow with PKCEを使用
+  - HTTPトランスポート専用（ブラウザベース認証が必要）
+  - ユーザー委任アクセスシナリオに推奨
 
 ## 機能
 
@@ -46,7 +56,7 @@ SharePointサイトとOneDriveコンテンツの両方を柔軟な設定で検�
 
 ## 必要要件
 
-- Python 3.12以上
+- Python 3.12
 - uv (パッケージマネージャー)
 
 ## インストール
@@ -74,15 +84,22 @@ uv sync --dev
 
 ## SharePoint設定
 
+`SHAREPOINT_AUTH_MODE` 環境変数で**証明書認証**（デフォルト）と**OAuth認証**を切り替えることができます。
+
 ### 1. 環境変数の設定
 
 `.env`ファイルを作成し、以下の設定を行います（`.env.example`を参考）：
+
+#### 共通設定（両方の認証方式共通）
 
 ```bash
 # SharePoint設定
 SHAREPOINT_BASE_URL=https://yourcompany.sharepoint.com
 SHAREPOINT_TENANT_ID=your-tenant-id-here
-SHAREPOINT_CLIENT_ID=your-client-id-here
+
+# 認証モード（"certificate" または "oauth"）
+# デフォルト: certificate
+SHAREPOINT_AUTH_MODE=certificate
 
 # 検索対象（複数指定可、カンマ区切り）
 # オプション:
@@ -102,6 +119,21 @@ SHAREPOINT_SITE_NAME=yoursite
 # SHAREPOINT_ONEDRIVE_PATHS=user@company.com,manager@company.com:/Documents/重要書類
 # SHAREPOINT_ONEDRIVE_PATHS=user1@company.com:/Documents/プロジェクト,user2@company.com:/Documents/アーカイブ
 
+# 検索設定（オプション）
+SHAREPOINT_DEFAULT_MAX_RESULTS=20
+SHAREPOINT_ALLOWED_FILE_EXTENSIONS=pdf,docx,xlsx,pptx,txt,md
+
+# ツール説明文のカスタマイズ（オプション）
+# SHAREPOINT_SEARCH_TOOL_DESCRIPTION=社内文書を検索します
+# SHAREPOINT_DOWNLOAD_TOOL_DESCRIPTION=検索結果からファイルをダウンロードします
+```
+
+#### 証明書認証設定（SHAREPOINT_AUTH_MODE=certificate）
+
+```bash
+# 証明書認証用クライアントID
+SHAREPOINT_CLIENT_ID=your-client-id-here
+
 # 証明書認証設定（ファイルパスまたはテキストのいずれかを指定）
 # 優先順位: 1. テキスト、2. ファイルパス
 
@@ -113,14 +145,30 @@ SHAREPOINT_PRIVATE_KEY_PATH=path/to/your/private_key.pem
 # テキストが設定されている場合、ファイルパスより優先されます
 # SHAREPOINT_CERTIFICATE_TEXT="-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----"
 # SHAREPOINT_PRIVATE_KEY_TEXT="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"
+```
 
-# 検索設定（オプション）
-SHAREPOINT_DEFAULT_MAX_RESULTS=20
-SHAREPOINT_ALLOWED_FILE_EXTENSIONS=pdf,docx,xlsx,pptx,txt,md
+#### OAuth認証設定（SHAREPOINT_AUTH_MODE=oauth）
 
-# ツール説明文のカスタマイズ（オプション）
-# SHAREPOINT_SEARCH_TOOL_DESCRIPTION=社内文書を検索します
-# SHAREPOINT_DOWNLOAD_TOOL_DESCRIPTION=検索結果からファイルをダウンロードします
+**注**: OAuth認証はHTTPトランスポート（`--transport http`）が必要です
+
+```bash
+# OAuthクライアントID（Azure ADアプリの登録で取得）
+# 未設定の場合は SHAREPOINT_CLIENT_ID にフォールバックします
+# 通常は SHAREPOINT_CLIENT_ID のみ設定すれば両方の認証モードで使用できます
+SHAREPOINT_OAUTH_CLIENT_ID=your-oauth-client-id-here
+
+# OAuthクライアントシークレット（Azure ADアプリの「証明書とシークレット」で作成）
+# OAuth認証モードでは必須
+SHAREPOINT_OAUTH_CLIENT_SECRET=your-oauth-client-secret-here
+
+# FastMCPサーバーのベースURL（OAuthコールバック用）
+# デフォルト: http://localhost:8000
+SHAREPOINT_OAUTH_SERVER_BASE_URL=http://localhost:8000
+
+# OAuthリダイレクトURI（Azure ADアプリの設定と一致させる）
+# デフォルト: http://localhost:8000/auth/callback
+# 注: FastMCP標準の /auth/callback を使用（旧: /oauth/callback）
+SHAREPOINT_OAUTH_REDIRECT_URI=http://localhost:8000/auth/callback
 ```
 
 ### 2. 証明書の作成
@@ -141,32 +189,87 @@ rm cert/certificate.csr
 - `cert/private_key.pem`
   - 秘密鍵（サーバーで使用）
 
-### 3. Azure AD証明書認証の設定
+### 3. Azure ADアプリケーションの設定
 
-#### 1. Azure ADアプリケーションの登録
+認証方式に応じて、適切な設定を選択してください：
+
+#### オプションA: 証明書認証の設定（アプリケーション権限）
+
+**1. Azure ADアプリケーションの登録**
 1. [Azure Portal](https://portal.azure.com/) → EntraID → アプリの登録
 2. 「新規登録」をクリック
 3. アプリケーション名を入力（例: SharePoint MCP Server）
 4. 登録ボタンをクリック
 
-#### 2. 証明書のアップロード
+**2. 証明書のアップロード**
 1. 作成したアプリを選択 → 「証明書とシークレット」
 2. 「証明書」タブで「証明書のアップロード」をクリック
 3. 作成した `cert/certificate.pem` をアップロード
 
-#### 3. API権限の設定
+**3. API権限の設定**
 1. 「API権限」タブに移動
 2. 「権限の追加」→「Microsoft Graph」→「アプリケーションの権限」
 3. 以下の権限を追加
-   - `Sites.FullControl.All`
-     - SharePointサイトへのフルアクセス
+   - `Sites.FullControl.All` - SharePointサイトへのフルアクセス
 4. 「管理者の同意を与える」をクリック
 
-#### 4. 必要な情報の取得
-- テナントID
-  - 「概要」ページのディレクトリ（テナント）ID
-- クライアントID
-  - 「概要」ページのアプリケーション（クライアント）ID
+**4. 必要な情報の取得**
+- テナントID: 「概要」ページのディレクトリ（テナント）ID
+- クライアントID: 「概要」ページのアプリケーション（クライアント）ID
+
+#### オプションB: OAuth認証の設定（ユーザー権限）
+
+**1. Azure ADアプリケーションの登録**
+1. [Azure Portal](https://portal.azure.com/) → EntraID → アプリの登録
+2. 「新規登録」をクリック
+3. 以下を入力：
+   - 名前: SharePoint MCP OAuth Client
+   - サポートされているアカウントの種類: この組織ディレクトリのみのアカウント
+   - リダイレクトURI: Web - `http://localhost:8000/auth/callback`（注: /oauth/callbackから変更）
+4. 「登録」をクリック
+
+**2. クライアントシークレットの設定**
+1. 作成したアプリを選択 → 「証明書とシークレット」
+2. 「新しいクライアントシークレット」をクリック
+3. 説明を追加（例: MCP Server Secret）
+4. 有効期限を設定（例: 24ヶ月）
+5. 「追加」をクリック
+6. **重要**: シークレット値をすぐにコピー（再表示されません）
+7. この値を `SHAREPOINT_OAUTH_CLIENT_SECRET` 環境変数に保存
+
+**3. 認証の設定**
+1. 作成したアプリを選択 → 「認証」
+2. 「プラットフォームの構成」で、リダイレクトURIが `http://localhost:8000/auth/callback` に設定されていることを確認
+3. 「詳細設定」で：
+   - パブリッククライアントフローを許可: いいえ
+4. 変更を保存
+
+**4. API権限の設定（委任された権限）**
+1. 「API権限」タブに移動
+2. 「権限の追加」→「SharePoint」→「委任された権限」
+3. 以下の権限を追加：
+   - `AllSites.Read` - すべてのサイトコレクション内のアイテムを読み取る
+   - `AllSites.Write` - すべてのサイトコレクション内のアイテムを読み書きする（ファイルダウンロードに必要な場合）
+   - `User.Read` - ユーザープロファイルを読み取る（自動的に追加）
+4. 「管理者の同意を与える」をクリック（管理者の同意が必要）
+
+**5. 必要な情報の取得**
+- テナントID: 「概要」ページのディレクトリ（テナント）ID
+- OAuthクライアントID: 「概要」ページのアプリケーション（クライアント）ID
+- OAuthクライアントシークレット: 手順2で取得したシークレット値
+
+**6. 認証フロー**
+
+このMCPサーバーのOAuth認証は**FastMCPのAzureProvider**によって処理され、安全な2層認証を実装します：
+
+1. **MCPクライアント認証**: MCPクライアント（Claude Desktop、MCP Inspectorなど）が接続すると、Microsoft Entra IDで認証
+2. **SharePointアクセス**: 認証されたユーザーのトークンを使用して、ユーザーの代わりにSharePoint APIにアクセス
+
+**重要な注意事項**:
+- 認証はMCPクライアントのOAuthフローを通じて実行されます
+- 手動でブラウザログインする必要はありません - MCPクライアントがOAuthフローを自動処理
+- トークンはFastMCPによって管理され、安全にキャッシュされます
+- サーバーは `/auth/callback` エンドポイント（FastMCP標準）をOAuthコールバックに使用
 
 ### 4. ツール説明文のカスタマイズ（オプション）
 

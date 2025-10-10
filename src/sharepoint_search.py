@@ -14,11 +14,19 @@ from .sharepoint_auth import SharePointCertificateAuth
 
 logger = logging.getLogger(__name__)
 
+# 型ヒント用（OAuth認証クラスを遅延インポート）
+try:
+    from .sharepoint_oauth_auth import SharePointOAuthAuth
+
+    AuthClient = SharePointCertificateAuth | SharePointOAuthAuth
+except ImportError:
+    AuthClient = SharePointCertificateAuth
+
 
 class SharePointSearchClient:
     """SharePoint検索クライアント"""
 
-    def __init__(self, site_url: str, auth: SharePointCertificateAuth):
+    def __init__(self, site_url: str, auth: AuthClient):
         self.site_url = site_url.rstrip("/")
         self.auth = auth
 

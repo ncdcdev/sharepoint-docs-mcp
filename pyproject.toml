@@ -19,7 +19,7 @@ classifiers = [
 ]
 dependencies = [
     "cryptography>=45.0.7",
-    "fastmcp>=2.12.3",
+    "fastmcp>=2.12.4",
     "httpx>=0.28.1",
     "mcp[cli]>=1.14.0",
     "pyjwt>=2.10.1",
