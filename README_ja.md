@@ -74,7 +74,8 @@ SHAREPOINT_PRIVATE_KEY_PATH=path/to/private_key.pem
 # SHAREPOINT_AUTH_MODE=oauth
 # SHAREPOINT_OAUTH_CLIENT_SECRET=your-oauth-client-secret-here
 # SHAREPOINT_OAUTH_SERVER_BASE_URL=https://your-server.com
-# SHAREPOINT_OAUTH_ALLOWED_REDIRECT_URIS=http://localhost:*,https://claude.ai/*
+# 未設定: すべてのURI許可（開発環境）。設定時: 指定パターンのみ許可（本番環境推奨）
+# SHAREPOINT_OAUTH_ALLOWED_REDIRECT_URIS=https://claude.ai/*,https://*.anthropic.com/*
 ```
 
 詳細な設定手順は[セットアップガイド](docs/setup_ja.md)をご覧ください。

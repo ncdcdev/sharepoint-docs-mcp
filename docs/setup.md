@@ -90,10 +90,12 @@ SHAREPOINT_OAUTH_CLIENT_SECRET=your-oauth-client-secret-here
 SHAREPOINT_OAUTH_SERVER_BASE_URL=http://localhost:8000
 
 # Allowed MCP client redirect URIs (comma-separated, wildcards supported)
-# Default: http://localhost:*,http://127.0.0.1:*
-# For production deployments (e.g., Cloud Run), add your service URLs
-# For Claude.ai integration, add: https://claude.ai/*,https://*.anthropic.com/*
-SHAREPOINT_OAUTH_ALLOWED_REDIRECT_URIS=http://localhost:*,http://127.0.0.1:*,https://claude.ai/*
+# If not set: All redirect URIs are allowed (convenient for development, not recommended for production)
+# If set: Only specified patterns are allowed (recommended for production)
+# For local development:
+# SHAREPOINT_OAUTH_ALLOWED_REDIRECT_URIS=http://localhost:*,http://127.0.0.1:*
+# For production (e.g., Claude.ai integration):
+# SHAREPOINT_OAUTH_ALLOWED_REDIRECT_URIS=https://claude.ai/*,https://*.anthropic.com/*
 ```
 
 ## Certificate Creation
