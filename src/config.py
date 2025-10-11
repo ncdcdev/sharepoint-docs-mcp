@@ -42,9 +42,9 @@ class SharePointConfig:
             "SHAREPOINT_OAUTH_SERVER_BASE_URL", "http://localhost:8000"
         )
         # Allowed redirect URIs (comma-separated, supports wildcards)
+        # None = allow all (default for development convenience)
         self.oauth_allowed_redirect_uris = os.getenv(
-            "SHAREPOINT_OAUTH_ALLOWED_REDIRECT_URIS",
-            "http://localhost:*,http://127.0.0.1:*",
+            "SHAREPOINT_OAUTH_ALLOWED_REDIRECT_URIS"
         )
 
         # 検索設定
@@ -185,12 +185,18 @@ class SharePointConfig:
     @property
     def oauth_client_id(self) -> str:
         """OAuth用のClient ID（未設定の場合はclient_idにフォールバック）"""
-        return (
-            self._oauth_client_id_env if self._oauth_client_id_env else self.client_id
-        )
+        return self._oauth_client_id_env or self.client_id
 
-    def get_oauth_allowed_redirect_uris(self) -> list[str]:
-        """OAuth許可リダイレクトURIのリストを取得"""
+    def get_oauth_allowed_redirect_uris(self) -> list[str] | None:
+        """OAuth許可リダイレクトURIのリストを取得
+
+        Returns:
+            None: 環境変数未設定（すべてのURIを許可）
+            []: 空文字列が設定（すべてのURIを禁止）
+            list[str]: URIのリスト
+        """
+        if self.oauth_allowed_redirect_uris is None:
+            return None
         if not self.oauth_allowed_redirect_uris:
             return []
         return [
