@@ -40,6 +40,14 @@ class SharePointTokenVerifier(TokenVerifier):
         if not token or not isinstance(token, str):
             return None
 
+        # Log security note for audit purposes
+        # TODO: Consider adding minimal claim validation (e.g., issuer, expiration) if possible,
+        # even without signature verification.
+        logging.warning(
+            "Accepting SharePoint token without full cryptographic validation. "
+            "This relies on the security of the OIDC proxy flow."
+        )
+
         # Create AccessToken with minimal validation
         # The token was obtained through secure OAuth flow, so we trust it
         return AccessToken(
@@ -98,7 +106,7 @@ class AzureOIDCProxyForSharePoint(OIDCProxy):
 
         # Rebuild query string (urlencode with doseq=True handles list values)
         new_query = urlencode(
-            dict(query_params.items()),
+            query_params,
             doseq=True,
         )
 
@@ -135,13 +143,13 @@ def _create_auth_provider():
             or not config.oauth_client_secret
             or not config.tenant_id
         ):
-            logging.warning(
+            error_msg = (
                 "OAuth mode is enabled but configuration is incomplete. "
-                "MCP server authentication will be disabled. "
                 "Ensure SHAREPOINT_OAUTH_CLIENT_ID (or SHAREPOINT_CLIENT_ID), "
                 "SHAREPOINT_OAUTH_CLIENT_SECRET, and SHAREPOINT_TENANT_ID are set."
             )
-            return None
+            logging.error(error_msg)
+            raise ValueError(error_msg)
 
         # OAuth mode: Use OIDC Proxy to protect MCP server with Azure AD
         # Extract tenant name from site URL for SharePoint scope
