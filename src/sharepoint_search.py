@@ -3,22 +3,29 @@ SharePoint検索機能モジュール
 """
 
 import logging
-from typing import Any
+from typing import Any, Protocol
 from urllib.parse import quote, unquote, urlparse
 
 import requests
 
-from .config import config as global_config
-from .error_messages import handle_sharepoint_error
-from .sharepoint_auth import SharePointCertificateAuth
+from src.config import config as global_config
+from src.error_messages import handle_sharepoint_error
 
 logger = logging.getLogger(__name__)
+
+
+class AuthClient(Protocol):
+    """認証クライアントのプロトコル（証明書認証/OAuth両対応）"""
+
+    def get_access_token(self) -> str:
+        """アクセストークンを取得"""
+        ...
 
 
 class SharePointSearchClient:
     """SharePoint検索クライアント"""
 
-    def __init__(self, site_url: str, auth: SharePointCertificateAuth):
+    def __init__(self, site_url: str, auth: AuthClient):
         self.site_url = site_url.rstrip("/")
         self.auth = auth
 

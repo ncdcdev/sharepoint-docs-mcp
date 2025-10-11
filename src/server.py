@@ -2,16 +2,192 @@ import base64
 import logging
 import sys
 from typing import Any
+from urllib.parse import parse_qs, urlencode, urlparse, urlsplit, urlunsplit
 
 from fastmcp import FastMCP
+from fastmcp.server.auth import AccessToken, TokenVerifier
+from fastmcp.server.auth.oidc_proxy import OIDCProxy
+from fastmcp.server.dependencies import get_access_token
+from mcp.server.auth.provider import AuthorizationParams
 
-from .config import config
-from .error_messages import handle_sharepoint_error
-from .sharepoint_auth import SharePointCertificateAuth
-from .sharepoint_search import SharePointSearchClient
+from src.config import config
+from src.error_messages import handle_sharepoint_error
+from src.sharepoint_auth import SharePointCertificateAuth
+from src.sharepoint_search import SharePointSearchClient
+
+
+class SharePointTokenVerifier(TokenVerifier):
+    """Simple token verifier for SharePoint OAuth tokens
+
+    Since SharePoint tokens have a different audience than Graph API,
+    we cannot validate them via Microsoft Graph API. Instead, we trust
+    that the token was issued by Azure AD through the OAuth flow.
+
+    The security is maintained by:
+    1. OAuth flow validates the user with Azure AD
+    2. Token is issued directly by Azure AD (no third party)
+    3. PKCE ensures token cannot be intercepted
+    4. Token is only used within the same session
+
+    Note:
+        This is a simplified verifier that trusts the OAuth flow and does not perform
+        cryptographic validation of the token. No signature or claims are checked.
+        Use with caution and only in environments where the OAuth flow is strictly controlled.
+    """
+
+    async def verify_token(self, token: str) -> AccessToken | None:
+        """Accept any non-empty token from Azure AD OAuth flow"""
+        if not token or not isinstance(token, str):
+            return None
+
+        # Log security note for audit purposes
+        # TODO: Consider adding minimal claim validation (e.g., issuer, expiration) if possible,
+        # even without signature verification.
+        logging.warning(
+            "Accepting SharePoint token without full cryptographic validation. "
+            "This relies on the security of the OIDC proxy flow."
+        )
+
+        # Create AccessToken with minimal validation
+        # The token was obtained through secure OAuth flow, so we trust it
+        return AccessToken(
+            token=token,
+            client_id="azure-ad-sharepoint",
+            scopes=self.required_scopes or [],
+            expires_at=None,  # Azure AD manages expiration
+        )
+
+
+class AzureOIDCProxyForSharePoint(OIDCProxy):
+    """Custom OIDC Proxy for Azure AD that removes unsupported 'resource' parameter
+
+    Azure AD v2.0 doesn't support the 'resource' parameter (RFC 8707).
+    This custom provider overrides the authorize method to remove it and
+    uses SharePointTokenVerifier for token validation.
+    """
+
+    def get_token_verifier(
+        self,
+        *,
+        algorithm: str | None = None,
+        audience: str | None = None,
+        required_scopes: list[str] | None = None,
+        timeout_seconds: int | None = None,
+    ):
+        """Override to use SharePointTokenVerifier
+
+        SharePoint tokens have SharePoint as audience, not Graph API,
+        so we cannot use AzureTokenVerifier (which calls Graph API).
+        Instead, we use a simple verifier that trusts tokens from the OAuth flow.
+        """
+        return SharePointTokenVerifier(
+            required_scopes=required_scopes or self.required_scopes or []
+        )
+
+    async def authorize(
+        self,
+        client,
+        params: AuthorizationParams,
+    ) -> str:
+        """Override authorize to remove resource parameter (Azure AD v2.0 doesn't support it)"""
+        # Get the standard authorization URL from parent class
+        upstream_url = await super().authorize(client, params)
+
+        # Parse the URL to check for 'resource' parameter
+        parsed = urlsplit(upstream_url)
+        query_params = parse_qs(parsed.query, keep_blank_values=True)
+
+        # If 'resource' parameter doesn't exist, return URL as-is
+        if "resource" not in query_params:
+            return upstream_url
+
+        # Remove 'resource' parameter (Azure AD v2.0 doesn't support RFC 8707)
+        del query_params["resource"]
+
+        # Rebuild query string (urlencode with doseq=True handles list values)
+        new_query = urlencode(
+            query_params,
+            doseq=True,
+        )
+
+        # Reconstruct and return the URL
+        return str(
+            urlunsplit(
+                (parsed.scheme, parsed.netloc, parsed.path, new_query, parsed.fragment)
+            )
+        )
+
+
+class SimpleTokenAuth:
+    """Simple token-based authentication for OAuth mode
+
+    This class wraps an access token obtained from FastMCP's authentication context
+    and provides the same interface as SharePointCertificateAuth.
+    """
+
+    def __init__(self, token: str):
+        self._token = token
+
+    def get_access_token(self) -> str:
+        """Return the access token"""
+        return self._token
+
+
+# MCPサーバーの認証プロバイダを設定
+def _create_auth_provider():
+    """Create FastMCP auth provider based on auth mode"""
+    if config.is_oauth_mode:
+        # Validate OAuth configuration before initializing OAuth provider
+        if (
+            not config.oauth_client_id
+            or not config.oauth_client_secret
+            or not config.tenant_id
+        ):
+            error_msg = (
+                "OAuth mode is enabled but configuration is incomplete. "
+                "Ensure SHAREPOINT_OAUTH_CLIENT_ID (or SHAREPOINT_CLIENT_ID), "
+                "SHAREPOINT_OAUTH_CLIENT_SECRET, and SHAREPOINT_TENANT_ID are set."
+            )
+            logging.error(error_msg)
+            raise ValueError(error_msg)
+
+        # OAuth mode: Use OIDC Proxy to protect MCP server with Azure AD
+        # Extract tenant name from site URL for SharePoint scope
+        parsed_url = urlparse(config.site_url)
+        tenant_name = parsed_url.netloc.split(".sharepoint.com")[0]
+
+        # Azure AD OIDC configuration URL (v2.0)
+        config_url = f"https://login.microsoftonline.com/{config.tenant_id}/v2.0/.well-known/openid-configuration"
+
+        # Use custom OIDC Proxy that removes unsupported 'resource' parameter for Azure AD v2.0
+        allowed_uris = config.get_oauth_allowed_redirect_uris()
+        logging.info(f"OAuth allowed redirect URIs: {allowed_uris}")
+        if allowed_uris == []:
+            logging.warning(
+                "OAuth mode is enabled, and SHAREPOINT_OAUTH_ALLOWED_REDIRECT_URIS is set to an empty string. "
+                "No client redirect URIs will be allowed, which will likely cause authentication to fail."
+            )
+
+        return AzureOIDCProxyForSharePoint(
+            config_url=config_url,
+            client_id=config.oauth_client_id,
+            client_secret=config.oauth_client_secret,
+            base_url=config.oauth_server_base_url,
+            redirect_path="/auth/callback",
+            required_scopes=[
+                f"https://{tenant_name}.sharepoint.com/.default",  # SharePoint API access
+                "offline_access",  # Refresh token support
+            ],
+            # Allow MCP client redirect URIs from environment configuration
+            allowed_client_redirect_uris=allowed_uris,
+        )
+    else:
+        # Certificate mode: No MCP server authentication
+        return None
+
 
 # MCPサーバーインスタンスを作成
-mcp = FastMCP(name="SharePointDocsMCP")
+mcp = FastMCP(name="SharePointDocsMCP", auth=_create_auth_provider())
 
 # SharePointクライアントのグローバルインスタンス
 _sharepoint_client: SharePointSearchClient | None = None
@@ -37,12 +213,39 @@ def setup_logging():
     logging.info("Logging configured to output to stderr.")
 
 
+def _get_auth_client() -> SharePointCertificateAuth | None:
+    """認証クライアントを取得（証明書モードのみ）
+
+    OAuthモードの場合は、FastMCPのOIDCProxyが認証を処理するため、
+    個別の認証クライアントは不要（Noneを返す）。
+    """
+    if config.is_oauth_mode:
+        # OAuth mode: FastMCP's OIDCProxy handles authentication
+        # Token will be retrieved from context in tool functions
+        return None
+
+    # Certificate mode: Use SharePointCertificateAuth
+    return SharePointCertificateAuth(
+        tenant_id=config.tenant_id,
+        client_id=config.client_id,
+        site_url=config.site_url,
+        certificate_path=config.certificate_path,
+        certificate_text=config.certificate_text,
+        private_key_path=config.private_key_path,
+        private_key_text=config.private_key_text,
+    )
+
+
 def _get_sharepoint_client() -> SharePointSearchClient:
-    """SharePointクライアントを取得または初期化"""
+    """SharePointクライアントを取得または初期化
+
+    - 証明書モード: シングルトンクライアントを使用
+    - OAuthモード: リクエストごとに新しいクライアントを作成（トークンはリクエスト依存）
+    """
     global _sharepoint_client
 
+    # 設定の検証（初回のみ）
     if _sharepoint_client is None:
-        # 設定の検証
         validation_errors = config.validate()
         if validation_errors:
             error_msg = "SharePoint configuration is invalid: " + "; ".join(
@@ -51,16 +254,31 @@ def _get_sharepoint_client() -> SharePointSearchClient:
             logging.error(error_msg)
             raise ValueError(error_msg)
 
-        # 認証クライアントを初期化
-        auth = SharePointCertificateAuth(
-            tenant_id=config.tenant_id,
-            client_id=config.client_id,
+    # OAuthモード: リクエストごとに新しいクライアントを作成
+    if config.is_oauth_mode:
+        # FastMCPの認証コンテキストからトークンを取得
+        access_token = get_access_token()
+        if not access_token:
+            raise ValueError(
+                "OAuth authentication required but no access token available. "
+                "Please authenticate with FastMCP's AzureProvider."
+            )
+
+        # SimpleTokenAuthでトークンをラップ
+        auth = SimpleTokenAuth(token=access_token.token)
+
+        # SharePointクライアントを作成（リクエストごと）
+        return SharePointSearchClient(
             site_url=config.site_url,
-            certificate_path=config.certificate_path,
-            certificate_text=config.certificate_text,
-            private_key_path=config.private_key_path,
-            private_key_text=config.private_key_text,
+            auth=auth,
         )
+
+    # 証明書モード: シングルトンクライアントを使用
+    if _sharepoint_client is None:
+        # 認証クライアントを初期化
+        auth = _get_auth_client()
+        if auth is None:
+            raise ValueError("Certificate authentication client initialization failed")
 
         # SharePointクライアントを初期化
         _sharepoint_client = SharePointSearchClient(
@@ -68,7 +286,7 @@ def _get_sharepoint_client() -> SharePointSearchClient:
             auth=auth,
         )
 
-        logging.info("SharePoint client initialized successfully")
+        logging.info("SharePoint client initialized successfully (certificate mode)")
 
     return _sharepoint_client
 

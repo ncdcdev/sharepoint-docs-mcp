@@ -36,6 +36,18 @@ uv run lint            # Lint code with ruff
 uv run fmt             # Format code with ruff
 ```
 
+## Documentation Guidelines
+
+**IMPORTANT**: When updating documentation, always update both English and Japanese versions:
+
+- `README.md` and `README_ja.md` - Main project documentation
+- `docs/setup.md` and `docs/setup_ja.md` - Setup instructions
+- `docs/usage.md` and `docs/usage_ja.md` - Usage guide
+- `docs/development.md` and `docs/development_ja.md` - Development guide
+- `.env.example` - Include bilingual comments
+
+Ensure consistency between English and Japanese documentation to maintain user experience for both language speakers.
+
 ## Coding Guidelines
 
 **IMPORTANT**: Always run quality checks before committing:

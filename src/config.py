@@ -24,13 +24,28 @@ class SharePointConfig:
         # OneDrive設定
         self.onedrive_paths = os.getenv("SHAREPOINT_ONEDRIVE_PATHS", "")
         self.tenant_id = os.getenv("SHAREPOINT_TENANT_ID", "")
-        self.client_id = os.getenv("SHAREPOINT_CLIENT_ID", "")
 
-        # 証明書認証設定（ファイルパスまたはテキスト）
+        # 認証モード設定
+        self.auth_mode = os.getenv("SHAREPOINT_AUTH_MODE", "certificate")
+
+        # 証明書認証設定（certificateモード）
+        self.client_id = os.getenv("SHAREPOINT_CLIENT_ID", "")
         self.certificate_path = os.getenv("SHAREPOINT_CERTIFICATE_PATH", "")
         self.certificate_text = os.getenv("SHAREPOINT_CERTIFICATE_TEXT", "")
         self.private_key_path = os.getenv("SHAREPOINT_PRIVATE_KEY_PATH", "")
         self.private_key_text = os.getenv("SHAREPOINT_PRIVATE_KEY_TEXT", "")
+
+        # OAuth認証設定（oauthモード）
+        self._oauth_client_id_env = os.getenv("SHAREPOINT_OAUTH_CLIENT_ID", "")
+        self.oauth_client_secret = os.getenv("SHAREPOINT_OAUTH_CLIENT_SECRET", "")
+        self.oauth_server_base_url = os.getenv(
+            "SHAREPOINT_OAUTH_SERVER_BASE_URL", "http://localhost:8000"
+        )
+        # Allowed redirect URIs (comma-separated, supports wildcards)
+        # None = allow all (default for development convenience)
+        self.oauth_allowed_redirect_uris = os.getenv(
+            "SHAREPOINT_OAUTH_ALLOWED_REDIRECT_URIS"
+        )
 
         # 検索設定
         self.default_max_results = int(
@@ -157,34 +172,85 @@ class SharePointConfig:
 
         return self.parse_onedrive_paths()
 
+    @property
+    def is_oauth_mode(self) -> bool:
+        """OAuth認証モードかどうか"""
+        return self.auth_mode.lower() == "oauth"
+
+    @property
+    def is_certificate_mode(self) -> bool:
+        """証明書認証モードかどうか"""
+        return self.auth_mode.lower() == "certificate"
+
+    @property
+    def oauth_client_id(self) -> str:
+        """OAuth用のClient ID（未設定の場合はclient_idにフォールバック）"""
+        return self._oauth_client_id_env or self.client_id
+
+    def get_oauth_allowed_redirect_uris(self) -> list[str] | None:
+        """OAuth許可リダイレクトURIのリストを取得
+
+        Returns:
+            None: 環境変数未設定（すべてのURIを許可）
+            []: 空文字列が設定（すべてのURIを禁止）
+            list[str]: URIのリスト
+        """
+        if self.oauth_allowed_redirect_uris is None:
+            return None
+        if not self.oauth_allowed_redirect_uris:
+            return []
+        return [
+            uri.strip()
+            for uri in self.oauth_allowed_redirect_uris.split(",")
+            if uri.strip()
+        ]
+
     def validate(self) -> list[str]:
         """設定の検証を行い、エラーメッセージのリストを返す"""
         errors = []
 
+        # 共通検証
         if not self.base_url:
             errors.append("SHAREPOINT_BASE_URL is required")
 
         if not self.tenant_id:
             errors.append("SHAREPOINT_TENANT_ID is required")
 
-        if not self.client_id:
-            errors.append("SHAREPOINT_CLIENT_ID is required")
+        # 認証モード別検証
+        if self.is_oauth_mode:
+            # OAuth認証モードの検証（oauth_client_idはclient_idにフォールバック可能）
+            if not self.oauth_client_id:
+                errors.append(
+                    "Either SHAREPOINT_OAUTH_CLIENT_ID or SHAREPOINT_CLIENT_ID is required for OAuth mode"
+                )
+            if not self.oauth_client_secret:
+                errors.append(
+                    "SHAREPOINT_OAUTH_CLIENT_SECRET is required for OAuth mode"
+                )
+        elif self.is_certificate_mode:
+            # 証明書認証モードの検証
+            if not self.client_id:
+                errors.append("SHAREPOINT_CLIENT_ID is required for certificate mode")
 
-        # 証明書：ファイルパスまたはテキストのいずれかが必要
-        if not self.certificate_path and not self.certificate_text:
-            errors.append(
-                "Either SHAREPOINT_CERTIFICATE_PATH or SHAREPOINT_CERTIFICATE_TEXT is required"
-            )
-        elif self.certificate_path and not Path(self.certificate_path).exists():
-            errors.append(f"Certificate file not found: {self.certificate_path}")
+            # 証明書：ファイルパスまたはテキストのいずれかが必要
+            if not self.certificate_path and not self.certificate_text:
+                errors.append(
+                    "Either SHAREPOINT_CERTIFICATE_PATH or SHAREPOINT_CERTIFICATE_TEXT is required"
+                )
+            elif self.certificate_path and not Path(self.certificate_path).exists():
+                errors.append(f"Certificate file not found: {self.certificate_path}")
 
-        # 秘密鍵：ファイルパスまたはテキストのいずれかが必要
-        if not self.private_key_path and not self.private_key_text:
+            # 秘密鍵：ファイルパスまたはテキストのいずれかが必要
+            if not self.private_key_path and not self.private_key_text:
+                errors.append(
+                    "Either SHAREPOINT_PRIVATE_KEY_PATH or SHAREPOINT_PRIVATE_KEY_TEXT is required"
+                )
+            elif self.private_key_path and not Path(self.private_key_path).exists():
+                errors.append(f"Private key file not found: {self.private_key_path}")
+        else:
             errors.append(
-                "Either SHAREPOINT_PRIVATE_KEY_PATH or SHAREPOINT_PRIVATE_KEY_TEXT is required"
+                f"Invalid SHAREPOINT_AUTH_MODE: {self.auth_mode} (must be 'certificate' or 'oauth')"
             )
-        elif self.private_key_path and not Path(self.private_key_path).exists():
-            errors.append(f"Private key file not found: {self.private_key_path}")
 
         return errors
 

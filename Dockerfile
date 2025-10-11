@@ -1,5 +1,11 @@
 FROM ghcr.io/astral-sh/uv:python3.12-bookworm
 
+# Pythonのバイトコードを生成しないように設定
+ENV PYTHONDONTWRITEBYTECODE=1
+# Pythonの標準出力をバッファリングしないように設定
+ENV PYTHONUNBUFFERED=1
+# Pythonのモジュール検索パスに現在のディレクトリを追加
+ENV PYTHONPATH=".:$PYTHONPATH"
 # タイムゾーンを日本に設定
 ENV TZ=Asia/Tokyo
 # デフォルトのポート設定
