@@ -152,6 +152,9 @@ def _create_auth_provider():
         config_url = f"https://login.microsoftonline.com/{config.tenant_id}/v2.0/.well-known/openid-configuration"
 
         # Use custom OIDC Proxy that removes unsupported 'resource' parameter for Azure AD v2.0
+        allowed_uris = config.get_oauth_allowed_redirect_uris()
+        logging.info(f"OAuth allowed redirect URIs: {allowed_uris}")
+
         return AzureOIDCProxyForSharePoint(
             config_url=config_url,
             client_id=config.oauth_client_id,
@@ -162,11 +165,8 @@ def _create_auth_provider():
                 f"https://{tenant_name}.sharepoint.com/.default",  # SharePoint API access
                 "offline_access",  # Refresh token support
             ],
-            # Allow all localhost redirect URIs (MCP clients use random ports)
-            allowed_client_redirect_uris=[
-                "http://localhost:*",
-                "http://127.0.0.1:*",
-            ],
+            # Allow MCP client redirect URIs from environment configuration
+            allowed_client_redirect_uris=allowed_uris,
         )
     else:
         # Certificate mode: No MCP server authentication
