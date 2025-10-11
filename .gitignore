@@ -188,3 +188,7 @@ cert/
 
 .claude/
 .ruff_cache/
+
+# OAuth token cache
+.sharepoint_tokens.json
+.vscode/

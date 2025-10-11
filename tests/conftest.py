@@ -20,6 +20,14 @@ def mock_config():
     config.search_tool_description = "Test search tool"
     config.download_tool_description = "Test download tool"
 
+    # OAuth認証設定
+    config.auth_mode = "certificate"
+    config.is_oauth_mode = False
+    config.is_certificate_mode = True
+    config.oauth_client_id = ""
+    config.oauth_redirect_uri = "http://localhost:8000/oauth/callback"
+    config.token_cache_path = ".sharepoint_tokens.json"
+
     # Mock validation method
     config.validate.return_value = []
 
@@ -28,12 +36,13 @@ def mock_config():
 
 @pytest.fixture
 def mock_env_vars():
-    """Mock environment variables for testing"""
+    """Mock environment variables for testing (certificate mode)"""
     env_vars = {
         "SHAREPOINT_BASE_URL": "https://test.sharepoint.com",
         "SHAREPOINT_SITE_NAME": "test",
         "SHAREPOINT_TENANT_ID": "test-tenant-id",
         "SHAREPOINT_CLIENT_ID": "test-client-id",
+        "SHAREPOINT_AUTH_MODE": "certificate",
         "SHAREPOINT_CERTIFICATE_TEXT": "mock-certificate",
         "SHAREPOINT_PRIVATE_KEY_TEXT": "mock-private-key",
     }
