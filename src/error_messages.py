@@ -5,6 +5,8 @@ Provides natural language error messages that are easy for AI agents to understa
 
 from enum import Enum
 
+from src.config import config
+
 
 class ErrorCategory(Enum):
     """Error category definitions"""
@@ -44,10 +46,11 @@ def get_authentication_error(original_error: Exception) -> SharePointError:
     error_str = str(original_error).lower()
 
     if "oauth/login" in error_str or "no valid access token" in error_str:
+        login_url = f"{config.oauth_server_base_url.rstrip('/')}/auth/login"
         return SharePointError(
             category=ErrorCategory.AUTHENTICATION,
             message="OAuth authentication required but not completed.",
-            solution="Please visit http://localhost:8000/auth/login to authenticate with your Microsoft account. After successful authentication, tokens will be cached and you can retry this operation.",
+            solution=f"Please visit {login_url} to authenticate with your Microsoft account. After successful authentication, tokens will be cached and you can retry this operation.",
             original_error=original_error,
         )
     elif "certificate" in error_str or "private_key" in error_str:

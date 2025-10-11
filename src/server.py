@@ -10,10 +10,10 @@ from fastmcp.server.auth.oidc_proxy import OIDCProxy
 from fastmcp.server.dependencies import get_access_token
 from mcp.server.auth.provider import AuthorizationParams
 
-from .config import config
-from .error_messages import handle_sharepoint_error
-from .sharepoint_auth import SharePointCertificateAuth
-from .sharepoint_search import SharePointSearchClient
+from src.config import config
+from src.error_messages import handle_sharepoint_error
+from src.sharepoint_auth import SharePointCertificateAuth
+from src.sharepoint_search import SharePointSearchClient
 
 
 class SharePointTokenVerifier(TokenVerifier):
@@ -96,9 +96,9 @@ class AzureOIDCProxyForSharePoint(OIDCProxy):
         # Remove 'resource' parameter (Azure AD v2.0 doesn't support RFC 8707)
         del query_params["resource"]
 
-        # Rebuild query string (parse_qs returns lists, so flatten with doseq=True)
+        # Rebuild query string (urlencode with doseq=True handles list values)
         new_query = urlencode(
-            {k: v[0] if len(v) == 1 else v for k, v in query_params.items()},
+            dict(query_params.items()),
             doseq=True,
         )
 

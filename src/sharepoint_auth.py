@@ -14,7 +14,7 @@ from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 
-from .error_messages import handle_sharepoint_error
+from src.error_messages import handle_sharepoint_error
 
 logger = logging.getLogger(__name__)
 

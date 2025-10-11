@@ -47,7 +47,7 @@ def mock_env_vars():
         "SHAREPOINT_PRIVATE_KEY_TEXT": "mock-private-key",
     }
 
-    with patch.dict(os.environ, env_vars, clear=True):
+    with patch.dict(os.environ, env_vars, clear=False):
         yield env_vars
 
 

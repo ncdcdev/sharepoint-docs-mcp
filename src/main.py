@@ -2,8 +2,8 @@ import logging
 
 import typer
 
-from .config import config
-from .server import mcp, register_tools, setup_logging
+from src.config import config
+from src.server import mcp, register_tools, setup_logging
 
 # typerアプリケーションを作成
 app = typer.Typer()
@@ -27,7 +27,6 @@ def main(
     stdioまたはhttpトランスポートでMCPサーバーを起動します。
     """
     setup_logging()
-    register_tools()
 
     # OAuth認証モードのバリデーション
     if config.is_oauth_mode and transport == "stdio":
@@ -36,6 +35,8 @@ def main(
             "Please use --transport http or switch to certificate authentication mode."
         )
         raise typer.Exit(code=1)
+
+    register_tools()
 
     if transport == "stdio":
         logging.info("Starting MCP server with stdio transport...")

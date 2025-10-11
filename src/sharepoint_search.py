@@ -8,8 +8,8 @@ from urllib.parse import quote, unquote, urlparse
 
 import requests
 
-from .config import config as global_config
-from .error_messages import handle_sharepoint_error
+from src.config import config as global_config
+from src.error_messages import handle_sharepoint_error
 
 logger = logging.getLogger(__name__)
 
