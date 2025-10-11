@@ -88,6 +88,12 @@ SHAREPOINT_OAUTH_CLIENT_SECRET=your-oauth-client-secret-here
 # Azure AD redirect URI will be: {SERVER_BASE_URL}/auth/callback
 # Default: http://localhost:8000
 SHAREPOINT_OAUTH_SERVER_BASE_URL=http://localhost:8000
+
+# Allowed MCP client redirect URIs (comma-separated, wildcards supported)
+# Default: http://localhost:*,http://127.0.0.1:*
+# For production deployments (e.g., Cloud Run), add your service URLs
+# For Claude.ai integration, add: https://claude.ai/*,https://*.anthropic.com/*
+SHAREPOINT_OAUTH_ALLOWED_REDIRECT_URIS=http://localhost:*,http://127.0.0.1:*,https://claude.ai/*
 ```
 
 ## Certificate Creation
