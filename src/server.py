@@ -154,6 +154,11 @@ def _create_auth_provider():
         # Use custom OIDC Proxy that removes unsupported 'resource' parameter for Azure AD v2.0
         allowed_uris = config.get_oauth_allowed_redirect_uris()
         logging.info(f"OAuth allowed redirect URIs: {allowed_uris}")
+        if not allowed_uris:
+            logging.warning(
+                "OAuth mode is enabled, but SHAREPOINT_OAUTH_ALLOWED_REDIRECT_URIS is empty. "
+                "No client redirect URIs will be allowed, which may cause authentication to fail."
+            )
 
         return AzureOIDCProxyForSharePoint(
             config_url=config_url,
