@@ -73,6 +73,8 @@ SHAREPOINT_PRIVATE_KEY_PATH=path/to/private_key.pem
 # OAuth認証の場合（HTTPトランスポート専用）
 # SHAREPOINT_AUTH_MODE=oauth
 # SHAREPOINT_OAUTH_CLIENT_SECRET=your-oauth-client-secret-here
+# SHAREPOINT_OAUTH_SERVER_BASE_URL=https://your-server.com
+# SHAREPOINT_OAUTH_ALLOWED_REDIRECT_URIS=http://localhost:*,https://claude.ai/*
 ```
 
 詳細な設定手順は[セットアップガイド](docs/setup_ja.md)をご覧ください。

@@ -88,6 +88,12 @@ SHAREPOINT_OAUTH_CLIENT_SECRET=your-oauth-client-secret-here
 # Azure ADのリダイレクトURIは {SERVER_BASE_URL}/auth/callback になります
 # デフォルト: http://localhost:8000
 SHAREPOINT_OAUTH_SERVER_BASE_URL=http://localhost:8000
+
+# 許可するMCPクライアントのリダイレクトURI（カンマ区切り、ワイルドカード対応）
+# デフォルト: http://localhost:*,http://127.0.0.1:*
+# 本番環境（Cloud Run等）では、サービスURLを追加してください
+# Claude.ai統合の場合は以下を追加: https://claude.ai/*,https://*.anthropic.com/*
+SHAREPOINT_OAUTH_ALLOWED_REDIRECT_URIS=http://localhost:*,http://127.0.0.1:*,https://claude.ai/*
 ```
 
 ## 証明書の作成

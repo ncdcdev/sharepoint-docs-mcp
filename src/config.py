@@ -41,6 +41,11 @@ class SharePointConfig:
         self.oauth_server_base_url = os.getenv(
             "SHAREPOINT_OAUTH_SERVER_BASE_URL", "http://localhost:8000"
         )
+        # Allowed redirect URIs (comma-separated, supports wildcards)
+        self.oauth_allowed_redirect_uris = os.getenv(
+            "SHAREPOINT_OAUTH_ALLOWED_REDIRECT_URIS",
+            "http://localhost:*,http://127.0.0.1:*",
+        )
 
         # 検索設定
         self.default_max_results = int(
@@ -183,6 +188,16 @@ class SharePointConfig:
         return (
             self._oauth_client_id_env if self._oauth_client_id_env else self.client_id
         )
+
+    def get_oauth_allowed_redirect_uris(self) -> list[str]:
+        """OAuth許可リダイレクトURIのリストを取得"""
+        if not self.oauth_allowed_redirect_uris:
+            return []
+        return [
+            uri.strip()
+            for uri in self.oauth_allowed_redirect_uris.split(",")
+            if uri.strip()
+        ]
 
     def validate(self) -> list[str]:
         """設定の検証を行い、エラーメッセージのリストを返す"""

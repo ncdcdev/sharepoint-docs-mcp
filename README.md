@@ -73,6 +73,8 @@ SHAREPOINT_PRIVATE_KEY_PATH=path/to/private_key.pem
 # For OAuth authentication (HTTP transport only)
 # SHAREPOINT_AUTH_MODE=oauth
 # SHAREPOINT_OAUTH_CLIENT_SECRET=your-oauth-client-secret-here
+# SHAREPOINT_OAUTH_SERVER_BASE_URL=https://your-server.com
+# SHAREPOINT_OAUTH_ALLOWED_REDIRECT_URIS=http://localhost:*,https://claude.ai/*
 ```
 
 See [Setup Guide](docs/setup.md) for detailed configuration instructions.
