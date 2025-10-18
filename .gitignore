@@ -186,7 +186,9 @@ Desktop.ini
 temp/
 cert/
 
-.claude/
+# Claude Code - exclude user-specific files but keep project skills
+.claude/*
+!.claude/skills/
 .ruff_cache/
 
 # OAuth token cache

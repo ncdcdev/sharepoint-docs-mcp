@@ -18,43 +18,15 @@ Supports both stdio and HTTP transports for flexible integration.
 - Quality tools
   - ruff (linting/formatting), ty (type checking)
 
-## Development Commands
+## Available Skills
 
-### Setup
-```bash
-uv sync --dev           # Install dependencies
-uv run sharepoint-docs-mcp --transport stdio   # Start stdio mode
-uv run sharepoint-docs-mcp --transport http    # Start HTTP mode
-```
-
-### Quality Checks
-```bash
-uv run check           # Run all checks (typecheck + lint) - verification only
-uv run fix             # Auto-fix + format code (includes --unsafe-fixes)
-uv run typecheck       # Type checking with ty
-uv run lint            # Lint code with ruff
-uv run fmt             # Format code with ruff
-```
-
-## Documentation Guidelines
-
-**IMPORTANT**: When updating documentation, always update both English and Japanese versions:
-
-- `README.md` and `README_ja.md` - Main project documentation
-- `docs/setup.md` and `docs/setup_ja.md` - Setup instructions
-- `docs/usage.md` and `docs/usage_ja.md` - Usage guide
-- `docs/development.md` and `docs/development_ja.md` - Development guide
-- `.env.example` - Include bilingual comments
-
-Ensure consistency between English and Japanese documentation to maintain user experience for both language speakers.
+Use these skills for common tasks:
+- `/quality-check` - Run quality checks and auto-fix code issues
+- `/sync-docs` - Update English and Japanese documentation in sync
 
 ## Coding Guidelines
 
-**IMPORTANT**: Always run quality checks before committing:
-```bash
-uv run check     # Required - runs all quality checks (verification only)
-uv run fix       # Auto-fix and format code (includes --unsafe-fixes)
-```
+**IMPORTANT**: Always run quality checks before committing (use `/quality-check` skill).
 
 ### Type Annotations
 
@@ -176,28 +148,3 @@ SHAREPOINT_SITE_NAME=site1,site2,site3
 - pathフィルターとsiteフィルターの組み合わせ
 - メールアドレスからOneDriveパスへの自動変換
 - フォルダーレベルまでの詳細指定対応
-
-### 日本語文章でのMarkdownフォーマット
-
-日本語でドキュメントを作成する際は、以下のガイドラインに従う
-
-#### 太字の使用を避ける
-**❌ Wrong**:
-```markdown
-- **機能名**: 機能の説明
-- **設定項目**: 設定の説明
-```
-
-**✅ Correct**:
-```markdown
-- 機能名
-  - 機能の説明
-- 設定項目
-  - 設定の説明
-```
-
-#### コロン「:」の使用を最小限にする
-文末のコロンは日本語として不自然なため、本当に必要な場合のみ使用する
-
-#### 箇条書きでの構造化
-見出しと説明を区別する際は、説明部分を1段階深くインデントする
