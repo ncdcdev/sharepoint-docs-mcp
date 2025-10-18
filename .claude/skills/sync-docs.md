@@ -22,7 +22,11 @@
    - `docs/development.md` (英語)
    - `docs/development_ja.md` (日本語)
 
-5. **環境変数サンプル**
+5. **トラブルシューティングガイド**
+   - `docs/troubleshooting.md` (英語)
+   - `docs/troubleshooting_ja.md` (日本語)
+
+6. **環境変数サンプル**
    - `.env.example` (バイリンガルコメント)
 
 ## 更新手順
