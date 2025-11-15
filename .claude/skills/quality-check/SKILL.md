@@ -1,3 +1,8 @@
+---
+name: quality-check
+description: コード品質チェックと自動修正を実行します。コミット前やコード変更後に使用してください。
+---
+
 # Quality Check Skill
 
 このスキルは、コード品質チェックと自動修正を実行します。
