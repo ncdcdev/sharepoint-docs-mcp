@@ -206,7 +206,7 @@ rm cert/certificate.csr
 - 手動でブラウザログインする必要はありません - MCPクライアントがOAuthフローを自動処理
 - トークンはFastMCPによって管理され、安全にキャッシュされます
 - サーバーは `/auth/callback` エンドポイント（FastMCP標準）をOAuthコールバックに使用
-- MCPクライアントは動的ポート（例: http://localhost:6274/oauth/callback）を使用可能で、FastMCPはワイルドカードlocalhost URIを許可
+- MCPクライアントは動的ポート（例: http://localhost:6274/oauth/callback ）を使用可能で、FastMCPはワイルドカードlocalhost URIを許可
 
 ## ツール説明文のカスタマイズ
 
