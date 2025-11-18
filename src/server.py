@@ -253,15 +253,23 @@ def _get_token_from_request(ctx: Context | None = None) -> str | None:
     if ctx:
         try:
             request = ctx.get_http_request()
-        except (RuntimeError, AttributeError) as e:
-            # Not in HTTP context (e.g., stdio mode)
+        except RuntimeError as e:
+            # Not in HTTP context (e.g., stdio mode) - expected behavior
             logging.debug(f"Not in HTTP context, skipping Authorization header: {e}")
+        except AttributeError as e:
+            # Unexpected attribute error - may indicate a code bug
+            logging.warning(f"Unexpected error accessing HTTP request: {e}")
         else:
             auth_header = request.headers.get("Authorization", "")
             if auth_header.startswith("Bearer "):
-                token = auth_header[7:]  # Remove "Bearer " prefix
-                logging.info("Token retrieved from Authorization header")
-                return token
+                token = auth_header[
+                    7:
+                ].strip()  # Remove "Bearer " prefix and strip whitespace
+                if token:
+                    logging.info("Token retrieved from Authorization header")
+                    return token
+                else:
+                    logging.warning("Empty token in Authorization header")
 
     # Fallback to FastMCP's OAuth flow token
     access_token = get_access_token()

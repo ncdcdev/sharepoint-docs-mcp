@@ -201,27 +201,32 @@ Features:
 - Uses `/auth/callback` endpoint for OAuth callbacks
 - Supports dynamic ports (e.g., http://localhost:6274/oauth/callback)
 
-**Method 2: Direct Token in Authorization Header**
+**Method 2: Direct Token in Authorization Header (HTTP Transport Only)**
 
-For advanced scenarios (testing, custom integrations, existing token management):
+For advanced scenarios such as testing, custom integrations, or existing token management systems:
+
+**Important**: This method requires `--transport http` mode. It is not available in stdio mode (used by Claude Desktop and similar MCP clients).
 
 - Acquire an access token externally (e.g., via Azure CLI, custom script)
-- Pass the token in the `Authorization: Bearer <token>` HTTP header when calling MCP tools
+- Pass the token in the `Authorization: Bearer <token>` HTTP header when calling MCP tools via HTTP
 - The server uses the provided token directly without performing the OAuth flow
+- Primarily intended for testing, debugging, and custom HTTP-based integrations
 
 Example using Azure CLI:
 ```bash
 # Get token for SharePoint
 az account get-access-token --resource https://yourtenant.sharepoint.com --query accessToken -o tsv
 
-# Use with curl (example)
+# Use with curl to test the MCP server directly
 curl -X POST http://localhost:8000/mcp \
   -H "Authorization: Bearer <token>" \
   -H "Content-Type: application/json" \
   -d '{"method": "sharepoint_docs_search", "params": {"query": "test"}}'
 ```
 
-**Important**: Ensure your token has the required SharePoint scopes (`https://<tenant>.sharepoint.com/.default`) and manage token validity/refresh yourself.
+**Note**: Standard MCP clients (Claude Desktop, etc.) use stdio transport and cannot use this method. Use Method 1 (FastMCP OAuth Flow) for standard MCP clients.
+
+**Security Consideration**: Ensure your token has the required SharePoint scopes (`https://<tenant>.sharepoint.com/.default`) and manage token validity/refresh yourself.
 
 ## Tool Description Customization
 

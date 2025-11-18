@@ -201,27 +201,32 @@ rm cert/certificate.csr
 - `/auth/callback` エンドポイントをOAuthコールバックに使用
 - 動的ポート対応（例: http://localhost:6274/oauth/callback）
 
-**方法2: Authorizationヘッダーで直接トークンを渡す**
+**方法2: Authorizationヘッダーで直接トークンを渡す（HTTPトランスポート専用）**
 
-高度なシナリオ（テスト、カスタム統合、既存のトークン管理システム）向け：
+テスト、カスタム統合、既存のトークン管理システム向けの高度なシナリオ：
+
+**重要**: この方法は `--transport http` モードが必要です。stdioモード（Claude Desktopなどの標準MCPクライアントで使用）では利用できません。
 
 - 外部でアクセストークンを取得（Azure CLI、カスタムスクリプトなど）
-- MCPツール呼び出し時に `Authorization: Bearer <token>` HTTPヘッダーでトークンを渡す
+- HTTP経由でMCPツールを呼び出す際に `Authorization: Bearer <token>` HTTPヘッダーでトークンを渡す
 - サーバーはOAuthフローを実行せず、提供されたトークンを直接使用
+- 主にテスト、デバッグ、カスタムHTTPベース統合向け
 
 Azure CLIを使用した例：
 ```bash
 # SharePoint用のトークンを取得
 az account get-access-token --resource https://yourtenant.sharepoint.com --query accessToken -o tsv
 
-# curlで使用する例
+# curlでMCPサーバーを直接テスト
 curl -X POST http://localhost:8000/mcp \
   -H "Authorization: Bearer <token>" \
   -H "Content-Type: application/json" \
   -d '{"method": "sharepoint_docs_search", "params": {"query": "test"}}'
 ```
 
-**重要**: トークンが必要なSharePointスコープ（`https://<tenant>.sharepoint.com/.default`）を持つことを確認し、トークンの有効性と更新を自分で管理してください。
+**注意**: 標準MCPクライアント（Claude Desktopなど）はstdioトランスポートを使用するため、この方法は使用できません。標準MCPクライアントには方法1（FastMCP OAuthフロー）を使用してください。
+
+**セキュリティ上の注意**: トークンが必要なSharePointスコープ（`https://<tenant>.sharepoint.com/.default`）を持つことを確認し、トークンの有効性と更新を自分で管理してください。
 
 ## ツール説明文のカスタマイズ
 
