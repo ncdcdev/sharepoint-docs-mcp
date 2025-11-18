@@ -253,14 +253,15 @@ def _get_token_from_request(ctx: Context | None = None) -> str | None:
     if ctx:
         try:
             request = ctx.get_http_request()
+        except (RuntimeError, AttributeError) as e:
+            # Not in HTTP context (e.g., stdio mode)
+            logging.debug(f"Not in HTTP context, skipping Authorization header: {e}")
+        else:
             auth_header = request.headers.get("Authorization", "")
             if auth_header.startswith("Bearer "):
                 token = auth_header[7:]  # Remove "Bearer " prefix
                 logging.info("Token retrieved from Authorization header")
                 return token
-        except Exception as e:
-            # Not in HTTP context or header not available
-            logging.debug(f"Could not get token from Authorization header: {e}")
 
     # Fallback to FastMCP's OAuth flow token
     access_token = get_access_token()
