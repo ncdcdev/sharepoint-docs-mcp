@@ -185,28 +185,43 @@ Choose the appropriate setup based on your authentication method:
 
 **6. Authentication Flow**
 
-OAuth authentication in this MCP server is handled through **FastMCP's OIDCProxy**, which implements a secure two-layer authentication:
+OAuth authentication in this MCP server supports two token acquisition methods:
 
-1. **Layer 1 - MCP Client Authentication**:
-   - MCP client (e.g., Claude Desktop, MCP Inspector) authenticates with the FastMCP server
-   - FastMCP proxy authenticates the user with Microsoft Entra ID
-   - Uses PKCE (Proof Key for Code Exchange) for security without client secrets on the client side
+**Method 1: FastMCP OAuth Flow (Recommended)**
 
-2. **Layer 2 - SharePoint API Access**:
-   - The authenticated user's token is used to access SharePoint APIs on their behalf
-   - User's delegated permissions are used (AllSites.Read/Write)
+Handled through **FastMCP's OIDCProxy**, which implements a secure two-layer authentication:
 
-**Security Features**:
-- PKCE (Proof Key for Code Exchange) ensures tokens cannot be intercepted
-- Client secrets are only stored on the server side (`.env` file)
-- Token validation trusts Azure AD's OAuth flow (no additional JWT verification required for SharePoint tokens)
+1. **MCP Client Authentication**: MCP client authenticates with FastMCP server, which then authenticates the user with Microsoft Entra ID using PKCE
+2. **SharePoint API Access**: The authenticated user's token is used to access SharePoint APIs with delegated permissions (AllSites.Read/Write)
 
-**Important Notes**:
-- Authentication is performed through the MCP client's OAuth flow with Azure AD
-- No manual browser login is required - the MCP client handles the OAuth flow automatically
-- Tokens are managed and validated by FastMCP (using custom SharePointTokenVerifier)
-- The server uses the `/auth/callback` endpoint (FastMCP standard) for OAuth callbacks
-- MCP clients can use dynamic ports (e.g., http://localhost:6274/oauth/callback) as FastMCP accepts wildcard localhost URIs
+Features:
+- No manual browser login required - MCP client handles the OAuth flow automatically
+- PKCE ensures tokens cannot be intercepted
+- Tokens are managed and validated by FastMCP
+- Uses `/auth/callback` endpoint for OAuth callbacks
+- Supports dynamic ports (e.g., http://localhost:6274/oauth/callback)
+
+**Method 2: Direct Token in Authorization Header**
+
+For advanced scenarios (testing, custom integrations, existing token management):
+
+- Acquire an access token externally (e.g., via Azure CLI, custom script)
+- Pass the token in the `Authorization: Bearer <token>` HTTP header when calling MCP tools
+- The server uses the provided token directly without performing the OAuth flow
+
+Example using Azure CLI:
+```bash
+# Get token for SharePoint
+az account get-access-token --resource https://yourtenant.sharepoint.com --query accessToken -o tsv
+
+# Use with curl (example)
+curl -X POST http://localhost:8000/mcp \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"method": "sharepoint_docs_search", "params": {"query": "test"}}'
+```
+
+**Important**: Ensure your token has the required SharePoint scopes (`https://<tenant>.sharepoint.com/.default`) and manage token validity/refresh yourself.
 
 ## Tool Description Customization
 

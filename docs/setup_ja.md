@@ -185,28 +185,43 @@ rm cert/certificate.csr
 
 **6. 認証フロー**
 
-このMCPサーバーのOAuth認証は**FastMCPのOIDCProxy**によって処理され、安全な2層認証を実装します
+このMCPサーバーのOAuth認証は2つのトークン取得方法をサポートします：
 
-1. **レイヤー1 - MCPクライアント認証**
-   - MCPクライアント（Claude Desktop、MCP Inspectorなど）がFastMCPサーバーに接続
-   - FastMCPプロキシがユーザーをMicrosoft Entra IDで認証
-   - クライアント側でシークレットが不要なPKCEを使用してセキュリティを確保
+**方法1: FastMCP OAuthフロー（推奨）**
 
-2. **レイヤー2 - SharePoint APIアクセス**
-   - 認証されたユーザーのトークンを使用してSharePoint APIにアクセス
-   - ユーザーの委任された権限を使用（AllSites.Read/Write）
+**FastMCPのOIDCProxy**によって処理され、安全な2層認証を実装します：
 
-**セキュリティ機能**
+1. **MCPクライアント認証**: MCPクライアントがFastMCPサーバーに接続し、FastMCPがMicrosoft Entra IDでユーザー認証（PKCEを使用）
+2. **SharePoint APIアクセス**: 認証されたユーザーのトークンでSharePoint APIにアクセス（委任された権限: AllSites.Read/Write）
+
+特徴：
+- 手動でブラウザログイン不要 - MCPクライアントがOAuthフローを自動処理
 - PKCEによりトークンの傍受を防止
-- クライアントシークレットはサーバー側でのみ保存
-- トークン検証はAzure ADのOAuthフローを信頼
+- トークンはFastMCPによって管理・検証
+- `/auth/callback` エンドポイントをOAuthコールバックに使用
+- 動的ポート対応（例: http://localhost:6274/oauth/callback）
 
-**重要な注意事項**
-- 認証はMCPクライアントのOAuthフローを通じて実行されます
-- 手動でブラウザログインする必要はありません - MCPクライアントがOAuthフローを自動処理
-- トークンはFastMCPによって管理され、安全にキャッシュされます
-- サーバーは `/auth/callback` エンドポイント（FastMCP標準）をOAuthコールバックに使用
-- MCPクライアントは動的ポート（例: http://localhost:6274/oauth/callback ）を使用可能で、FastMCPはワイルドカードlocalhost URIを許可
+**方法2: Authorizationヘッダーで直接トークンを渡す**
+
+高度なシナリオ（テスト、カスタム統合、既存のトークン管理システム）向け：
+
+- 外部でアクセストークンを取得（Azure CLI、カスタムスクリプトなど）
+- MCPツール呼び出し時に `Authorization: Bearer <token>` HTTPヘッダーでトークンを渡す
+- サーバーはOAuthフローを実行せず、提供されたトークンを直接使用
+
+Azure CLIを使用した例：
+```bash
+# SharePoint用のトークンを取得
+az account get-access-token --resource https://yourtenant.sharepoint.com --query accessToken -o tsv
+
+# curlで使用する例
+curl -X POST http://localhost:8000/mcp \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"method": "sharepoint_docs_search", "params": {"query": "test"}}'
+```
+
+**重要**: トークンが必要なSharePointスコープ（`https://<tenant>.sharepoint.com/.default`）を持つことを確認し、トークンの有効性と更新を自分で管理してください。
 
 ## ツール説明文のカスタマイズ
 
