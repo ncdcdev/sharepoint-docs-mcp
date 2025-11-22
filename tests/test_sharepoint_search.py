@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, Mock
 import os
 
 from src.sharepoint_search import SharePointSearchClient
@@ -150,3 +150,194 @@ class TestSharePointSearchOneDrive:
             # @allの場合、SharePointフィルターは空になる（テナント全体検索）
             filters = self.client._build_sharepoint_filters(config)
             assert filters == []
+
+
+class TestSharePointUpload:
+    """SharePointアップロード機能テスト"""
+
+    def setup_method(self):
+        """テストメソッド実行前のセットアップ"""
+        self.mock_auth = MagicMock()
+        self.mock_auth.get_access_token.return_value = "test-token"
+        self.client = SharePointSearchClient(
+            site_url="https://test.sharepoint.com",
+            auth=self.mock_auth
+        )
+        # モック設定
+        self.mock_config = Mock()
+        self.mock_config.base_url = "https://test.sharepoint.com"
+
+    def test_parse_site_path(self):
+        """サイト指定パスの解析テスト"""
+        with patch("src.sharepoint_search.global_config", self.mock_config):
+            api_base_url, server_relative_folder = self.client._parse_site_path(
+                "TeamSite:/Shared Documents/Reports"
+            )
+
+            assert api_base_url == "https://test.sharepoint.com/sites/TeamSite"
+            assert server_relative_folder == "/sites/TeamSite/Shared Documents/Reports"
+
+    def test_parse_onedrive_path(self):
+        """OneDrive指定パスの解析テスト"""
+        with patch("src.sharepoint_search.global_config", self.mock_config):
+            api_base_url, server_relative_folder = self.client._parse_onedrive_path(
+                "@onedrive:user@company.com:/Documents/Projects"
+            )
+
+            assert api_base_url == "https://test-my.sharepoint.com/personal/user_company_com"
+            assert server_relative_folder == "/personal/user_company_com/Documents/Projects"
+
+    def test_parse_full_url_path_sharepoint(self):
+        """完全URL（SharePoint）の解析テスト"""
+        with patch("src.sharepoint_search.global_config", self.mock_config):
+            api_base_url, server_relative_folder = self.client._parse_full_url_path(
+                "https://test.sharepoint.com/sites/TeamSite/Shared Documents/Reports"
+            )
+
+            assert api_base_url == "https://test.sharepoint.com/sites/TeamSite"
+            assert server_relative_folder == "/sites/TeamSite/Shared Documents/Reports"
+
+    def test_parse_full_url_path_onedrive(self):
+        """完全URL（OneDrive）の解析テスト"""
+        with patch("src.sharepoint_search.global_config", self.mock_config):
+            api_base_url, server_relative_folder = self.client._parse_full_url_path(
+                "https://test-my.sharepoint.com/personal/user_company_com/Documents"
+            )
+
+            assert api_base_url == "https://test-my.sharepoint.com/personal/user_company_com"
+            assert server_relative_folder == "/personal/user_company_com/Documents"
+
+    def test_parse_folder_path_site_format(self):
+        """_parse_folder_path - サイト形式のテスト"""
+        with patch("src.sharepoint_search.global_config", self.mock_config):
+            api_base_url, server_relative_folder = self.client._parse_folder_path(
+                "TestSite:/Documents"
+            )
+
+            assert api_base_url == "https://test.sharepoint.com/sites/TestSite"
+            assert server_relative_folder == "/sites/TestSite/Documents"
+
+    def test_parse_folder_path_onedrive_format(self):
+        """_parse_folder_path - OneDrive形式のテスト"""
+        with patch("src.sharepoint_search.global_config", self.mock_config):
+            api_base_url, server_relative_folder = self.client._parse_folder_path(
+                "@onedrive:test@example.com:/Folder"
+            )
+
+            assert api_base_url == "https://test-my.sharepoint.com/personal/test_example_com"
+            assert server_relative_folder == "/personal/test_example_com/Folder"
+
+    def test_parse_folder_path_full_url(self):
+        """_parse_folder_path - 完全URL形式のテスト"""
+        with patch("src.sharepoint_search.global_config", self.mock_config):
+            api_base_url, server_relative_folder = self.client._parse_folder_path(
+                "https://test.sharepoint.com/sites/MySite/Library"
+            )
+
+            assert api_base_url == "https://test.sharepoint.com/sites/MySite"
+            assert server_relative_folder == "/sites/MySite/Library"
+
+    def test_parse_folder_path_invalid_format(self):
+        """無効なフォルダパス形式のテスト"""
+        with patch("src.sharepoint_search.global_config", self.mock_config):
+            with pytest.raises(ValueError) as excinfo:
+                self.client._parse_folder_path("invalid-path-without-colon")
+
+            assert "Invalid folder_path format" in str(excinfo.value)
+
+    def test_parse_onedrive_path_invalid_format(self):
+        """無効なOneDriveパス形式のテスト"""
+        with patch("src.sharepoint_search.global_config", self.mock_config):
+            with pytest.raises(ValueError) as excinfo:
+                self.client._parse_onedrive_path("@onedrive:invalid-format")
+
+            assert "Invalid OneDrive path format" in str(excinfo.value)
+
+    def test_build_full_url(self):
+        """完全URL構築のテスト"""
+        result = self.client._build_full_url(
+            "https://test.sharepoint.com/sites/TeamSite",
+            "/sites/TeamSite/Documents/file.pdf"
+        )
+        assert result == "https://test.sharepoint.com/sites/TeamSite/Documents/file.pdf"
+
+    def test_upload_file_invalid_filename(self):
+        """無効なファイル名のテスト（パストラバーサル防止）"""
+        # 相対パスを含むファイル名
+        with pytest.raises(ValueError) as excinfo:
+            self.client.upload_file(
+                file_content=b"test content",
+                file_name="../malicious.txt",
+                folder_path="TestSite:/Documents"
+            )
+        assert "Invalid file name" in str(excinfo.value)
+
+        # スラッシュを含むファイル名
+        with pytest.raises(ValueError) as excinfo:
+            self.client.upload_file(
+                file_content=b"test content",
+                file_name="path/to/file.txt",
+                folder_path="TestSite:/Documents"
+            )
+        assert "Invalid file name" in str(excinfo.value)
+
+    @patch('src.sharepoint_search.requests.post')
+    def test_upload_file_success(self, mock_post):
+        """ファイルアップロード成功のテスト"""
+        # モックレスポンスの設定
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "d": {
+                "Name": "test.txt",
+                "ServerRelativeUrl": "/sites/TeamSite/Documents/test.txt",
+                "Length": 12,
+                "TimeLastModified": "2025-01-15T10:00:00Z"
+            }
+        }
+        mock_response.raise_for_status = MagicMock()
+        mock_post.return_value = mock_response
+
+        with patch("src.sharepoint_search.global_config", self.mock_config):
+            result = self.client.upload_file(
+                file_content=b"test content",
+                file_name="test.txt",
+                folder_path="TeamSite:/Documents"
+            )
+
+            assert result["title"] == "test.txt"
+            assert result["path"] == "https://test.sharepoint.com/sites/TeamSite/Documents/test.txt"
+            assert result["size"] == "12"
+            assert result["extension"] == "txt"
+
+            # APIが正しく呼び出されたことを確認
+            mock_post.assert_called_once()
+            call_args = mock_post.call_args
+            assert "/_api/web/GetFolderByServerRelativeUrl" in call_args[0][0]
+            assert "Files/add" in call_args[0][0]
+
+    @patch('src.sharepoint_search.requests.post')
+    def test_upload_file_with_overwrite(self, mock_post):
+        """上書きオプション付きアップロードのテスト"""
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "d": {
+                "Name": "test.txt",
+                "ServerRelativeUrl": "/sites/TeamSite/Documents/test.txt",
+                "Length": 12,
+                "TimeLastModified": "2025-01-15T10:00:00Z"
+            }
+        }
+        mock_response.raise_for_status = MagicMock()
+        mock_post.return_value = mock_response
+
+        with patch("src.sharepoint_search.global_config", self.mock_config):
+            self.client.upload_file(
+                file_content=b"test content",
+                file_name="test.txt",
+                folder_path="TeamSite:/Documents",
+                overwrite=True
+            )
+
+            # overwrite=trueがURLに含まれていることを確認
+            call_args = mock_post.call_args
+            assert "overwrite=true" in call_args[0][0]

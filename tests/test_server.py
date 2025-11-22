@@ -2,7 +2,7 @@ import pytest
 from unittest.mock import patch, Mock
 import base64
 
-from src.server import sharepoint_docs_search, sharepoint_docs_download
+from src.server import sharepoint_docs_search, sharepoint_docs_download, sharepoint_docs_upload
 
 
 class TestSharePointDocsSearch:
@@ -160,3 +160,89 @@ class TestGetSharePointClient:
                     # 2回目の呼び出しでは新しいインスタンスを作成しない
                     assert mock_client_class.call_count == 1
                     assert client1 == client2
+
+
+class TestSharePointDocsUpload:
+    """sharepoint_docs_upload 関数のテスト"""
+
+    @pytest.mark.unit
+    def test_upload_file_success(self, mock_config, mock_sharepoint_client):
+        """ファイルアップロード成功のテスト"""
+        with patch("src.server._get_sharepoint_client", return_value=mock_sharepoint_client):
+            with patch("src.server.config", mock_config):
+                file_content = base64.b64encode(b"test content").decode("utf-8")
+                result = sharepoint_docs_upload(
+                    file_content=file_content,
+                    file_name="test.txt",
+                    folder_path="TestSite:/Documents"
+                )
+
+                assert result["title"] == "uploaded.txt"
+                assert result["path"] == "https://test.sharepoint.com/sites/test/documents/uploaded.txt"
+                mock_sharepoint_client.upload_file.assert_called_once()
+
+    @pytest.mark.unit
+    def test_upload_file_with_overwrite(self, mock_config, mock_sharepoint_client):
+        """上書きオプション付きアップロードのテスト"""
+        with patch("src.server._get_sharepoint_client", return_value=mock_sharepoint_client):
+            with patch("src.server.config", mock_config):
+                file_content = base64.b64encode(b"test content").decode("utf-8")
+                sharepoint_docs_upload(
+                    file_content=file_content,
+                    file_name="test.txt",
+                    folder_path="TestSite:/Documents",
+                    overwrite=True
+                )
+
+                call_args = mock_sharepoint_client.upload_file.call_args
+                assert call_args.kwargs["overwrite"] is True
+
+    @pytest.mark.unit
+    def test_upload_file_invalid_base64(self, mock_config, mock_sharepoint_client):
+        """無効なBase64コンテンツのテスト"""
+        with patch("src.server._get_sharepoint_client", return_value=mock_sharepoint_client):
+            with patch("src.server.config", mock_config):
+                with pytest.raises(Exception) as exc_info:
+                    sharepoint_docs_upload(
+                        file_content="invalid-base64!@#$",
+                        file_name="test.txt",
+                        folder_path="TestSite:/Documents"
+                    )
+
+                assert "Invalid base64" in str(exc_info.value.__cause__)
+
+    @pytest.mark.unit
+    def test_upload_file_size_limit(self, mock_config, mock_sharepoint_client):
+        """ファイルサイズ制限のテスト"""
+        with patch("src.server._get_sharepoint_client", return_value=mock_sharepoint_client):
+            with patch("src.server.config", mock_config):
+                # 251MB のファイル（制限は250MB）
+                large_content = base64.b64encode(b"x" * (251 * 1024 * 1024)).decode("utf-8")
+
+                with pytest.raises(Exception) as exc_info:
+                    sharepoint_docs_upload(
+                        file_content=large_content,
+                        file_name="large.bin",
+                        folder_path="TestSite:/Documents"
+                    )
+
+                assert "exceeds the maximum allowed size" in str(exc_info.value.__cause__)
+
+    @pytest.mark.unit
+    def test_upload_file_error_handling(self, mock_config, mock_sharepoint_client):
+        """ファイルアップロードエラーハンドリングのテスト"""
+        mock_sharepoint_client.upload_file.side_effect = Exception("Upload failed")
+
+        with patch("src.server._get_sharepoint_client", return_value=mock_sharepoint_client):
+            with patch("src.server.config", mock_config):
+                file_content = base64.b64encode(b"test content").decode("utf-8")
+
+                with pytest.raises(Exception) as exc_info:
+                    sharepoint_docs_upload(
+                        file_content=file_content,
+                        file_name="test.txt",
+                        folder_path="TestSite:/Documents"
+                    )
+
+                # エラーハンドリング関数が呼ばれることを確認
+                assert "Upload failed" in str(exc_info.value.__cause__)

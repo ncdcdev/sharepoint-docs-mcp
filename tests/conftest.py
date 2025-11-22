@@ -19,6 +19,7 @@ def mock_config():
     config.allowed_file_extensions = ["pdf", "docx", "xlsx"]
     config.search_tool_description = "Test search tool"
     config.download_tool_description = "Test download tool"
+    config.upload_tool_description = "Test upload tool"
 
     # OAuth認証設定
     config.auth_mode = "certificate"
@@ -77,5 +78,12 @@ def mock_sharepoint_client():
             }
         ]
         client_instance.download_file.return_value = b"mock file content"
+        client_instance.upload_file.return_value = {
+            "title": "uploaded.txt",
+            "path": "https://test.sharepoint.com/sites/test/documents/uploaded.txt",
+            "size": "1024",
+            "modified": "2024-01-01T00:00:00Z",
+            "extension": "txt",
+        }
         mock_client.return_value = client_instance
         yield client_instance
