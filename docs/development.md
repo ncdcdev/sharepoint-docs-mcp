@@ -75,7 +75,6 @@ uv run fix
 - **pytest**: Python testing framework with fixtures and mocking
 - **pytest-cov**: Code coverage reporting
 - **pytest-mock**: Enhanced mocking capabilities
-- 24 unit tests covering core functionality (48% coverage)
 
 ## Code Quality Tools
 
