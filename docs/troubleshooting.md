@@ -1,11 +1,10 @@
 # Troubleshooting Guide
 
-This guide covers common issues and debugging methods for the SharePoint MCP server.
+This guide covers common issues for the SharePoint MCP server.
 
 ## Table of Contents
 
 - [Common Issues](#common-issues)
-- [Debugging Methods](#debugging-methods)
 
 ## Common Issues
 
@@ -47,15 +46,3 @@ Access token request failed
 # Check configuration status (using MCP Inspector)
 # Execute get_sharepoint_config_status tool
 ```
-
-## Debugging Methods
-
-### Using MCP Inspector
-
-```bash
-npx @modelcontextprotocol/inspector uv run sharepoint-docs-mcp --transport stdio
-```
-
-### Log Level Adjustment
-
-Detailed logs are output when starting the server. Error details are displayed in standard error output.

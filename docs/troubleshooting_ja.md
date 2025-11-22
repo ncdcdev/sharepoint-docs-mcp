@@ -1,11 +1,10 @@
 # トラブルシューティングガイド
 
-このガイドでは、SharePoint MCPサーバーのよくある問題とデバッグ方法について説明します。
+このガイドでは、SharePoint MCPサーバーのよくある問題について説明します。
 
 ## 目次
 
 - [よくある問題](#よくある問題)
-- [デバッグ方法](#デバッグ方法)
 
 ## よくある問題
 
@@ -47,15 +46,3 @@ Access token request failed
 # 設定ステータスを確認（MCP Inspector使用）
 # get_sharepoint_config_status ツールを実行
 ```
-
-## デバッグ方法
-
-### MCP Inspectorを使用
-
-```bash
-npx @modelcontextprotocol/inspector uv run sharepoint-docs-mcp --transport stdio
-```
-
-### ログレベルの調整
-
-サーバー起動時に詳細なログが出力されます。エラーの詳細は標準エラー出力に表示されます。

@@ -8,6 +8,7 @@ This guide covers development-related information including project structure, d
 - [Development Commands](#development-commands)
 - [Testing Framework](#testing-framework)
 - [Code Quality Tools](#code-quality-tools)
+- [Debugging](#debugging)
 
 ## Project Structure
 
@@ -87,3 +88,15 @@ uv run fix
   - pytest configuration: Test discovery and coverage settings
   - ruff configuration: Code style and rule settings
   - ty configuration: Detailed type checking settings
+
+## Debugging
+
+### Using MCP Inspector
+
+```bash
+npx @modelcontextprotocol/inspector uv run sharepoint-docs-mcp --transport stdio
+```
+
+### Log Level Adjustment
+
+Detailed logs are output when starting the server. Error details are displayed in standard error output.
