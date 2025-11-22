@@ -49,6 +49,7 @@ SHAREPOINT_ALLOWED_FILE_EXTENSIONS=pdf,docx,xlsx,pptx,txt,md
 # ツール説明文のカスタマイズ（オプション）
 # SHAREPOINT_SEARCH_TOOL_DESCRIPTION=社内文書を検索します
 # SHAREPOINT_DOWNLOAD_TOOL_DESCRIPTION=検索結果からファイルをダウンロードします
+# SHAREPOINT_UPLOAD_TOOL_DESCRIPTION=SharePointまたはOneDriveにファイルをアップロードします
 ```
 
 ### 証明書認証設定（SHAREPOINT_AUTH_MODE=certificate）
@@ -173,10 +174,12 @@ rm cert/certificate.csr
 1. 「API権限」タブに移動
 2. 「権限の追加」→「SharePoint」→「委任された権限」
 3. 以下の権限を追加：
-   - `AllSites.Read` - すべてのサイトコレクション内のアイテムを読み取る
-   - `AllSites.Write` - すべてのサイトコレクション内のアイテムを読み書きする（ファイルダウンロードに必要な場合）
+   - `AllSites.Read` - すべてのサイトコレクション内のアイテムを読み取る（検索とダウンロード）
+   - `AllSites.Write` - すべてのサイトコレクション内のアイテムを読み書きする（アップロード機能に必要）
    - `User.Read` - ユーザープロファイルを読み取る（自動的に追加）
 4. 「管理者の同意を与える」をクリック（管理者の同意が必要）
+
+**注意**: アップロード機能を使用する場合は`AllSites.Write`権限が必要です。
 
 **5. 必要な情報の取得**
 - テナントID: 「概要」ページのディレクトリ（テナント）ID
@@ -214,9 +217,11 @@ MCPツールの説明文を日本語などにカスタマイズできます
 
 - `SHAREPOINT_SEARCH_TOOL_DESCRIPTION`: 検索ツールの説明文（デフォルト: "Search for documents in SharePoint"）
 - `SHAREPOINT_DOWNLOAD_TOOL_DESCRIPTION`: ダウンロードツールの説明文（デフォルト: "Download a file from SharePoint"）
+- `SHAREPOINT_UPLOAD_TOOL_DESCRIPTION`: アップロードツールの説明文（デフォルト: "Upload a file to SharePoint or OneDrive"）
 
 例：
 ```bash
 SHAREPOINT_SEARCH_TOOL_DESCRIPTION=社内文書を検索します
 SHAREPOINT_DOWNLOAD_TOOL_DESCRIPTION=検索結果からファイルをダウンロードします
+SHAREPOINT_UPLOAD_TOOL_DESCRIPTION=SharePointまたはOneDriveにファイルをアップロードします
 ```

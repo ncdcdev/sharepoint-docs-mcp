@@ -49,6 +49,7 @@ SHAREPOINT_ALLOWED_FILE_EXTENSIONS=pdf,docx,xlsx,pptx,txt,md
 # Tool description customization (optional)
 # SHAREPOINT_SEARCH_TOOL_DESCRIPTION=Search internal documents
 # SHAREPOINT_DOWNLOAD_TOOL_DESCRIPTION=Download files from search results
+# SHAREPOINT_UPLOAD_TOOL_DESCRIPTION=Upload files to SharePoint or OneDrive
 ```
 
 ### Certificate Authentication Configuration (SHAREPOINT_AUTH_MODE=certificate)
@@ -173,10 +174,12 @@ Choose the appropriate setup based on your authentication method:
 1. Go to "API permissions" tab
 2. "Add a permission" → "SharePoint" → "Delegated permissions"
 3. Add the following permissions:
-   - `AllSites.Read` - Read items in all site collections
-   - `AllSites.Write` - Read and write items in all site collections (if file downloads are needed)
+   - `AllSites.Read` - Read items in all site collections (search and download)
+   - `AllSites.Write` - Read and write items in all site collections (required for upload functionality)
    - `User.Read` - Read user profile (automatically added)
 4. Click "Grant admin consent" (admin consent required)
+
+**Note**: `AllSites.Write` permission is required if you want to use the upload functionality.
 
 **5. Required Information**
 - Tenant ID: Directory (tenant) ID from the "Overview" page
@@ -214,9 +217,11 @@ You can customize MCP tool descriptions in Japanese or other languages:
 
 - `SHAREPOINT_SEARCH_TOOL_DESCRIPTION`: Search tool description (default: "Search for documents in SharePoint")
 - `SHAREPOINT_DOWNLOAD_TOOL_DESCRIPTION`: Download tool description (default: "Download a file from SharePoint")
+- `SHAREPOINT_UPLOAD_TOOL_DESCRIPTION`: Upload tool description (default: "Upload a file to SharePoint or OneDrive")
 
 Example:
 ```bash
 SHAREPOINT_SEARCH_TOOL_DESCRIPTION=Search internal documents
 SHAREPOINT_DOWNLOAD_TOOL_DESCRIPTION=Download files from search results
+SHAREPOINT_UPLOAD_TOOL_DESCRIPTION=Upload files to SharePoint or OneDrive
 ```
