@@ -206,7 +206,7 @@ rm cert/certificate.csr
 
 **重要な注意事項**
 - 認証はMCPクライアントのOAuthフローを通じて実行されます
-- 手動でブラウザログインする必要はありません - MCPクライアントがOAuthフローを自動処理
+- MCPクライアントがブラウザを開き、ユーザー認証を行います（証明書モードではブラウザ認証は不要）
 - トークンはFastMCPによって管理され、安全にキャッシュされます
 - サーバーは `/auth/callback` エンドポイント（FastMCP標準）をOAuthコールバックに使用
 - MCPクライアントは動的ポート（例: http://localhost:6274/oauth/callback ）を使用可能で、FastMCPはワイルドカードlocalhost URIを許可

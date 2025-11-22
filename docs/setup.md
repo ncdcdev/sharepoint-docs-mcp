@@ -206,7 +206,7 @@ OAuth authentication in this MCP server is handled through **FastMCP's OIDCProxy
 
 **Important Notes**:
 - Authentication is performed through the MCP client's OAuth flow with Azure AD
-- No manual browser login is required - the MCP client handles the OAuth flow automatically
+- The MCP client opens a browser for user authentication (certificate mode does not require browser authentication)
 - Tokens are managed and validated by FastMCP (using custom SharePointTokenVerifier)
 - The server uses the `/auth/callback` endpoint (FastMCP standard) for OAuth callbacks
 - MCP clients can use dynamic ports (e.g., http://localhost:6274/oauth/callback) as FastMCP accepts wildcard localhost URIs
