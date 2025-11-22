@@ -63,6 +63,10 @@ class SharePointConfig:
         self.download_tool_description = os.getenv(
             "SHAREPOINT_DOWNLOAD_TOOL_DESCRIPTION", "Download a file from SharePoint"
         )
+        self.upload_tool_description = os.getenv(
+            "SHAREPOINT_UPLOAD_TOOL_DESCRIPTION",
+            "Upload a file to SharePoint or OneDrive. Supports multiple folder path formats: full URL, 'SiteName:/Folder', or '@onedrive:user@domain.com:/Folder'.",
+        )
 
     @property
     def site_url(self) -> str:

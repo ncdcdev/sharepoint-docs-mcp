@@ -16,6 +16,9 @@ class ErrorCategory(Enum):
     NETWORK = "network"
     SEARCH_QUERY = "search_query"
     FILE_NOT_FOUND = "file_not_found"
+    FOLDER_NOT_FOUND = "folder_not_found"
+    FILE_ALREADY_EXISTS = "file_already_exists"
+    UPLOAD_FAILED = "upload_failed"
     CONFIGURATION = "configuration"
     UNKNOWN = "unknown"
 
@@ -162,6 +165,76 @@ def get_configuration_error(original_error: Exception) -> SharePointError:
     )
 
 
+def get_folder_not_found_error(
+    folder_path: str | None, original_error: Exception, is_onedrive: bool = False
+) -> SharePointError:
+    """Generate folder not found error message"""
+    if folder_path:
+        message = f"The specified folder was not found: {folder_path}"
+    else:
+        message = "The requested folder was not found."
+
+    if is_onedrive:
+        solution = (
+            "Please verify the OneDrive folder path is correct. "
+            "Ensure the user email and folder path are properly formatted "
+            "(e.g., '@onedrive:user@domain.com:/Documents/Folder')."
+        )
+    else:
+        solution = (
+            "Please verify the folder path is correct. "
+            "Use the format 'SiteName:/Folder/Path' or provide a full URL. "
+            "You may need to create the folder first."
+        )
+
+    return SharePointError(
+        category=ErrorCategory.FOLDER_NOT_FOUND,
+        message=message,
+        solution=solution,
+        original_error=original_error,
+    )
+
+
+def get_file_already_exists_error(
+    file_name: str | None, original_error: Exception
+) -> SharePointError:
+    """Generate file already exists error message"""
+    if file_name:
+        message = f"A file with the name '{file_name}' already exists in the destination folder."
+    else:
+        message = "A file with the same name already exists in the destination folder."
+
+    return SharePointError(
+        category=ErrorCategory.FILE_ALREADY_EXISTS,
+        message=message,
+        solution="Use the 'overwrite' parameter set to true to replace the existing file, or choose a different file name.",
+        original_error=original_error,
+    )
+
+
+def get_upload_error(
+    original_error: Exception, is_onedrive: bool = False
+) -> SharePointError:
+    """Generate upload error message"""
+    error_str = str(original_error).lower()
+
+    if "file size" in error_str or "too large" in error_str or "413" in error_str:
+        return SharePointError(
+            category=ErrorCategory.UPLOAD_FAILED,
+            message="The file is too large to upload.",
+            solution="SharePoint has a file size limit (typically 250MB for REST API). Please try uploading a smaller file or contact your administrator about size limits.",
+            original_error=original_error,
+        )
+
+    location = "OneDrive" if is_onedrive else "SharePoint"
+    return SharePointError(
+        category=ErrorCategory.UPLOAD_FAILED,
+        message=f"Failed to upload the file to {location}.",
+        solution="Please verify you have write permissions to the destination folder and the folder path is correct.",
+        original_error=original_error,
+    )
+
+
 def get_unknown_error(original_error: Exception) -> SharePointError:
     """Generate unknown error message"""
     return SharePointError(
@@ -194,8 +267,15 @@ def handle_sharepoint_error(
             return get_authentication_error(error)
         elif status_code == 403:
             return get_authorization_error(error)
-        elif status_code == 404 and context == "download":
-            return get_file_not_found_error(None, error, is_onedrive_file)
+        elif status_code == 404:
+            if context == "download":
+                return get_file_not_found_error(None, error, is_onedrive_file)
+            elif context == "upload":
+                return get_folder_not_found_error(None, error, is_onedrive_file)
+        elif status_code == 409 and context == "upload":
+            return get_file_already_exists_error(None, error)
+        elif status_code == 413 and context == "upload":
+            return get_upload_error(error, is_onedrive_file)
 
     # Classification by error message content
     if any(
@@ -221,11 +301,20 @@ def handle_sharepoint_error(
         any(keyword in error_str for keyword in ["not found", "404"])
         and context == "download"
     ):
-        return get_file_not_found_error(None, error)
+        return get_file_not_found_error(None, error, is_onedrive_file)
+    elif (
+        any(keyword in error_str for keyword in ["not found", "404"])
+        and context == "upload"
+    ):
+        return get_folder_not_found_error(None, error, is_onedrive_file)
+    elif ("already exists" in error_str or "409" in error_str) and context == "upload":
+        return get_file_already_exists_error(None, error)
     elif any(
         keyword in error_str
         for keyword in ["config", "validation", "missing", "required"]
     ):
         return get_configuration_error(error)
+    elif context == "upload":
+        return get_upload_error(error, is_onedrive_file)
     else:
         return get_unknown_error(error)

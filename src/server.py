@@ -399,7 +399,68 @@ def sharepoint_docs_download(file_path: str) -> str:
         raise handle_sharepoint_error(e, "download") from e
 
 
+def sharepoint_docs_upload(
+    file_content: str,
+    file_name: str,
+    folder_path: str,
+    overwrite: bool = False,
+) -> dict[str, Any]:
+    """
+    Upload a file to SharePoint or OneDrive
+
+    Args:
+        file_content: Base64 encoded file content
+        file_name: Name for the uploaded file
+        folder_path: Destination folder in one of these formats:
+            - Full URL: "https://tenant.sharepoint.com/sites/Site/Folder"
+            - Site path: "SiteName:/Folder/Path"
+            - OneDrive: "@onedrive:user@domain.com:/Folder"
+        overwrite: Whether to overwrite existing file (default: False)
+
+    Returns:
+        Upload result with title, path, size, modified, and extension
+    """
+    logging.info(f"Uploading file '{file_name}' to '{folder_path}'")
+
+    try:
+        client = _get_sharepoint_client()
+
+        # Base64デコード
+        try:
+            file_bytes = base64.b64decode(file_content)
+        except Exception as decode_error:
+            raise ValueError(
+                f"Invalid base64 encoded content: {str(decode_error)}"
+            ) from decode_error
+
+        # ファイルサイズチェック（250MB制限）
+        max_size = 250 * 1024 * 1024  # 250MB
+        if len(file_bytes) > max_size:
+            raise ValueError(
+                f"File size ({len(file_bytes)} bytes) exceeds the maximum allowed size ({max_size} bytes). "
+                "Consider using chunked upload for larger files."
+            )
+
+        # ファイルをアップロード
+        result = client.upload_file(
+            file_content=file_bytes,
+            file_name=file_name,
+            folder_path=folder_path,
+            overwrite=overwrite,
+        )
+
+        logging.info(
+            f"SharePoint file upload completed. Path: {result.get('path', 'unknown')}"
+        )
+        return result
+
+    except Exception as e:
+        logging.error(f"SharePoint file upload failed: {str(e)}")
+        raise handle_sharepoint_error(e, "upload") from e
+
+
 def register_tools():
     """Register MCP tools"""
     mcp.tool(description=config.search_tool_description)(sharepoint_docs_search)
     mcp.tool(description=config.download_tool_description)(sharepoint_docs_download)
+    mcp.tool(description=config.upload_tool_description)(sharepoint_docs_upload)
