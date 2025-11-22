@@ -8,6 +8,7 @@
 - [MCP Inspectorでの検証](#mcp-inspectorでの検証)
 - [Claude Desktopとの統合](#claude-desktopとの統合)
 - [検索の使用例](#検索の使用例)
+- [アップロードの使用例](#アップロードの使用例)
 
 ## MCPサーバーの起動
 
@@ -164,3 +165,88 @@ SHAREPOINT_SITE_NAME=@onedrive,project-a-team,project-a-docs
 SHAREPOINT_ONEDRIVE_PATHS=sales1@company.com:/Documents/顧客情報,sales2@company.com:/Documents/提案書
 SHAREPOINT_SITE_NAME=@onedrive,sales-team,customer-portal
 ```
+
+## アップロードの使用例
+
+`sharepoint_docs_upload`ツールを使用して、SharePointサイトまたはOneDriveにファイルをアップロードできます。ファイル内容はBase64エンコードされている必要があります。
+
+### フォルダパス形式
+
+3つのフォルダパス形式をサポートしています
+
+**サイトパス形式**
+```
+サイト名:/フォルダ/パス
+```
+例: `TeamSite:/Shared Documents/Reports`
+
+**OneDrive形式**
+```
+@onedrive:ユーザー@ドメイン.com:/フォルダ/パス
+```
+例: `@onedrive:user@company.com:/Documents/Projects`
+
+**完全URL形式**
+```
+https://テナント.sharepoint.com/sites/サイト名/フォルダ/パス
+```
+例: `https://company.sharepoint.com/sites/TeamSite/Shared Documents`
+
+### アップロード例
+
+**SharePointサイトへのアップロード**
+```json
+{
+  "tool": "sharepoint_docs_upload",
+  "arguments": {
+    "file_content": "SGVsbG8gV29ybGQh...",
+    "file_name": "report.pdf",
+    "folder_path": "TeamSite:/Shared Documents/Reports"
+  }
+}
+```
+
+**OneDriveへのアップロード**
+```json
+{
+  "tool": "sharepoint_docs_upload",
+  "arguments": {
+    "file_content": "SGVsbG8gV29ybGQh...",
+    "file_name": "notes.txt",
+    "folder_path": "@onedrive:user@company.com:/Documents/Notes"
+  }
+}
+```
+
+**上書きオプション付きアップロード**
+```json
+{
+  "tool": "sharepoint_docs_upload",
+  "arguments": {
+    "file_content": "SGVsbG8gV29ybGQh...",
+    "file_name": "existing-file.docx",
+    "folder_path": "TeamSite:/Shared Documents",
+    "overwrite": true
+  }
+}
+```
+
+### アップロードレスポンス
+
+アップロードのレスポンスは検索結果と同じ形式です
+
+```json
+{
+  "title": "report.pdf",
+  "path": "https://company.sharepoint.com/sites/TeamSite/Shared Documents/Reports/report.pdf",
+  "size": "1234567",
+  "modified": "2025-01-15T10:30:00Z",
+  "extension": "pdf"
+}
+```
+
+### 制限事項
+
+- 最大ファイルサイズ: 250MB（SharePoint REST API制限）
+- ファイル名にはパス区切り文字（`/`、`\`）や`..`を含めることはできません
+- アップロード先のフォルダは事前に存在している必要があります

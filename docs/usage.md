@@ -8,6 +8,7 @@ This guide covers how to use the SharePoint MCP server with various clients and 
 - [MCP Inspector Verification](#mcp-inspector-verification)
 - [Claude Desktop Integration](#claude-desktop-integration)
 - [Search Usage Examples](#search-usage-examples)
+- [Upload Usage Examples](#upload-usage-examples)
 
 ## MCP Server Startup
 
@@ -164,3 +165,88 @@ SHAREPOINT_SITE_NAME=@onedrive,project-a-team,project-a-docs
 SHAREPOINT_ONEDRIVE_PATHS=sales1@company.com:/Documents/Customers,sales2@company.com:/Documents/Proposals
 SHAREPOINT_SITE_NAME=@onedrive,sales-team,customer-portal
 ```
+
+## Upload Usage Examples
+
+The `sharepoint_docs_upload` tool allows you to upload files to SharePoint sites or OneDrive. The file content must be Base64 encoded.
+
+### Folder Path Formats
+
+Three folder path formats are supported:
+
+**Site Path Format**
+```
+SiteName:/Folder/Path
+```
+Example: `TeamSite:/Shared Documents/Reports`
+
+**OneDrive Format**
+```
+@onedrive:user@domain.com:/Folder/Path
+```
+Example: `@onedrive:user@company.com:/Documents/Projects`
+
+**Full URL Format**
+```
+https://tenant.sharepoint.com/sites/SiteName/Folder/Path
+```
+Example: `https://company.sharepoint.com/sites/TeamSite/Shared Documents`
+
+### Upload Examples
+
+**Upload to SharePoint Site**
+```json
+{
+  "tool": "sharepoint_docs_upload",
+  "arguments": {
+    "file_content": "SGVsbG8gV29ybGQh...",
+    "file_name": "report.pdf",
+    "folder_path": "TeamSite:/Shared Documents/Reports"
+  }
+}
+```
+
+**Upload to OneDrive**
+```json
+{
+  "tool": "sharepoint_docs_upload",
+  "arguments": {
+    "file_content": "SGVsbG8gV29ybGQh...",
+    "file_name": "notes.txt",
+    "folder_path": "@onedrive:user@company.com:/Documents/Notes"
+  }
+}
+```
+
+**Upload with Overwrite**
+```json
+{
+  "tool": "sharepoint_docs_upload",
+  "arguments": {
+    "file_content": "SGVsbG8gV29ybGQh...",
+    "file_name": "existing-file.docx",
+    "folder_path": "TeamSite:/Shared Documents",
+    "overwrite": true
+  }
+}
+```
+
+### Upload Response
+
+The upload response follows the same format as search results:
+
+```json
+{
+  "title": "report.pdf",
+  "path": "https://company.sharepoint.com/sites/TeamSite/Shared Documents/Reports/report.pdf",
+  "size": "1234567",
+  "modified": "2025-01-15T10:30:00Z",
+  "extension": "pdf"
+}
+```
+
+### Limitations
+
+- Maximum file size: 250MB (SharePoint REST API limit)
+- File names cannot contain path separators (`/`, `\`) or `..`
+- The destination folder must exist before uploading

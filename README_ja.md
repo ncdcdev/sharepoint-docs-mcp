@@ -31,6 +31,10 @@ stdioとHTTPの両方のトランスポートに対応しています。
 - **sharepoint_docs_download**
   - 検索結果からファイルをダウンロード
   - SharePoint/OneDriveファイルに応じた自動メソッド選択
+- **sharepoint_docs_upload**
+  - SharePointサイトまたはOneDriveへファイルをアップロード
+  - 複数のフォルダパス形式に対応（完全URL、サイトパス、OneDriveパス）
+  - 既存ファイルの上書きオプション
 
 ### OneDrive対応
 

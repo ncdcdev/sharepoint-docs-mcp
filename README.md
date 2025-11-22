@@ -31,6 +31,10 @@ Two authentication methods are supported:
 - **sharepoint_docs_download**
   - File download from search results
   - Automatic method selection for SharePoint vs OneDrive files
+- **sharepoint_docs_upload**
+  - File upload to SharePoint sites or OneDrive
+  - Multiple folder path formats (full URL, site path, OneDrive path)
+  - Overwrite option for existing files
 
 ### OneDrive Support
 
