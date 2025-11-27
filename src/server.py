@@ -4,7 +4,7 @@ import sys
 from typing import Any
 from urllib.parse import parse_qs, urlencode, urlparse, urlsplit, urlunsplit
 
-from fastmcp import FastMCP
+from fastmcp import Context, FastMCP
 from fastmcp.server.auth import AccessToken, TokenVerifier
 from fastmcp.server.auth.oidc_proxy import OIDCProxy
 from fastmcp.server.dependencies import get_access_token
@@ -236,11 +236,56 @@ def _get_auth_client() -> SharePointCertificateAuth | None:
     )
 
 
-def _get_sharepoint_client() -> SharePointSearchClient:
+def _get_token_from_request(ctx: Context | None = None) -> str | None:
+    """Get token from Authorization header or FastMCP context
+
+    Tries to get token in the following order:
+    1. From Authorization header (direct token approach)
+    2. From FastMCP's OAuth flow (get_access_token)
+
+    Args:
+        ctx: FastMCP context (optional)
+
+    Returns:
+        Token string if available, None otherwise
+    """
+    # Try to get from HTTP header first (direct token)
+    if ctx:
+        try:
+            request = ctx.get_http_request()
+        except RuntimeError as e:
+            # Not in HTTP context (e.g., stdio mode) - expected behavior
+            logging.debug(f"Not in HTTP context, skipping Authorization header: {e}")
+        except AttributeError as e:
+            # Unexpected attribute error - may indicate a code bug
+            logging.warning(f"Unexpected error accessing HTTP request: {e}")
+        else:
+            auth_header = request.headers.get("Authorization", "")
+            if auth_header.lower().startswith("bearer "):
+                token = auth_header[len("bearer ") :].strip()
+                if token:
+                    logging.info("Token retrieved from Authorization header")
+                    return token
+                else:
+                    logging.warning("Empty token in Authorization header")
+
+    # Fallback to FastMCP's OAuth flow token
+    access_token = get_access_token()
+    if access_token:
+        logging.info("Token retrieved from FastMCP OAuth context")
+        return access_token.token
+
+    return None
+
+
+def _get_sharepoint_client(ctx: Context | None = None) -> SharePointSearchClient:
     """SharePointクライアントを取得または初期化
 
     - 証明書モード: シングルトンクライアントを使用
     - OAuthモード: リクエストごとに新しいクライアントを作成（トークンはリクエスト依存）
+
+    Args:
+        ctx: FastMCP context for accessing HTTP request (OAuth mode only)
     """
     global _sharepoint_client
 
@@ -256,16 +301,16 @@ def _get_sharepoint_client() -> SharePointSearchClient:
 
     # OAuthモード: リクエストごとに新しいクライアントを作成
     if config.is_oauth_mode:
-        # FastMCPの認証コンテキストからトークンを取得
-        access_token = get_access_token()
-        if not access_token:
+        # Get token from Authorization header or FastMCP context
+        token = _get_token_from_request(ctx)
+        if not token:
             raise ValueError(
                 "OAuth authentication required but no access token available. "
-                "Please authenticate with FastMCP's AzureProvider."
+                "Please provide token via Authorization header or authenticate with FastMCP's OAuth flow."
             )
 
         # SimpleTokenAuthでトークンをラップ
-        auth = SimpleTokenAuth(token=access_token.token)
+        auth = SimpleTokenAuth(token=token)
 
         # SharePointクライアントを作成（リクエストごと）
         return SharePointSearchClient(
@@ -296,6 +341,7 @@ def sharepoint_docs_search(
     max_results: int = 20,
     file_extensions: list[str] | None = None,
     response_format: str = "detailed",
+    ctx: Context | None = None,
 ) -> list[dict[str, Any]]:
     """
     Search for documents in SharePoint with response format options
@@ -305,6 +351,7 @@ def sharepoint_docs_search(
         max_results: Maximum number of results to return (default: 20, max: 100)
         file_extensions: List of file extensions to search (e.g., ["pdf", "docx"])
         response_format: Response format - "detailed" (default) or "compact"
+        ctx: FastMCP context (injected automatically)
 
     Returns:
         List of search results. Each result contains:
@@ -322,7 +369,7 @@ def sharepoint_docs_search(
         response_format = "detailed"
 
     try:
-        client = _get_sharepoint_client()
+        client = _get_sharepoint_client(ctx)
 
         # ファイル拡張子のフィルタリング
         if file_extensions:
@@ -368,12 +415,13 @@ def sharepoint_docs_search(
         raise handle_sharepoint_error(e, "search") from e
 
 
-def sharepoint_docs_download(file_path: str) -> str:
+def sharepoint_docs_download(file_path: str, ctx: Context | None = None) -> str:
     """
     Download a file from SharePoint
 
     Args:
         file_path: ダウンロードするファイルのフルパス（sharepoint_docs_searchの結果から取得）
+        ctx: FastMCP context (injected automatically)
 
     Returns:
         ダウンロードしたファイルの内容（Base64エンコード済み文字列）
@@ -381,7 +429,7 @@ def sharepoint_docs_download(file_path: str) -> str:
     logging.info(f"Downloading SharePoint file: {file_path}")
 
     try:
-        client = _get_sharepoint_client()
+        client = _get_sharepoint_client(ctx)
 
         # ファイルをダウンロード
         file_content = client.download_file(file_path)
