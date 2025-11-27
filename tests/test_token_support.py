@@ -122,8 +122,8 @@ class TestGetTokenFromRequest:
         assert token is None
 
     @pytest.mark.unit
-    def test_bearer_prefix_case_sensitive(self):
-        """Test that 'Bearer ' prefix is case-sensitive"""
+    def test_bearer_prefix_case_insensitive(self):
+        """Test that 'Bearer ' prefix is case-insensitive"""
         mock_ctx = Mock(spec=Context)
         mock_request = Mock()
         mock_request.headers = {"Authorization": "bearer lowercase-token"}
@@ -132,5 +132,5 @@ class TestGetTokenFromRequest:
         with patch("src.server.get_access_token", return_value=None):
             token = _get_token_from_request(mock_ctx)
 
-        # Should not match lowercase "bearer"
-        assert token is None
+        # Should match lowercase "bearer"
+        assert token == "lowercase-token"

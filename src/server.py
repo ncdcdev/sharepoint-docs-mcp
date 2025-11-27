@@ -261,10 +261,8 @@ def _get_token_from_request(ctx: Context | None = None) -> str | None:
             logging.warning(f"Unexpected error accessing HTTP request: {e}")
         else:
             auth_header = request.headers.get("Authorization", "")
-            if auth_header.startswith("Bearer "):
-                token = auth_header[
-                    7:
-                ].strip()  # Remove "Bearer " prefix and strip whitespace
+            if auth_header.lower().startswith("bearer "):
+                token = auth_header[len("bearer ") :].strip()
                 if token:
                     logging.info("Token retrieved from Authorization header")
                     return token
