@@ -13,6 +13,7 @@ from mcp.server.auth.provider import AuthorizationParams
 from src.config import config
 from src.error_messages import handle_sharepoint_error
 from src.sharepoint_auth import SharePointCertificateAuth
+from src.sharepoint_excel import SharePointExcelClient
 from src.sharepoint_search import SharePointSearchClient
 
 
@@ -191,6 +192,7 @@ mcp = FastMCP(name="SharePointDocsMCP", auth=_create_auth_provider())
 
 # SharePointクライアントのグローバルインスタンス
 _sharepoint_client: SharePointSearchClient | None = None
+_sharepoint_excel_client: SharePointExcelClient | None = None
 
 
 def setup_logging():
@@ -336,6 +338,66 @@ def _get_sharepoint_client(ctx: Context | None = None) -> SharePointSearchClient
     return _sharepoint_client
 
 
+def _get_sharepoint_excel_client(ctx: Context | None = None) -> SharePointExcelClient:
+    """SharePoint Excelクライアントを取得または初期化
+
+    - 証明書モード: シングルトンクライアントを使用
+    - OAuthモード: リクエストごとに新しいクライアントを作成（トークンはリクエスト依存）
+
+    Args:
+        ctx: FastMCP context for accessing HTTP request (OAuth mode only)
+    """
+    global _sharepoint_excel_client
+
+    # 設定の検証（初回のみ）
+    if _sharepoint_excel_client is None:
+        validation_errors = config.validate()
+        if validation_errors:
+            error_msg = "SharePoint configuration is invalid: " + "; ".join(
+                validation_errors
+            )
+            logging.error(error_msg)
+            raise ValueError(error_msg)
+
+    # OAuthモード: リクエストごとに新しいクライアントを作成
+    if config.is_oauth_mode:
+        # Get token from Authorization header or FastMCP context
+        token = _get_token_from_request(ctx)
+        if not token:
+            raise ValueError(
+                "OAuth authentication required but no access token available. "
+                "Please provide token via Authorization header or authenticate with FastMCP's OAuth flow."
+            )
+
+        # SimpleTokenAuthでトークンをラップ
+        auth = SimpleTokenAuth(token=token)
+
+        # SharePoint Excelクライアントを作成（リクエストごと）
+        return SharePointExcelClient(
+            site_url=config.site_url,
+            auth=auth,
+        )
+
+    # 証明書モード: シングルトンクライアントを使用
+    if _sharepoint_excel_client is None:
+        # 認証クライアントを初期化
+        auth = _get_auth_client()
+        if auth is None:
+            raise ValueError("Certificate authentication client initialization failed")
+
+        # SharePoint Excelクライアントを初期化
+        _sharepoint_excel_client = SharePointExcelClient(
+            site_url=config.site_url,
+            auth=auth,
+        )
+
+        logging.info(
+            "SharePoint Excel client initialized successfully (certificate mode)"
+        )
+
+    return _sharepoint_excel_client
+
+
 def sharepoint_docs_search(
     query: str,
     max_results: int = 20,
@@ -447,7 +509,84 @@ def sharepoint_docs_download(file_path: str, ctx: Context | None = None) -> str:
         raise handle_sharepoint_error(e, "download") from e
 
 
+def sharepoint_excel_operations(
+    operation: str,
+    file_path: str,
+    sheet_name: str | None = None,
+    range_spec: str | None = None,
+    ctx: Context | None = None,
+) -> str:
+    """
+    Operate on Excel files in SharePoint
+
+    Args:
+        operation: Operation type - "list_sheets", "get_image", or "get_range"
+        file_path: Path to Excel file (obtained from search results)
+        sheet_name: Sheet name (required for get_image operation)
+        range_spec: Cell range (required for get_range operation, e.g., "Sheet1!A1:C10")
+        ctx: FastMCP context (injected automatically)
+
+    Returns:
+        - list_sheets: XML format sheet list
+        - get_image: base64-encoded image
+        - get_range: XML format cell data
+    """
+    logging.info(f"Excel operation '{operation}' on file: {file_path}")
+
+    # Validate operation type
+    valid_operations = ["list_sheets", "get_image", "get_range"]
+    if operation not in valid_operations:
+        raise ValueError(
+            f"Invalid operation: {operation}. Valid operations are: {', '.join(valid_operations)}"
+        )
+
+    # Validate operation-specific parameters
+    if operation == "get_image" and not sheet_name:
+        raise ValueError("sheet_name is required for get_image operation")
+
+    if operation == "get_range" and not range_spec:
+        raise ValueError("range_spec is required for get_range operation")
+
+    try:
+        client = _get_sharepoint_excel_client(ctx)
+
+        # Execute operation
+        if operation == "list_sheets":
+            result = client.list_sheets(file_path)
+        elif operation == "get_image":
+            # sheet_name is validated earlier, so it's guaranteed to be str here
+            assert sheet_name is not None  # for type checker
+            result = client.get_sheet_image(file_path, sheet_name)
+        elif operation == "get_range":
+            # range_spec is validated earlier, so it's guaranteed to be str here
+            assert range_spec is not None  # for type checker
+            result = client.get_range_data(file_path, range_spec)
+
+        logging.info(f"Excel operation '{operation}' completed successfully")
+        return result
+
+    except Exception as e:
+        logging.error(f"Excel operation '{operation}' failed: {str(e)}")
+        raise handle_sharepoint_error(
+            e,
+            f"excel_{operation}",
+            excel_context={
+                "file_path": file_path,
+                "sheet_name": sheet_name,
+                "range_spec": range_spec,
+            },
+        ) from e
+
+
 def register_tools():
     """Register MCP tools"""
     mcp.tool(description=config.search_tool_description)(sharepoint_docs_search)
     mcp.tool(description=config.download_tool_description)(sharepoint_docs_download)
+    mcp.tool(
+        description=(
+            "Operate on Excel files in SharePoint. "
+            "Supports listing sheets (XML), getting sheet images (base64), "
+            "and retrieving cell range data (XML). "
+            "Operation types: 'list_sheets', 'get_image', 'get_range'."
+        )
+    )(sharepoint_excel_operations)
