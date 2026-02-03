@@ -8,6 +8,7 @@ This guide covers how to use the SharePoint MCP server with various clients and 
 - [MCP Inspector Verification](#mcp-inspector-verification)
 - [Claude Desktop Integration](#claude-desktop-integration)
 - [Search Usage Examples](#search-usage-examples)
+- [Excel Operations Usage Examples](#excel-operations-usage-examples)
 
 ## MCP Server Startup
 
@@ -163,4 +164,176 @@ SHAREPOINT_SITE_NAME=@onedrive,project-a-team,project-a-docs
 # Search sales OneDrive folders and customer sites
 SHAREPOINT_ONEDRIVE_PATHS=sales1@company.com:/Documents/Customers,sales2@company.com:/Documents/Proposals
 SHAREPOINT_SITE_NAME=@onedrive,sales-team,customer-portal
+```
+
+## Excel Operations Usage Examples
+
+You can perform operations on Excel files in SharePoint: list sheets, get sheet images, and retrieve cell range data.
+
+### Prerequisites
+
+- SharePoint Excel Services must be enabled
+- Excel files must be stored in a SharePoint library
+- Appropriate access permissions required
+
+### Basic Workflow
+
+1. **Search for Excel Files**
+```python
+# Use sharepoint_docs_search tool
+results = sharepoint_docs_search(
+    query="budget",
+    file_extensions=["xlsx"]
+)
+# Get file_path from results
+file_path = results[0]["path"]
+# Example: "/sites/finance/Shared Documents/budget_2024.xlsx"
+```
+
+2. **List Sheets**
+```python
+# Use sharepoint_excel_operations tool
+sheets_xml = sharepoint_excel_operations(
+    operation="list_sheets",
+    file_path=file_path
+)
+# Returns XML format sheet list
+# Identify the sheet name you need
+```
+
+3. **Get Sheet Image**
+```python
+# Get visual preview of a specific sheet
+image_base64 = sharepoint_excel_operations(
+    operation="get_image",
+    file_path=file_path,
+    sheet_name="Sheet1"
+)
+# Returns base64-encoded image data
+# Can be saved or displayed as an image
+```
+
+4. **Get Cell Range Data**
+```python
+# Get data from a specific cell range
+range_xml = sharepoint_excel_operations(
+    operation="get_range",
+    file_path=file_path,
+    range_spec="Sheet1!A1:D10"
+)
+# Returns XML format cell data
+# Can be used for data analysis or report generation
+```
+
+### Operation Types
+
+#### list_sheets
+List all sheets in XML format.
+
+**Parameters:**
+- `operation`: "list_sheets"
+- `file_path`: Path to Excel file (from search results)
+
+**Returns:** XML format sheet list
+
+**Example:**
+```python
+sheets = sharepoint_excel_operations(
+    operation="list_sheets",
+    file_path="/sites/team/Shared Documents/report.xlsx"
+)
+```
+
+#### get_image
+Get a screenshot of the specified sheet in base64 format.
+
+**Parameters:**
+- `operation`: "get_image"
+- `file_path`: Path to Excel file
+- `sheet_name`: Sheet name (required)
+
+**Returns:** base64-encoded image data (PNG format)
+
+**Example:**
+```python
+image = sharepoint_excel_operations(
+    operation="get_image",
+    file_path="/sites/team/Shared Documents/report.xlsx",
+    sheet_name="Summary"
+)
+# Save as image
+import base64
+with open("sheet_preview.png", "wb") as f:
+    f.write(base64.b64decode(image))
+```
+
+#### get_range
+Get data from the specified cell range in XML format.
+
+**Parameters:**
+- `operation`: "get_range"
+- `file_path`: Path to Excel file
+- `range_spec`: Cell range (required, e.g., "Sheet1!A1:C10")
+
+**Returns:** XML format cell data
+
+**Example:**
+```python
+data = sharepoint_excel_operations(
+    operation="get_range",
+    file_path="/sites/team/Shared Documents/report.xlsx",
+    range_spec="Sheet1!A1:E20"
+)
+```
+
+### Handling Special Characters
+
+Single quotes (') in sheet names or cell ranges are automatically escaped.
+
+**Example:**
+```python
+# Specify sheet name "John's Report"
+image = sharepoint_excel_operations(
+    operation="get_image",
+    file_path=file_path,
+    sheet_name="John's Report"  # Automatically escaped to "John''s Report"
+)
+```
+
+### Common Use Cases
+
+**Budget Data Analysis**
+```python
+# 1. Search for budget file
+results = sharepoint_docs_search(query="budget 2024", file_extensions=["xlsx"])
+file_path = results[0]["path"]
+
+# 2. Check sheet list
+sheets = sharepoint_excel_operations(operation="list_sheets", file_path=file_path)
+
+# 3. Get budget data
+budget_data = sharepoint_excel_operations(
+    operation="get_range",
+    file_path=file_path,
+    range_spec="Budget!A1:F100"
+)
+```
+
+**Report Visual Preview**
+```python
+# 1. Search for report file
+results = sharepoint_docs_search(query="monthly report", file_extensions=["xlsx"])
+file_path = results[0]["path"]
+
+# 2. Get summary sheet image
+summary_image = sharepoint_excel_operations(
+    operation="get_image",
+    file_path=file_path,
+    sheet_name="Summary"
+)
+
+# 3. Save or display image
+import base64
+with open("monthly_summary.png", "wb") as f:
+    f.write(base64.b64decode(summary_image))
 ```

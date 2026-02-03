@@ -48,6 +48,52 @@ Access token request failed
 # Execute get_sharepoint_config_status tool
 ```
 
+### 5. Excel Operations Errors
+
+#### Excel Services Disabled
+
+```
+Excel Services is not enabled or not available for this SharePoint site.
+```
+
+**Solutions:**
+- Request SharePoint administrator to enable Excel Services
+- Verify Excel Services is available for the target SharePoint site
+- Confirm file is stored in a location where Excel Services is enabled
+
+#### Excel File Not Found
+
+```
+The specified Excel file was not found: /sites/team/documents/report.xlsx
+```
+
+**Solutions:**
+- Verify file path is correct (use `sharepoint_docs_search` to get latest path)
+- Check if file has been deleted or moved
+- Confirm you have access permissions to the file
+
+#### Sheet Not Found
+
+```
+The specified sheet was not found: Sheet2
+```
+
+**Solutions:**
+- Use `list_sheets` operation to confirm available sheets
+- Verify sheet name spelling is correct
+- Ensure special characters (like single quotes) are specified correctly
+
+#### Invalid Cell Range
+
+```
+The specified cell range is invalid: InvalidRange
+```
+
+**Solutions:**
+- Verify cell range format is correct (e.g., "Sheet1!A1:C10")
+- Confirm sheet name is included in the range specification
+- Check if the range is within the actual bounds of the Excel file
+
 ## Debugging Methods
 
 ### Using MCP Inspector

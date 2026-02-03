@@ -8,6 +8,7 @@
 - [MCP Inspectorでの検証](#mcp-inspectorでの検証)
 - [Claude Desktopとの統合](#claude-desktopとの統合)
 - [検索の使用例](#検索の使用例)
+- [Excel操作の使用例](#excel操作の使用例)
 
 ## MCPサーバーの起動
 
@@ -163,4 +164,176 @@ SHAREPOINT_SITE_NAME=@onedrive,project-a-team,project-a-docs
 # 営業担当のOneDriveフォルダーと顧客サイトを検索
 SHAREPOINT_ONEDRIVE_PATHS=sales1@company.com:/Documents/顧客情報,sales2@company.com:/Documents/提案書
 SHAREPOINT_SITE_NAME=@onedrive,sales-team,customer-portal
+```
+
+## Excel操作の使用例
+
+SharePoint上のExcelファイルに対して、シート一覧取得、シート画像取得、セル範囲データ取得の操作を実行できます。
+
+### 前提条件
+
+- SharePoint Excel Services が有効化されていること
+- 対象のExcelファイルがSharePointライブラリに保存されていること
+- 適切なアクセス権限があること
+
+### 基本的なワークフロー
+
+1. **Excelファイルを検索**
+```python
+# sharepoint_docs_search ツールを使用
+results = sharepoint_docs_search(
+    query="予算",
+    file_extensions=["xlsx"]
+)
+# 結果から file_path を取得
+file_path = results[0]["path"]
+# 例: "/sites/finance/Shared Documents/budget_2024.xlsx"
+```
+
+2. **シート一覧を取得**
+```python
+# sharepoint_excel_operations ツールを使用
+sheets_xml = sharepoint_excel_operations(
+    operation="list_sheets",
+    file_path=file_path
+)
+# XML形式でシート一覧が返される
+# 結果から必要なシート名を特定
+```
+
+3. **シートの画像を取得**
+```python
+# 特定のシートのビジュアルプレビューを取得
+image_base64 = sharepoint_excel_operations(
+    operation="get_image",
+    file_path=file_path,
+    sheet_name="Sheet1"
+)
+# base64エンコードされた画像データが返される
+# 画像として保存または表示が可能
+```
+
+4. **セル範囲のデータを取得**
+```python
+# 特定のセル範囲のデータを取得
+range_xml = sharepoint_excel_operations(
+    operation="get_range",
+    file_path=file_path,
+    range_spec="Sheet1!A1:D10"
+)
+# XML形式でセルデータが返される
+# データ分析やレポート生成に使用可能
+```
+
+### 操作タイプ
+
+#### list_sheets
+シート一覧をXML形式で取得します。
+
+**パラメータ:**
+- `operation`: "list_sheets"
+- `file_path`: Excelファイルのパス（検索結果から取得）
+
+**戻り値:** XML形式のシート一覧
+
+**使用例:**
+```python
+sheets = sharepoint_excel_operations(
+    operation="list_sheets",
+    file_path="/sites/team/Shared Documents/report.xlsx"
+)
+```
+
+#### get_image
+指定したシートのキャプチャ画像をbase64形式で取得します。
+
+**パラメータ:**
+- `operation`: "get_image"
+- `file_path`: Excelファイルのパス
+- `sheet_name`: シート名（必須）
+
+**戻り値:** base64エンコードされた画像データ（PNG形式）
+
+**使用例:**
+```python
+image = sharepoint_excel_operations(
+    operation="get_image",
+    file_path="/sites/team/Shared Documents/report.xlsx",
+    sheet_name="Summary"
+)
+# 画像として保存
+import base64
+with open("sheet_preview.png", "wb") as f:
+    f.write(base64.b64decode(image))
+```
+
+#### get_range
+指定したセル範囲のデータをXML形式で取得します。
+
+**パラメータ:**
+- `operation`: "get_range"
+- `file_path`: Excelファイルのパス
+- `range_spec`: セル範囲（必須、例: "Sheet1!A1:C10"）
+
+**戻り値:** XML形式のセルデータ
+
+**使用例:**
+```python
+data = sharepoint_excel_operations(
+    operation="get_range",
+    file_path="/sites/team/Shared Documents/report.xlsx",
+    range_spec="Sheet1!A1:E20"
+)
+```
+
+### 特殊文字の扱い
+
+シート名やセル範囲にシングルクォート（'）が含まれる場合、自動的にエスケープされます。
+
+**例:**
+```python
+# シート名に「John's Report」を指定
+image = sharepoint_excel_operations(
+    operation="get_image",
+    file_path=file_path,
+    sheet_name="John's Report"  # 自動的に "John''s Report" にエスケープ
+)
+```
+
+### 一般的な使用例
+
+**予算データの分析**
+```python
+# 1. 予算ファイルを検索
+results = sharepoint_docs_search(query="予算 2024", file_extensions=["xlsx"])
+file_path = results[0]["path"]
+
+# 2. シート一覧を確認
+sheets = sharepoint_excel_operations(operation="list_sheets", file_path=file_path)
+
+# 3. 予算データを取得
+budget_data = sharepoint_excel_operations(
+    operation="get_range",
+    file_path=file_path,
+    range_spec="予算!A1:F100"
+)
+```
+
+**レポートのビジュアルプレビュー**
+```python
+# 1. レポートファイルを検索
+results = sharepoint_docs_search(query="月次レポート", file_extensions=["xlsx"])
+file_path = results[0]["path"]
+
+# 2. サマリーシートの画像を取得
+summary_image = sharepoint_excel_operations(
+    operation="get_image",
+    file_path=file_path,
+    sheet_name="Summary"
+)
+
+# 3. 画像を保存または表示
+import base64
+with open("monthly_summary.png", "wb") as f:
+    f.write(base64.b64decode(summary_image))
 ```

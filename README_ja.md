@@ -31,6 +31,12 @@ stdioとHTTPの両方のトランスポートに対応しています。
 - **sharepoint_docs_download**
   - 検索結果からファイルをダウンロード
   - SharePoint/OneDriveファイルに応じた自動メソッド選択
+- **sharepoint_excel_operations**
+  - SharePoint上のExcelファイルを操作
+  - シート一覧の取得（XML形式）
+  - シートのキャプチャ画像取得（base64形式）
+  - セル範囲のデータ取得（XML形式）
+  - SharePoint Excel Services REST APIを使用
 
 ### OneDrive対応
 
