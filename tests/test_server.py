@@ -2,7 +2,7 @@ import pytest
 from unittest.mock import patch, Mock
 import base64
 
-from src.server import sharepoint_docs_search, sharepoint_docs_download, sharepoint_excel_operations
+from src.server import sharepoint_docs_search, sharepoint_docs_download, sharepoint_excel_to_json
 
 
 class TestSharePointDocsSearch:
@@ -162,121 +162,104 @@ class TestGetSharePointClient:
                     assert client1 == client2
 
 
-class TestSharePointExcelOperations:
-    """sharepoint_excel_operations 関数のテスト"""
+class TestSharePointExcelToJson:
+    """sharepoint_excel_to_json 関数のテスト"""
 
     @pytest.fixture
-    def mock_excel_client(self):
-        """Mock SharePoint Excel client"""
-        mock_client = Mock()
-        mock_client.list_sheets.return_value = '<?xml version="1.0"?><sheets><sheet>Sheet1</sheet></sheets>'
-        mock_client.get_sheet_image.return_value = base64.b64encode(b"fake-image-data").decode("utf-8")
-        mock_client.get_range_data.return_value = '<?xml version="1.0"?><range><cell>A1</cell></range>'
-        return mock_client
+    def mock_excel_parser(self):
+        """Mock Excel parser"""
+        with patch("src.server.SharePointExcelParser") as mock_parser_class:
+            parser_instance = Mock()
+            parser_instance.parse_to_json.return_value = '{"file_path": "/test.xlsx", "sheets": []}'
+            mock_parser_class.return_value = parser_instance
+            yield parser_instance
 
     @pytest.mark.unit
-    def test_list_sheets_operation(self, mock_config, mock_excel_client):
-        """list_sheets操作のテスト"""
-        with patch("src.server._get_sharepoint_excel_client", return_value=mock_excel_client):
+    def test_excel_to_json_success(self, mock_config, mock_sharepoint_client, mock_excel_parser):
+        """Excel to JSON変換の成功テスト（デフォルト）"""
+        with patch("src.server._get_sharepoint_client", return_value=mock_sharepoint_client):
             with patch("src.server.config", mock_config):
-                result = sharepoint_excel_operations(
-                    operation="list_sheets",
+                result = sharepoint_excel_to_json(
                     file_path="/sites/test/Shared Documents/test.xlsx"
                 )
 
-                assert '<?xml version="1.0"?>' in result
-                assert '<sheet>Sheet1</sheet>' in result
-                mock_excel_client.list_sheets.assert_called_once_with(
-                    "/sites/test/Shared Documents/test.xlsx"
+                # JSON文字列が返されることを確認
+                assert '"file_path"' in result
+                assert '"sheets"' in result
+                # デフォルトでは include_formatting=False が渡される
+                mock_excel_parser.parse_to_json.assert_called_once_with(
+                    "/sites/test/Shared Documents/test.xlsx", False
                 )
 
     @pytest.mark.unit
-    def test_get_image_operation(self, mock_config, mock_excel_client):
-        """get_image操作のテスト"""
-        with patch("src.server._get_sharepoint_excel_client", return_value=mock_excel_client):
+    def test_excel_to_json_with_real_json(self, mock_config, mock_sharepoint_client, mock_excel_parser):
+        """実際のJSON構造での変換テスト"""
+        import json
+
+        mock_json_data = {
+            "file_path": "/sites/test/Shared Documents/test.xlsx",
+            "sheets": [
+                {
+                    "name": "Sheet1",
+                    "dimensions": "A1:B2",
+                    "rows": [
+                        [
+                            {"value": "Name", "data_type": "s", "coordinate": "A1"},
+                            {"value": "Age", "data_type": "s", "coordinate": "B1"}
+                        ],
+                        [
+                            {"value": "John", "data_type": "s", "coordinate": "A2"},
+                            {"value": 25, "data_type": "n", "coordinate": "B2"}
+                        ]
+                    ]
+                }
+            ]
+        }
+        mock_excel_parser.parse_to_json.return_value = json.dumps(mock_json_data)
+
+        with patch("src.server._get_sharepoint_client", return_value=mock_sharepoint_client):
             with patch("src.server.config", mock_config):
-                result = sharepoint_excel_operations(
-                    operation="get_image",
+                result = sharepoint_excel_to_json(
+                    file_path="/sites/test/Shared Documents/test.xlsx"
+                )
+
+                # JSON文字列をパース
+                parsed_result = json.loads(result)
+                assert parsed_result["file_path"] == "/sites/test/Shared Documents/test.xlsx"
+                assert len(parsed_result["sheets"]) == 1
+                assert parsed_result["sheets"][0]["name"] == "Sheet1"
+
+    @pytest.mark.unit
+    def test_excel_to_json_with_formatting(self, mock_config, mock_sharepoint_client, mock_excel_parser):
+        """Excel to JSON変換の成功テスト（書式情報あり）"""
+        with patch("src.server._get_sharepoint_client", return_value=mock_sharepoint_client):
+            with patch("src.server.config", mock_config):
+                result = sharepoint_excel_to_json(
                     file_path="/sites/test/Shared Documents/test.xlsx",
-                    sheet_name="Sheet1"
+                    include_formatting=True
                 )
 
-                # base64エンコードされた画像データが返される
-                assert result == base64.b64encode(b"fake-image-data").decode("utf-8")
-                mock_excel_client.get_sheet_image.assert_called_once_with(
-                    "/sites/test/Shared Documents/test.xlsx",
-                    "Sheet1"
-                )
-
-    @pytest.mark.unit
-    def test_get_range_operation(self, mock_config, mock_excel_client):
-        """get_range操作のテスト"""
-        with patch("src.server._get_sharepoint_excel_client", return_value=mock_excel_client):
-            with patch("src.server.config", mock_config):
-                result = sharepoint_excel_operations(
-                    operation="get_range",
-                    file_path="/sites/test/Shared Documents/test.xlsx",
-                    range_spec="Sheet1!A1:C10"
-                )
-
-                assert '<?xml version="1.0"?>' in result
-                assert '<range><cell>A1</cell></range>' in result
-                mock_excel_client.get_range_data.assert_called_once_with(
-                    "/sites/test/Shared Documents/test.xlsx",
-                    "Sheet1!A1:C10"
+                # JSON文字列が返されることを確認
+                assert '"file_path"' in result
+                assert '"sheets"' in result
+                # include_formatting=True が渡される
+                mock_excel_parser.parse_to_json.assert_called_once_with(
+                    "/sites/test/Shared Documents/test.xlsx", True
                 )
 
     @pytest.mark.unit
-    def test_invalid_operation_type(self, mock_config, mock_excel_client):
-        """無効な操作タイプのテスト"""
-        with patch("src.server._get_sharepoint_excel_client", return_value=mock_excel_client):
-            with patch("src.server.config", mock_config):
-                with pytest.raises(ValueError) as exc_info:
-                    sharepoint_excel_operations(
-                        operation="invalid_operation",
-                        file_path="/sites/test/Shared Documents/test.xlsx"
-                    )
+    def test_excel_to_json_error_handling(self, mock_config, mock_sharepoint_client):
+        """Excel to JSON変換のエラーハンドリングテスト"""
+        from src.error_messages import SharePointError
 
-                assert "Invalid operation: invalid_operation" in str(exc_info.value)
+        with patch("src.server._get_sharepoint_client", return_value=mock_sharepoint_client):
+            with patch("src.server.SharePointExcelParser") as mock_parser_class:
+                parser_instance = Mock()
+                parser_instance.parse_to_json.side_effect = Exception("Parse error")
+                mock_parser_class.return_value = parser_instance
 
-    @pytest.mark.unit
-    def test_get_image_missing_sheet_name(self, mock_config, mock_excel_client):
-        """get_image操作でsheet_nameが欠けている場合のテスト"""
-        with patch("src.server._get_sharepoint_excel_client", return_value=mock_excel_client):
-            with patch("src.server.config", mock_config):
-                with pytest.raises(ValueError) as exc_info:
-                    sharepoint_excel_operations(
-                        operation="get_image",
-                        file_path="/sites/test/Shared Documents/test.xlsx"
-                    )
-
-                assert "sheet_name is required for get_image operation" in str(exc_info.value)
-
-    @pytest.mark.unit
-    def test_get_range_missing_range_spec(self, mock_config, mock_excel_client):
-        """get_range操作でrange_specが欠けている場合のテスト"""
-        with patch("src.server._get_sharepoint_excel_client", return_value=mock_excel_client):
-            with patch("src.server.config", mock_config):
-                with pytest.raises(ValueError) as exc_info:
-                    sharepoint_excel_operations(
-                        operation="get_range",
-                        file_path="/sites/test/Shared Documents/test.xlsx"
-                    )
-
-                assert "range_spec is required for get_range operation" in str(exc_info.value)
-
-    @pytest.mark.unit
-    def test_excel_operation_error_handling(self, mock_config, mock_excel_client):
-        """Excel操作のエラーハンドリングテスト"""
-        mock_excel_client.list_sheets.side_effect = Exception("Excel operation failed")
-
-        with patch("src.server._get_sharepoint_excel_client", return_value=mock_excel_client):
-            with patch("src.server.config", mock_config):
-                with pytest.raises(Exception) as exc_info:
-                    sharepoint_excel_operations(
-                        operation="list_sheets",
-                        file_path="/sites/test/Shared Documents/test.xlsx"
-                    )
-
-                # エラーハンドリング関数が呼ばれることを確認
-                assert "Excel operation failed" in str(exc_info.value.__cause__)
+                with patch("src.server.config", mock_config):
+                    with pytest.raises(SharePointError):
+                        sharepoint_excel_to_json(
+                            file_path="/sites/test/Shared Documents/test.xlsx"
+                        )

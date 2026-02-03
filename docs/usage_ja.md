@@ -168,13 +168,13 @@ SHAREPOINT_SITE_NAME=@onedrive,sales-team,customer-portal
 
 ## Excel操作の使用例
 
-SharePoint上のExcelファイルに対して、シート一覧取得、シート画像取得、セル範囲データ取得の操作を実行できます。
+SharePoint上のExcelファイルを解析してJSON形式でデータを取得できます。デフォルトでは値と座標のみの軽量レスポンスを返します。`include_formatting=true`で書式情報も取得できます。
 
 ### 前提条件
 
-- SharePoint Excel Services が有効化されていること
-- 対象のExcelファイルがSharePointライブラリに保存されていること
+- ExcelファイルがSharePointライブラリまたはOneDriveに保存されていること
 - 適切なアクセス権限があること
+- Excel Services不要
 
 ### 基本的なワークフロー
 
@@ -190,150 +190,205 @@ file_path = results[0]["path"]
 # 例: "/sites/finance/Shared Documents/budget_2024.xlsx"
 ```
 
-2. **シート一覧を取得**
+2. **ExcelファイルをJSONに変換（デフォルト：軽量）**
 ```python
-# sharepoint_excel_operations ツールを使用
-sheets_xml = sharepoint_excel_operations(
-    operation="list_sheets",
-    file_path=file_path
-)
-# XML形式でシート一覧が返される
-# 結果から必要なシート名を特定
+# sharepoint_excel_to_json ツールを使用（デフォルト：軽量レスポンス）
+json_data = sharepoint_excel_to_json(file_path=file_path)
+
+# JSONレスポンスを解析
+import json
+data = json.loads(json_data)
+
+# シート情報へのアクセス
+for sheet in data["sheets"]:
+    print(f"シート: {sheet['name']}")
+    print(f"範囲: {sheet['dimensions']}")
+
+    # セルデータへのアクセス（値と座標のみ）
+    for row in sheet["rows"]:
+        for cell in row:
+            print(f"{cell['coordinate']}: {cell['value']}")
 ```
 
-3. **シートの画像を取得**
+3. **書式情報を含む解析（オプション）**
 ```python
-# 特定のシートのビジュアルプレビューを取得
-image_base64 = sharepoint_excel_operations(
-    operation="get_image",
+# include_formatting=true で追加情報を取得
+json_data = sharepoint_excel_to_json(
     file_path=file_path,
-    sheet_name="Sheet1"
+    include_formatting=True
 )
-# base64エンコードされた画像データが返される
-# 画像として保存または表示が可能
+
+# JSONレスポンスを解析
+data = json.loads(json_data)
+
+# 書式情報を含むセルデータへのアクセス
+for sheet in data["sheets"]:
+    for row in sheet["rows"]:
+        for cell in row:
+            print(f"{cell['coordinate']}: {cell['value']}")
+            if "fill" in cell:
+                print(f"  塗りつぶし色: {cell['fill']['fg_color']}")
+            if "merged" in cell:
+                print(f"  結合範囲: {cell['merged']['range']}")
 ```
 
-4. **セル範囲のデータを取得**
-```python
-# 特定のセル範囲のデータを取得
-range_xml = sharepoint_excel_operations(
-    operation="get_range",
-    file_path=file_path,
-    range_spec="Sheet1!A1:D10"
-)
-# XML形式でセルデータが返される
-# データ分析やレポート生成に使用可能
+### JSON出力形式
+
+#### デフォルト形式（軽量）
+
+デフォルトでは、パフォーマンス最適化のため必須のセル情報のみを返します
+
+```json
+{
+  "file_path": "/sites/test/Shared Documents/budget.xlsx",
+  "sheets": [
+    {
+      "name": "Summary",
+      "dimensions": "A1:E10",
+      "rows": [
+        [
+          {
+            "value": "部門",
+            "coordinate": "A1"
+          },
+          {
+            "value": 12500,
+            "coordinate": "B1"
+          }
+        ]
+      ]
+    }
+  ]
+}
 ```
 
-### 操作タイプ
+#### 書式情報を含む形式（include_formatting=true）
 
-#### list_sheets
-シート一覧をXML形式で取得します。
+`include_formatting=true`を指定すると、追加の書式情報を含みます
 
-**パラメータ:**
-- `operation`: "list_sheets"
-- `file_path`: Excelファイルのパス（検索結果から取得）
-
-**戻り値:** XML形式のシート一覧
-
-**使用例:**
-```python
-sheets = sharepoint_excel_operations(
-    operation="list_sheets",
-    file_path="/sites/team/Shared Documents/report.xlsx"
-)
+```json
+{
+  "file_path": "/sites/test/Shared Documents/budget.xlsx",
+  "sheets": [
+    {
+      "name": "Summary",
+      "dimensions": "A1:E10",
+      "rows": [
+        [
+          {
+            "value": "部門",
+            "coordinate": "A1",
+            "data_type": "s",
+            "fill": {
+              "pattern_type": "solid",
+              "fg_color": "#CCCCCC",
+              "bg_color": null
+            },
+            "merged": {
+              "range": "A1:B1",
+              "is_top_left": true
+            },
+            "width": 15.0,
+            "height": 20.0
+          }
+        ]
+      ]
+    }
+  ]
+}
 ```
 
-#### get_image
-指定したシートのキャプチャ画像をbase64形式で取得します。
+### 利用可能なセル情報
 
-**パラメータ:**
-- `operation`: "get_image"
-- `file_path`: Excelファイルのパス
-- `sheet_name`: シート名（必須）
+**デフォルト（常に含まれる）**
+- value
+  - セル値（文字列、数値、日付、数式など）
+- coordinate
+  - セル位置（例: "A1"、"B2"）
 
-**戻り値:** base64エンコードされた画像データ（PNG形式）
-
-**使用例:**
-```python
-image = sharepoint_excel_operations(
-    operation="get_image",
-    file_path="/sites/team/Shared Documents/report.xlsx",
-    sheet_name="Summary"
-)
-# 画像として保存
-import base64
-with open("sheet_preview.png", "wb") as f:
-    f.write(base64.b64decode(image))
-```
-
-#### get_range
-指定したセル範囲のデータをXML形式で取得します。
-
-**パラメータ:**
-- `operation`: "get_range"
-- `file_path`: Excelファイルのパス
-- `range_spec`: セル範囲（必須、例: "Sheet1!A1:C10"）
-
-**戻り値:** XML形式のセルデータ
-
-**使用例:**
-```python
-data = sharepoint_excel_operations(
-    operation="get_range",
-    file_path="/sites/team/Shared Documents/report.xlsx",
-    range_spec="Sheet1!A1:E20"
-)
-```
-
-### 特殊文字の扱い
-
-シート名やセル範囲にシングルクォート（'）が含まれる場合、自動的にエスケープされます。
-
-**例:**
-```python
-# シート名に「John's Report」を指定
-image = sharepoint_excel_operations(
-    operation="get_image",
-    file_path=file_path,
-    sheet_name="John's Report"  # 自動的に "John''s Report" にエスケープ
-)
-```
+**include_formatting=true の場合**
+- data_type
+  - データ型コード（`s`=文字列、`n`=数値、`f`=数式など）
+- fill
+  - 塗りつぶし色情報（パターンタイプ、前景色/背景色）
+- merged
+  - 結合セル情報（範囲、位置）
+- width
+  - 列幅
+- height
+  - 行高
 
 ### 一般的な使用例
 
-**予算データの分析**
+**すべての予算データを抽出**
 ```python
 # 1. 予算ファイルを検索
 results = sharepoint_docs_search(query="予算 2024", file_extensions=["xlsx"])
 file_path = results[0]["path"]
 
-# 2. シート一覧を確認
-sheets = sharepoint_excel_operations(operation="list_sheets", file_path=file_path)
+# 2. 全てのExcelデータをJSONで取得
+json_data = sharepoint_excel_to_json(file_path=file_path)
+data = json.loads(json_data)
 
-# 3. 予算データを取得
-budget_data = sharepoint_excel_operations(
-    operation="get_range",
-    file_path=file_path,
-    range_spec="予算!A1:F100"
-)
+# 3. 特定のシートを処理
+for sheet in data["sheets"]:
+    if sheet["name"] == "予算":
+        for row in sheet["rows"]:
+            # 各セルから値を抽出
+            values = [cell["value"] for cell in row]
+            print(values)
 ```
 
-**レポートのビジュアルプレビュー**
+**セル書式の分析**
 ```python
-# 1. レポートファイルを検索
-results = sharepoint_docs_search(query="月次レポート", file_extensions=["xlsx"])
-file_path = results[0]["path"]
+# 1. 書式情報を含むExcelデータを取得
+json_data = sharepoint_excel_to_json(file_path=file_path, include_formatting=True)
+data = json.loads(json_data)
 
-# 2. サマリーシートの画像を取得
-summary_image = sharepoint_excel_operations(
-    operation="get_image",
-    file_path=file_path,
-    sheet_name="Summary"
-)
+# 2. 特定の書式を持つセルを検索
+for sheet in data["sheets"]:
+    for row in sheet["rows"]:
+        for cell in row:
+            # 色付きセルを検索
+            if cell.get("fill", {}).get("fg_color"):
+                print(f"色付きセル {cell['coordinate']}: {cell['value']}")
+                print(f"  色: {cell['fill']['fg_color']}")
+```
 
-# 3. 画像を保存または表示
-import base64
-with open("monthly_summary.png", "wb") as f:
-    f.write(base64.b64decode(summary_image))
+**別の形式にエクスポート**
+```python
+# 1. Excelデータを取得
+json_data = sharepoint_excel_to_json(file_path=file_path)
+data = json.loads(json_data)
+
+# 2. CSV形式に変換
+import csv
+for sheet in data["sheets"]:
+    with open(f"{sheet['name']}.csv", "w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        for row in sheet["rows"]:
+            values = [cell["value"] if cell["value"] is not None else "" for cell in row]
+            writer.writerow(values)
+```
+
+**複数シートの処理**
+```python
+# 1. 全てのExcelデータを取得
+json_data = sharepoint_excel_to_json(file_path=file_path)
+data = json.loads(json_data)
+
+# 2. 各シートを処理
+summary = {}
+for sheet in data["sheets"]:
+    sheet_name = sheet["name"]
+    row_count = len(sheet["rows"])
+    col_count = len(sheet["rows"][0]) if sheet["rows"] else 0
+
+    summary[sheet_name] = {
+        "dimensions": sheet["dimensions"],
+        "rows": row_count,
+        "columns": col_count
+    }
+
+print(json.dumps(summary, indent=2, ensure_ascii=False))
 ```

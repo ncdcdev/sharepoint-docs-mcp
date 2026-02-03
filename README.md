@@ -31,12 +31,11 @@ Two authentication methods are supported:
 - **sharepoint_docs_download**
   - File download from search results
   - Automatic method selection for SharePoint vs OneDrive files
-- **sharepoint_excel_operations**
-  - Operate on Excel files in SharePoint
-  - List sheets (XML format)
-  - Get sheet images (base64 format)
-  - Get cell range data (XML format)
-  - Uses SharePoint Excel Services REST API
+- **sharepoint_excel_to_json**
+  - Parse Excel files in SharePoint and return data as JSON
+  - Default: lightweight response with value and coordinate only
+  - Optional: include formatting (data_type, fill colors, merged cells, dimensions)
+  - No Excel Services dependency - uses direct file download + parsing
 
 ### OneDrive Support
 

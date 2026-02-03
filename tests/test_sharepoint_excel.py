@@ -1,208 +1,303 @@
-import base64
-from unittest.mock import MagicMock, Mock, patch
+import json
+from io import BytesIO
+from unittest.mock import Mock
 
 import pytest
-import requests
+from openpyxl import Workbook
+from openpyxl.styles import Font, PatternFill
 
-from src.error_messages import SharePointError
-from src.sharepoint_excel import SharePointExcelClient
+from src.sharepoint_excel import SharePointExcelParser
 
 
-class TestSharePointExcelClient:
-    """SharePoint Excel操作クライアントのテスト"""
+class TestSharePointExcelParser:
+    """SharePoint Excel解析のテスト"""
 
     def setup_method(self):
         """テストメソッド実行前のセットアップ"""
-        self.mock_auth = MagicMock()
-        self.mock_auth.get_access_token.return_value = "test-token"
-        self.client = SharePointExcelClient(
-            site_url="https://test.sharepoint.com/sites/test-site",
-            auth=self.mock_auth,
+        self.mock_download_client = Mock()
+
+    def _create_test_excel(self) -> bytes:
+        """テスト用のシンプルなExcelファイルを作成"""
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Sheet1"
+        ws["A1"] = "Name"
+        ws["B1"] = "Age"
+        ws["A2"] = "John"
+        ws["B2"] = 25
+
+        # BytesIOに保存
+        excel_bytes = BytesIO()
+        wb.save(excel_bytes)
+        excel_bytes.seek(0)
+        return excel_bytes.getvalue()
+
+    def _create_formatted_excel(self) -> bytes:
+        """書式を含むテスト用Excelファイルを作成"""
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "FormattedSheet"
+
+        # ヘッダー行に書式を設定
+        ws["A1"] = "Name"
+        ws["A1"].font = Font(name="Arial", size=12, bold=True, color="FF0000")
+        ws["A1"].fill = PatternFill(
+            start_color="FFFF00", end_color="FFFF00", fill_type="solid"
         )
 
-    def test_initialization(self):
-        """クライアント初期化のテスト"""
-        assert self.client.site_url == "https://test.sharepoint.com/sites/test-site"
-        assert self.client.auth == self.mock_auth
+        ws["B1"] = "Value"
+        ws["B1"].font = Font(name="Arial", size=12, bold=True)
 
-    def test_initialization_strips_trailing_slash(self):
-        """サイトURLの末尾スラッシュが削除されることのテスト"""
-        client = SharePointExcelClient(
-            site_url="https://test.sharepoint.com/sites/test-site/",
-            auth=self.mock_auth,
+        # データ行
+        ws["A2"] = "Item1"
+        ws["B2"] = 100
+
+        # BytesIOに保存
+        excel_bytes = BytesIO()
+        wb.save(excel_bytes)
+        excel_bytes.seek(0)
+        return excel_bytes.getvalue()
+
+    def _create_multi_sheet_excel(self) -> bytes:
+        """複数シートを含むテスト用Excelファイルを作成"""
+        wb = Workbook()
+
+        # 最初のシート
+        ws1 = wb.active
+        ws1.title = "Sheet1"
+        ws1["A1"] = "Data1"
+
+        # 2つ目のシート
+        ws2 = wb.create_sheet("Sheet2")
+        ws2["A1"] = "Data2"
+
+        # BytesIOに保存
+        excel_bytes = BytesIO()
+        wb.save(excel_bytes)
+        excel_bytes.seek(0)
+        return excel_bytes.getvalue()
+
+    def _create_merged_cells_excel(self) -> bytes:
+        """結合セルを含むテスト用Excelファイルを作成"""
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "MergedSheet"
+
+        # セルを結合
+        ws.merge_cells("A1:B1")
+        ws["A1"] = "Merged Header"
+
+        ws["A2"] = "Data1"
+        ws["B2"] = "Data2"
+
+        # BytesIOに保存
+        excel_bytes = BytesIO()
+        wb.save(excel_bytes)
+        excel_bytes.seek(0)
+        return excel_bytes.getvalue()
+
+    def test_parse_simple_excel(self):
+        """シンプルなExcelファイルの解析テスト（デフォルト：最小限の情報）"""
+        excel_bytes = self._create_test_excel()
+        self.mock_download_client.download_file.return_value = excel_bytes
+
+        # 解析（デフォルト：include_formatting=False）
+        parser = SharePointExcelParser(self.mock_download_client)
+        result_json = parser.parse_to_json("/test/file.xlsx")
+
+        # 検証
+        result = json.loads(result_json)
+        assert result["file_path"] == "/test/file.xlsx"
+        assert len(result["sheets"]) == 1
+        assert result["sheets"][0]["name"] == "Sheet1"
+        assert len(result["sheets"][0]["rows"]) == 2
+
+        # デフォルトでは value と coordinate のみ
+        cell = result["sheets"][0]["rows"][0][0]
+        assert cell["value"] == "Name"
+        assert cell["coordinate"] == "A1"
+        assert "data_type" not in cell
+        assert "fill" not in cell
+        assert "width" not in cell
+
+        cell2 = result["sheets"][0]["rows"][1][1]
+        assert cell2["value"] == 25
+        assert cell2["coordinate"] == "B2"
+
+    def test_parse_with_formatting(self):
+        """書式情報を含むExcelファイルの解析テスト（include_formatting=True）"""
+        excel_bytes = self._create_formatted_excel()
+        self.mock_download_client.download_file.return_value = excel_bytes
+
+        parser = SharePointExcelParser(self.mock_download_client)
+        result_json = parser.parse_to_json("/test/formatted.xlsx", include_formatting=True)
+
+        result = json.loads(result_json)
+        assert result["sheets"][0]["name"] == "FormattedSheet"
+
+        # ヘッダー行の書式を確認
+        header_cell = result["sheets"][0]["rows"][0][0]
+        assert header_cell["value"] == "Name"
+        assert "data_type" in header_cell
+        assert header_cell["fill"] is not None
+        # fontとalignmentは含まれない
+        assert "font" not in header_cell
+        assert "alignment" not in header_cell
+
+    def test_parse_multiple_sheets(self):
+        """複数シートのExcelファイルの解析テスト"""
+        excel_bytes = self._create_multi_sheet_excel()
+        self.mock_download_client.download_file.return_value = excel_bytes
+
+        parser = SharePointExcelParser(self.mock_download_client)
+        result_json = parser.parse_to_json("/test/multi.xlsx")
+
+        result = json.loads(result_json)
+        assert len(result["sheets"]) == 2
+        assert result["sheets"][0]["name"] == "Sheet1"
+        assert result["sheets"][1]["name"] == "Sheet2"
+        assert result["sheets"][0]["rows"][0][0]["value"] == "Data1"
+        assert result["sheets"][1]["rows"][0][0]["value"] == "Data2"
+
+    def test_parse_merged_cells(self):
+        """結合セルの解析テスト（include_formatting=True）"""
+        excel_bytes = self._create_merged_cells_excel()
+        self.mock_download_client.download_file.return_value = excel_bytes
+
+        parser = SharePointExcelParser(self.mock_download_client)
+        result_json = parser.parse_to_json("/test/merged.xlsx", include_formatting=True)
+
+        result = json.loads(result_json)
+        assert result["sheets"][0]["name"] == "MergedSheet"
+
+        # 結合セルの情報を確認（include_formatting=Trueの場合のみ含まれる）
+        merged_cell = result["sheets"][0]["rows"][0][0]
+        assert merged_cell["value"] == "Merged Header"
+        assert "merged" in merged_cell
+        assert merged_cell["merged"]["range"] == "A1:B1"
+        assert merged_cell["merged"]["is_top_left"] is True
+
+    def test_download_error_handling(self):
+        """ダウンロードエラーのハンドリングテスト"""
+        self.mock_download_client.download_file.side_effect = Exception(
+            "Download failed"
         )
-        assert client.site_url == "https://test.sharepoint.com/sites/test-site"
 
-    def test_build_excel_rest_url_basic(self):
-        """Excel REST API URLの基本的な構築テスト"""
-        file_path = "https://test.sharepoint.com/sites/test-site/Shared Documents/test.xlsx"
-        url = self.client._build_excel_rest_url(file_path, "Sheets", "atom")
+        parser = SharePointExcelParser(self.mock_download_client)
+        with pytest.raises(Exception) as exc_info:
+            parser.parse_to_json("/test/file.xlsx")
 
-        expected_url = (
-            "https://test.sharepoint.com/sites/test-site/_vti_bin/ExcelRest.aspx/"
-            "Shared%20Documents/test.xlsx/Model/Sheets?$format=atom"
-        )
-        assert url == expected_url
+        assert "Download failed" in str(exc_info.value)
 
-    def test_build_excel_rest_url_with_special_chars(self):
-        """特殊文字を含むファイルパスのURL構築テスト"""
-        file_path = "https://test.sharepoint.com/sites/test-site/Shared Documents/Test File (1).xlsx"
-        url = self.client._build_excel_rest_url(file_path, "Sheets", "atom")
+    def test_invalid_excel_file(self):
+        """無効なExcelファイルの処理テスト"""
+        # 無効なバイトデータを返す
+        self.mock_download_client.download_file.return_value = b"invalid excel data"
 
-        # スペースと括弧がエンコードされることを確認
-        assert "Test%20File%20%281%29.xlsx" in url
-        assert "Shared%20Documents" in url
+        parser = SharePointExcelParser(self.mock_download_client)
+        with pytest.raises(Exception):
+            parser.parse_to_json("/test/invalid.xlsx")
 
-    def test_build_excel_rest_url_nested_folder(self):
-        """ネストされたフォルダのURL構築テスト"""
-        file_path = "https://test.sharepoint.com/sites/test-site/Documents/Reports/2024/Q1/data.xlsx"
-        url = self.client._build_excel_rest_url(file_path, "Ranges('Sheet1!A1:C10')", "atom")
+    def test_empty_excel_file(self):
+        """空のExcelファイルの解析テスト"""
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "EmptySheet"
+        # データを追加しない
 
-        expected_url = (
-            "https://test.sharepoint.com/sites/test-site/_vti_bin/ExcelRest.aspx/"
-            "Documents/Reports/2024/Q1/data.xlsx/Model/Ranges('Sheet1!A1:C10')?$format=atom"
-        )
-        assert url == expected_url
+        excel_bytes = BytesIO()
+        wb.save(excel_bytes)
+        excel_bytes.seek(0)
 
-    def test_build_excel_rest_url_invalid_path(self):
-        """無効なファイルパスでエラーが発生することのテスト"""
-        file_path = "https://test.sharepoint.com/invalid/path/test.xlsx"
+        self.mock_download_client.download_file.return_value = excel_bytes.getvalue()
 
-        with pytest.raises(ValueError) as exc_info:
-            self.client._build_excel_rest_url(file_path, "Sheets", "atom")
+        parser = SharePointExcelParser(self.mock_download_client)
+        result_json = parser.parse_to_json("/test/empty.xlsx")
 
-        assert "Invalid file path format" in str(exc_info.value)
+        result = json.loads(result_json)
+        assert result["sheets"][0]["name"] == "EmptySheet"
+        # openpyxlは空のシートでも最低1つのセル（A1）を持つ
+        assert result["sheets"][0]["dimensions"] is not None
+        # 1行1列のデータが含まれる可能性がある
+        assert len(result["sheets"][0]["rows"]) >= 0
 
-    @patch("src.sharepoint_excel.requests.get")
-    def test_list_sheets_success(self, mock_get):
-        """シート一覧取得の成功テスト"""
-        # モックレスポンス
-        mock_response = Mock()
-        mock_response.text = '<?xml version="1.0"?><sheets><sheet>Sheet1</sheet></sheets>'
-        mock_response.raise_for_status = Mock()
-        mock_get.return_value = mock_response
+    def test_color_to_hex_rgb(self):
+        """RGB色の16進数変換テスト"""
+        excel_bytes = self._create_formatted_excel()
+        self.mock_download_client.download_file.return_value = excel_bytes
 
-        file_path = "https://test.sharepoint.com/sites/test-site/Shared Documents/test.xlsx"
-        result = self.client.list_sheets(file_path)
+        parser = SharePointExcelParser(self.mock_download_client)
+        result_json = parser.parse_to_json("/test/formatted.xlsx", include_formatting=True)
 
-        # 結果検証
-        assert result == mock_response.text
-        assert mock_get.called
-        assert mock_get.call_args[1]["headers"]["Authorization"] == "Bearer test-token"
-        assert mock_get.call_args[1]["headers"]["Accept"] == "application/atom+xml"
+        result = json.loads(result_json)
+        header_cell = result["sheets"][0]["rows"][0][0]
 
-    @patch("src.sharepoint_excel.requests.get")
-    def test_list_sheets_http_error(self, mock_get):
-        """シート一覧取得でHTTPエラーが発生するテスト"""
-        # HTTPエラーをシミュレート
-        mock_response = Mock()
-        mock_response.status_code = 404
-        mock_response.raise_for_status.side_effect = requests.HTTPError("404 Not Found")
-        mock_get.return_value = mock_response
+        # 塗りつぶし色の確認
+        if header_cell.get("fill", {}).get("fg_color"):
+            assert header_cell["fill"]["fg_color"].startswith("#")
 
-        file_path = "https://test.sharepoint.com/sites/test-site/Shared Documents/test.xlsx"
+    def test_parse_with_formulas(self):
+        """数式を含むExcelファイルの解析テスト"""
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "FormulaSheet"
 
-        with pytest.raises(SharePointError):
-            self.client.list_sheets(file_path)
+        ws["A1"] = 10
+        ws["A2"] = 20
+        ws["A3"] = "=A1+A2"  # 数式
 
-    @patch("src.sharepoint_excel.requests.get")
-    def test_get_sheet_image_success(self, mock_get):
-        """シート画像取得の成功テスト"""
-        # モックレスポンス（画像データ）
-        mock_image_data = b"fake-image-data"
-        mock_response = Mock()
-        mock_response.content = mock_image_data
-        mock_response.raise_for_status = Mock()
-        mock_get.return_value = mock_response
+        excel_bytes = BytesIO()
+        wb.save(excel_bytes)
+        excel_bytes.seek(0)
 
-        file_path = "https://test.sharepoint.com/sites/test-site/Shared Documents/test.xlsx"
-        result = self.client.get_sheet_image(file_path, "Sheet1")
+        self.mock_download_client.download_file.return_value = excel_bytes.getvalue()
 
-        # 結果検証（base64エンコードされていることを確認）
-        expected_base64 = base64.b64encode(mock_image_data).decode("utf-8")
-        assert result == expected_base64
-        assert mock_get.called
-        assert mock_get.call_args[1]["headers"]["Accept"] == "image/png"
+        parser = SharePointExcelParser(self.mock_download_client)
+        result_json = parser.parse_to_json("/test/formula.xlsx")
 
-    @patch("src.sharepoint_excel.requests.get")
-    def test_get_sheet_image_with_special_chars(self, mock_get):
-        """特殊文字を含むシート名の画像取得テスト"""
-        mock_image_data = b"fake-image-data"
-        mock_response = Mock()
-        mock_response.content = mock_image_data
-        mock_response.raise_for_status = Mock()
-        mock_get.return_value = mock_response
+        result = json.loads(result_json)
+        # 数式セルの値を確認（data_only=Falseなので数式文字列が入る）
+        formula_cell = result["sheets"][0]["rows"][2][0]
+        assert formula_cell["value"] == "=A1+A2"
 
-        file_path = "https://test.sharepoint.com/sites/test-site/Shared Documents/test.xlsx"
-        # シングルクォートを含むシート名
-        result = self.client.get_sheet_image(file_path, "John's Sheet")
+    def test_default_response_is_minimal(self):
+        """デフォルトレスポンスが最小限であることのテスト"""
+        excel_bytes = self._create_formatted_excel()
+        self.mock_download_client.download_file.return_value = excel_bytes
 
-        # URLにシングルクォートがエスケープされて含まれることを確認
-        assert mock_get.called
-        called_url = mock_get.call_args[0][0]
-        # シングルクォートが2つのシングルクォートにエスケープされる
-        assert "John''s Sheet" in called_url
+        parser = SharePointExcelParser(self.mock_download_client)
+        result_json = parser.parse_to_json("/test/formatted.xlsx")
 
-    @patch("src.sharepoint_excel.requests.get")
-    def test_get_range_data_success(self, mock_get):
-        """セル範囲データ取得の成功テスト"""
-        mock_response = Mock()
-        mock_response.text = '<?xml version="1.0"?><range><cell>A1</cell></range>'
-        mock_response.raise_for_status = Mock()
-        mock_get.return_value = mock_response
+        result = json.loads(result_json)
+        cell = result["sheets"][0]["rows"][0][0]
 
-        file_path = "https://test.sharepoint.com/sites/test-site/Shared Documents/test.xlsx"
-        result = self.client.get_range_data(file_path, "Sheet1!A1:C10")
+        # デフォルトでは value と coordinate のみ
+        assert "value" in cell
+        assert "coordinate" in cell
+        assert "data_type" not in cell
+        assert "fill" not in cell
+        assert "font" not in cell
+        assert "alignment" not in cell
+        assert "merged" not in cell
+        assert "width" not in cell
+        assert "height" not in cell
 
-        # 結果検証
-        assert result == mock_response.text
-        assert mock_get.called
-        assert mock_get.call_args[1]["headers"]["Accept"] == "application/atom+xml"
+    def test_formatting_included_when_requested(self):
+        """include_formatting=Trueの場合に書式情報が含まれることのテスト"""
+        excel_bytes = self._create_formatted_excel()
+        self.mock_download_client.download_file.return_value = excel_bytes
 
-    @patch("src.sharepoint_excel.requests.get")
-    def test_get_range_data_with_quotes(self, mock_get):
-        """シングルクォートを含む範囲指定のテスト"""
-        mock_response = Mock()
-        mock_response.text = '<?xml version="1.0"?><range><cell>A1</cell></range>'
-        mock_response.raise_for_status = Mock()
-        mock_get.return_value = mock_response
+        parser = SharePointExcelParser(self.mock_download_client)
+        result_json = parser.parse_to_json("/test/formatted.xlsx", include_formatting=True)
 
-        file_path = "https://test.sharepoint.com/sites/test-site/Shared Documents/test.xlsx"
-        # シート名にシングルクォートを含む範囲指定
-        result = self.client.get_range_data(file_path, "John's Sheet!A1:C10")
+        result = json.loads(result_json)
+        cell = result["sheets"][0]["rows"][0][0]
 
-        # URLにシングルクォートがエスケープされて含まれることを確認
-        assert mock_get.called
-        called_url = mock_get.call_args[0][0]
-        assert "John''s Sheet!A1:C10" in called_url
-
-    @patch("src.sharepoint_excel.requests.get")
-    def test_get_range_data_http_error(self, mock_get):
-        """セル範囲データ取得でHTTPエラーが発生するテスト"""
-        mock_response = Mock()
-        mock_response.status_code = 400
-        mock_response.raise_for_status.side_effect = requests.HTTPError("400 Bad Request")
-        mock_get.return_value = mock_response
-
-        file_path = "https://test.sharepoint.com/sites/test-site/Shared Documents/test.xlsx"
-
-        with pytest.raises(SharePointError):
-            self.client.get_range_data(file_path, "InvalidRange")
-
-    def test_auth_token_used_in_requests(self):
-        """認証トークンがリクエストに使用されることのテスト"""
-        with patch("src.sharepoint_excel.requests.get") as mock_get:
-            mock_response = Mock()
-            mock_response.text = "test"
-            mock_response.raise_for_status = Mock()
-            mock_get.return_value = mock_response
-
-            file_path = "https://test.sharepoint.com/sites/test-site/Shared Documents/test.xlsx"
-            self.client.list_sheets(file_path)
-
-            # get_access_tokenが呼ばれたことを確認
-            self.mock_auth.get_access_token.assert_called_once()
-
-            # 正しいAuthorizationヘッダーが設定されていることを確認
-            headers = mock_get.call_args[1]["headers"]
-            assert headers["Authorization"] == "Bearer test-token"
+        # include_formatting=True の場合
+        assert "value" in cell
+        assert "coordinate" in cell
+        assert "data_type" in cell
+        assert "fill" in cell
+        # font と alignment は含まれない
+        assert "font" not in cell
+        assert "alignment" not in cell

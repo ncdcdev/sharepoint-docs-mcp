@@ -1,201 +1,174 @@
 """
-SharePoint Excel操作モジュール
+SharePoint Excel解析モジュール（ダウンロード+openpyxl方式）
 """
 
-import base64
+import json
 import logging
-from typing import Protocol
-from urllib.parse import quote, urlparse
+from io import BytesIO
+from typing import Any
 
-import requests
-
-from src.error_messages import handle_sharepoint_error
+from openpyxl import load_workbook
+from openpyxl.styles import Color
 
 logger = logging.getLogger(__name__)
 
 
-class AuthClient(Protocol):
-    """認証クライアントのプロトコル（証明書認証/OAuth両対応）"""
+class SharePointExcelParser:
+    """SharePoint Excelファイル解析クライアント"""
 
-    def get_access_token(self) -> str:
-        """アクセストークンを取得"""
-        ...
-
-
-class SharePointExcelClient:
-    """SharePoint Excel操作クライアント"""
-
-    def __init__(self, site_url: str, auth: AuthClient):
-        self.site_url = site_url.rstrip("/")
-        self.auth = auth
-
-    def list_sheets(self, file_path: str) -> str:
+    def __init__(self, download_client):
         """
-        Excelファイルのシート一覧を取得
-
         Args:
-            file_path: Excelファイルのパス（検索結果から取得）
-
-        Returns:
-            XML形式のシート一覧
+            download_client: download_file(file_path) -> bytes メソッドを持つクライアント
         """
-        logger.info(f"Listing sheets for: {file_path}")
+        self.download_client = download_client
 
-        try:
-            excel_rest_url = self._build_excel_rest_url(
-                file_path, "Sheets", format_type="atom"
-            )
-            access_token = self.auth.get_access_token()
-
-            headers = {
-                "Authorization": f"Bearer {access_token}",
-                "Accept": "application/atom+xml",
-            }
-
-            response = requests.get(excel_rest_url, headers=headers, timeout=30)
-            response.raise_for_status()
-
-            logger.info("Successfully retrieved sheet list")
-            return response.text
-
-        except Exception as e:
-            logger.error(f"Failed to list sheets: {str(e)}")
-            raise handle_sharepoint_error(
-                e,
-                "excel_list_sheets",
-                excel_context={"file_path": file_path, "sheet_name": None, "range_spec": None},
-            ) from e
-
-    def get_sheet_image(self, file_path: str, sheet_name: str) -> str:
+    def parse_to_json(self, file_path: str, include_formatting: bool = False) -> str:
         """
-        シートのキャプチャ画像を取得
+        Excelファイルを解析してJSON形式で返す
 
         Args:
             file_path: Excelファイルのパス
-            sheet_name: シート名
+            include_formatting: 書式情報を含めるかどうか
+                False (デフォルト): value, coordinate のみ
+                True: value, coordinate, data_type, fill, merged, width, height を含む
 
         Returns:
-            base64エンコードされた画像データ
+            JSON文字列（全シート・全セルのデータ）
         """
-        logger.info(f"Getting image for sheet '{sheet_name}' in {file_path}")
+        logger.info(f"Parsing Excel file: {file_path} (include_formatting={include_formatting})")
 
         try:
-            # シート名のシングルクォートをエスケープ
-            escaped_sheet_name = sheet_name.replace("'", "''")
-            resource = f"Sheets('{escaped_sheet_name}')"
+            # ファイルをダウンロード
+            file_bytes = self.download_client.download_file(file_path)
+            logger.info(f"Downloaded {len(file_bytes)} bytes")
 
-            excel_rest_url = self._build_excel_rest_url(
-                file_path, resource, format_type="image"
-            )
-            access_token = self.auth.get_access_token()
+            # BytesIOでメモリ上に展開
+            file_stream = BytesIO(file_bytes)
 
-            headers = {
-                "Authorization": f"Bearer {access_token}",
-                "Accept": "image/png",
-            }
+            # openpyxlで読み込み（data_only=Falseで数式も取得）
+            workbook = load_workbook(file_stream, data_only=False, rich_text=True)
 
-            response = requests.get(excel_rest_url, headers=headers, timeout=30)
-            response.raise_for_status()
+            # 全シートを解析
+            result = {"file_path": file_path, "sheets": []}
 
-            # バイナリデータをbase64エンコード
-            image_base64 = base64.b64encode(response.content).decode("utf-8")
-            logger.info("Successfully retrieved sheet image")
-            return image_base64
+            for sheet_name in workbook.sheetnames:
+                sheet = workbook[sheet_name]
+                sheet_data = self._parse_sheet(sheet, include_formatting)
+                result["sheets"].append(sheet_data)
 
-        except Exception as e:
-            logger.error(f"Failed to get sheet image: {str(e)}")
-            raise handle_sharepoint_error(
-                e,
-                "excel_get_image",
-                excel_context={"file_path": file_path, "sheet_name": sheet_name, "range_spec": None},
-            ) from e
-
-    def get_range_data(self, file_path: str, range_spec: str) -> str:
-        """
-        セル範囲のデータを取得
-
-        Args:
-            file_path: Excelファイルのパス
-            range_spec: セル範囲（例: "Sheet1!A1:C10"）
-
-        Returns:
-            XML形式のセルデータ
-        """
-        logger.info(f"Getting range data '{range_spec}' from {file_path}")
-
-        try:
-            # 範囲指定のシングルクォートをエスケープ
-            escaped_range = range_spec.replace("'", "''")
-            resource = f"Ranges('{escaped_range}')"
-
-            excel_rest_url = self._build_excel_rest_url(
-                file_path, resource, format_type="atom"
-            )
-            access_token = self.auth.get_access_token()
-
-            headers = {
-                "Authorization": f"Bearer {access_token}",
-                "Accept": "application/atom+xml",
-            }
-
-            response = requests.get(excel_rest_url, headers=headers, timeout=30)
-            response.raise_for_status()
-
-            logger.info("Successfully retrieved range data")
-            return response.text
+            logger.info(f"Parsed {len(result['sheets'])} sheets")
+            return json.dumps(result, ensure_ascii=False, indent=2)
 
         except Exception as e:
-            logger.error(f"Failed to get range data: {str(e)}")
-            raise handle_sharepoint_error(
-                e,
-                "excel_get_range",
-                excel_context={"file_path": file_path, "sheet_name": None, "range_spec": range_spec},
-            ) from e
+            logger.error(f"Failed to parse Excel file: {str(e)}")
+            raise
 
-    def _build_excel_rest_url(
-        self, file_path: str, resource: str, format_type: str
-    ) -> str:
+    def _parse_sheet(self, sheet, include_formatting: bool) -> dict[str, Any]:
         """
-        Excel REST API URLを構築
+        シートを解析してdict形式で返す
 
         Args:
-            file_path: Excelファイルのパス
-            resource: リソース（Sheets, Ranges, etc.）
-            format_type: フォーマット（atom, image）
+            sheet: openpyxl Worksheet
+            include_formatting: 書式情報を含めるかどうか
 
         Returns:
-            完全なExcel REST API URL
+            シートデータのdict
         """
-        # ファイルパスからサイトURLとライブラリパスを抽出
-        parsed_url = urlparse(file_path)
-        path_segments = parsed_url.path.split("/")
+        sheet_data = {
+            "name": sheet.title,
+            "dimensions": str(sheet.dimensions) if sheet.dimensions else None,
+            "rows": [],
+        }
 
-        # サイト名を検出
-        site_name = None
-        library_path = None
+        # セル範囲を取得
+        if sheet.dimensions:
+            for row in sheet.iter_rows():
+                row_data = []
+                for cell in row:
+                    cell_data = self._parse_cell(cell, include_formatting)
+                    row_data.append(cell_data)
+                sheet_data["rows"].append(row_data)
 
-        for i, segment in enumerate(path_segments):
-            if segment == "sites" and i + 1 < len(path_segments):
-                site_name = path_segments[i + 1]
-                # サイト名以降のパスをライブラリパスとする
-                library_path = "/".join(path_segments[i + 2:])
-                break
+        return sheet_data
 
-        if not site_name or not library_path:
-            raise ValueError(f"Invalid file path format: {file_path}")
+    def _parse_cell(self, cell, include_formatting: bool) -> dict[str, Any]:
+        """
+        セルを解析してdict形式で返す
 
-        # サイトURLを構築
-        base_url = f"{parsed_url.scheme}://{parsed_url.netloc}"
-        site_url = f"{base_url}/sites/{site_name}"
+        Args:
+            cell: openpyxl Cell
+            include_formatting: 書式情報を含めるかどうか
 
-        # ライブラリパスをURLエンコード
-        encoded_library_path = quote(library_path, safe="/")
+        Returns:
+            セルデータのdict
+        """
+        # 基本情報（常に含む）
+        cell_data = {
+            "value": cell.value,
+            "coordinate": cell.coordinate,
+        }
 
-        # Excel REST API URLを構築
-        excel_rest_url = (
-            f"{site_url}/_vti_bin/ExcelRest.aspx/"
-            f"{encoded_library_path}/Model/{resource}?$format={format_type}"
-        )
+        # 書式情報（オプション）
+        if include_formatting:
+            cell_data["data_type"] = cell.data_type
 
-        logger.debug(f"Built Excel REST URL: {excel_rest_url}")
-        return excel_rest_url
+            # 塗りつぶし色情報
+            if cell.fill:
+                cell_data["fill"] = {
+                    "pattern_type": cell.fill.patternType,
+                    "fg_color": self._color_to_hex(cell.fill.fgColor),
+                    "bg_color": self._color_to_hex(cell.fill.bgColor),
+                }
+
+            # セル結合情報
+            if hasattr(cell, "parent") and cell.parent:
+                sheet = cell.parent
+                for merged_range in sheet.merged_cells.ranges:
+                    if cell.coordinate in merged_range:
+                        cell_data["merged"] = {
+                            "range": str(merged_range),
+                            "is_top_left": cell.coordinate
+                            == merged_range.start_cell.coordinate,
+                        }
+                        break
+
+            # セルサイズ情報（MergedCellはcolumn_letterを持たない可能性がある）
+            if hasattr(cell, "column_letter") and hasattr(cell, "row"):
+                if cell.column_letter and cell.row:
+                    sheet = cell.parent
+                    # 列幅
+                    if cell.column_letter in sheet.column_dimensions:
+                        col_dim = sheet.column_dimensions[cell.column_letter]
+                        cell_data["width"] = col_dim.width
+                    # 行高
+                    if cell.row in sheet.row_dimensions:
+                        row_dim = sheet.row_dimensions[cell.row]
+                        cell_data["height"] = row_dim.height
+
+        return cell_data
+
+    def _color_to_hex(self, color: Color | None) -> str | None:
+        """
+        openpyxl Colorオブジェクトを16進数カラーコードに変換
+
+        Args:
+            color: openpyxl Color
+
+        Returns:
+            16進数カラーコード (例: "#FF0000") またはNone
+        """
+        if color is None:
+            return None
+
+        if color.type == "rgb":
+            # RGB形式 (例: "FFFF0000" → "#FF0000")
+            rgb = color.rgb
+            if rgb and isinstance(rgb, str) and len(rgb) >= 6:
+                return f"#{rgb[-6:]}"
+
+        elif color.type == "theme":
+            # テーマカラーは複雑なので、簡易的に処理
+            return f"theme_{color.theme}"
+
+        return None

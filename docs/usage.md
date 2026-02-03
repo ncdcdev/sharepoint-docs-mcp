@@ -168,13 +168,13 @@ SHAREPOINT_SITE_NAME=@onedrive,sales-team,customer-portal
 
 ## Excel Operations Usage Examples
 
-You can perform operations on Excel files in SharePoint: list sheets, get sheet images, and retrieve cell range data.
+You can parse Excel files in SharePoint and retrieve data in JSON format. By default, returns lightweight response with value and coordinate only. Use `include_formatting=true` for additional formatting information.
 
 ### Prerequisites
 
-- SharePoint Excel Services must be enabled
-- Excel files must be stored in a SharePoint library
+- Excel files must be stored in a SharePoint library or OneDrive
 - Appropriate access permissions required
+- No Excel Services dependency
 
 ### Basic Workflow
 
@@ -190,150 +190,198 @@ file_path = results[0]["path"]
 # Example: "/sites/finance/Shared Documents/budget_2024.xlsx"
 ```
 
-2. **List Sheets**
+2. **Parse Excel File to JSON (Default: Lightweight)**
 ```python
-# Use sharepoint_excel_operations tool
-sheets_xml = sharepoint_excel_operations(
-    operation="list_sheets",
-    file_path=file_path
-)
-# Returns XML format sheet list
-# Identify the sheet name you need
+# Use sharepoint_excel_to_json tool (default: lightweight response)
+json_data = sharepoint_excel_to_json(file_path=file_path)
+
+# Parse JSON response
+import json
+data = json.loads(json_data)
+
+# Access sheet information
+for sheet in data["sheets"]:
+    print(f"Sheet: {sheet['name']}")
+    print(f"Dimensions: {sheet['dimensions']}")
+
+    # Access cell data (value and coordinate only)
+    for row in sheet["rows"]:
+        for cell in row:
+            print(f"{cell['coordinate']}: {cell['value']}")
 ```
 
-3. **Get Sheet Image**
+3. **Parse Excel File with Formatting (Optional)**
 ```python
-# Get visual preview of a specific sheet
-image_base64 = sharepoint_excel_operations(
-    operation="get_image",
+# Use include_formatting=true for additional information
+json_data = sharepoint_excel_to_json(
     file_path=file_path,
-    sheet_name="Sheet1"
+    include_formatting=True
 )
-# Returns base64-encoded image data
-# Can be saved or displayed as an image
+
+# Parse JSON response
+data = json.loads(json_data)
+
+# Access cell data with formatting
+for sheet in data["sheets"]:
+    for row in sheet["rows"]:
+        for cell in row:
+            print(f"{cell['coordinate']}: {cell['value']}")
+            if "fill" in cell:
+                print(f"  Fill color: {cell['fill']['fg_color']}")
+            if "merged" in cell:
+                print(f"  Merged range: {cell['merged']['range']}")
 ```
 
-4. **Get Cell Range Data**
-```python
-# Get data from a specific cell range
-range_xml = sharepoint_excel_operations(
-    operation="get_range",
-    file_path=file_path,
-    range_spec="Sheet1!A1:D10"
-)
-# Returns XML format cell data
-# Can be used for data analysis or report generation
+### JSON Output Format
+
+#### Default Format (Lightweight)
+
+By default, returns only essential cell information for optimal performance:
+
+```json
+{
+  "file_path": "/sites/test/Shared Documents/budget.xlsx",
+  "sheets": [
+    {
+      "name": "Summary",
+      "dimensions": "A1:E10",
+      "rows": [
+        [
+          {
+            "value": "Department",
+            "coordinate": "A1"
+          },
+          {
+            "value": 12500,
+            "coordinate": "B1"
+          }
+        ]
+      ]
+    }
+  ]
+}
 ```
 
-### Operation Types
+#### With Formatting (include_formatting=true)
 
-#### list_sheets
-List all sheets in XML format.
+When `include_formatting=true`, includes additional formatting information:
 
-**Parameters:**
-- `operation`: "list_sheets"
-- `file_path`: Path to Excel file (from search results)
-
-**Returns:** XML format sheet list
-
-**Example:**
-```python
-sheets = sharepoint_excel_operations(
-    operation="list_sheets",
-    file_path="/sites/team/Shared Documents/report.xlsx"
-)
+```json
+{
+  "file_path": "/sites/test/Shared Documents/budget.xlsx",
+  "sheets": [
+    {
+      "name": "Summary",
+      "dimensions": "A1:E10",
+      "rows": [
+        [
+          {
+            "value": "Department",
+            "coordinate": "A1",
+            "data_type": "s",
+            "fill": {
+              "pattern_type": "solid",
+              "fg_color": "#CCCCCC",
+              "bg_color": null
+            },
+            "merged": {
+              "range": "A1:B1",
+              "is_top_left": true
+            },
+            "width": 15.0,
+            "height": 20.0
+          }
+        ]
+      ]
+    }
+  ]
+}
 ```
 
-#### get_image
-Get a screenshot of the specified sheet in base64 format.
+### Available Cell Information
 
-**Parameters:**
-- `operation`: "get_image"
-- `file_path`: Path to Excel file
-- `sheet_name`: Sheet name (required)
+**Default (always included):**
+- **value**: Cell value (string, number, date, formula, etc.)
+- **coordinate**: Cell position (e.g., "A1", "B2")
 
-**Returns:** base64-encoded image data (PNG format)
-
-**Example:**
-```python
-image = sharepoint_excel_operations(
-    operation="get_image",
-    file_path="/sites/team/Shared Documents/report.xlsx",
-    sheet_name="Summary"
-)
-# Save as image
-import base64
-with open("sheet_preview.png", "wb") as f:
-    f.write(base64.b64decode(image))
-```
-
-#### get_range
-Get data from the specified cell range in XML format.
-
-**Parameters:**
-- `operation`: "get_range"
-- `file_path`: Path to Excel file
-- `range_spec`: Cell range (required, e.g., "Sheet1!A1:C10")
-
-**Returns:** XML format cell data
-
-**Example:**
-```python
-data = sharepoint_excel_operations(
-    operation="get_range",
-    file_path="/sites/team/Shared Documents/report.xlsx",
-    range_spec="Sheet1!A1:E20"
-)
-```
-
-### Handling Special Characters
-
-Single quotes (') in sheet names or cell ranges are automatically escaped.
-
-**Example:**
-```python
-# Specify sheet name "John's Report"
-image = sharepoint_excel_operations(
-    operation="get_image",
-    file_path=file_path,
-    sheet_name="John's Report"  # Automatically escaped to "John''s Report"
-)
-```
+**With include_formatting=true:**
+- **data_type**: Data type code (`s`=string, `n`=number, `f`=formula, etc.)
+- **fill**: Fill color information (pattern type, foreground/background colors)
+- **merged**: Merged cell information (range, position)
+- **width**: Column width
+- **height**: Row height
 
 ### Common Use Cases
 
-**Budget Data Analysis**
+**Extract All Budget Data**
 ```python
 # 1. Search for budget file
 results = sharepoint_docs_search(query="budget 2024", file_extensions=["xlsx"])
 file_path = results[0]["path"]
 
-# 2. Check sheet list
-sheets = sharepoint_excel_operations(operation="list_sheets", file_path=file_path)
+# 2. Get all Excel data as JSON
+json_data = sharepoint_excel_to_json(file_path=file_path)
+data = json.loads(json_data)
 
-# 3. Get budget data
-budget_data = sharepoint_excel_operations(
-    operation="get_range",
-    file_path=file_path,
-    range_spec="Budget!A1:F100"
-)
+# 3. Process specific sheet
+for sheet in data["sheets"]:
+    if sheet["name"] == "Budget":
+        for row in sheet["rows"]:
+            # Extract values from each cell
+            values = [cell["value"] for cell in row]
+            print(values)
 ```
 
-**Report Visual Preview**
+**Analyze Cell Formatting**
 ```python
-# 1. Search for report file
-results = sharepoint_docs_search(query="monthly report", file_extensions=["xlsx"])
-file_path = results[0]["path"]
+# 1. Get Excel data with formatting
+json_data = sharepoint_excel_to_json(file_path=file_path, include_formatting=True)
+data = json.loads(json_data)
 
-# 2. Get summary sheet image
-summary_image = sharepoint_excel_operations(
-    operation="get_image",
-    file_path=file_path,
-    sheet_name="Summary"
-)
+# 2. Find cells with specific formatting
+for sheet in data["sheets"]:
+    for row in sheet["rows"]:
+        for cell in row:
+            # Find colored cells
+            if cell.get("fill", {}).get("fg_color"):
+                print(f"Colored cell at {cell['coordinate']}: {cell['value']}")
+                print(f"  Color: {cell['fill']['fg_color']}")
+```
 
-# 3. Save or display image
-import base64
-with open("monthly_summary.png", "wb") as f:
-    f.write(base64.b64decode(summary_image))
+**Export to Different Format**
+```python
+# 1. Get Excel data
+json_data = sharepoint_excel_to_json(file_path=file_path)
+data = json.loads(json_data)
+
+# 2. Convert to CSV-like format
+import csv
+for sheet in data["sheets"]:
+    with open(f"{sheet['name']}.csv", "w", newline="") as f:
+        writer = csv.writer(f)
+        for row in sheet["rows"]:
+            values = [cell["value"] if cell["value"] is not None else "" for cell in row]
+            writer.writerow(values)
+```
+
+**Process Multiple Sheets**
+```python
+# 1. Get all Excel data
+json_data = sharepoint_excel_to_json(file_path=file_path)
+data = json.loads(json_data)
+
+# 2. Process each sheet
+summary = {}
+for sheet in data["sheets"]:
+    sheet_name = sheet["name"]
+    row_count = len(sheet["rows"])
+    col_count = len(sheet["rows"][0]) if sheet["rows"] else 0
+
+    summary[sheet_name] = {
+        "dimensions": sheet["dimensions"],
+        "rows": row_count,
+        "columns": col_count
+    }
+
+print(json.dumps(summary, indent=2))
 ```
