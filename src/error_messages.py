@@ -17,6 +17,10 @@ class ErrorCategory(Enum):
     SEARCH_QUERY = "search_query"
     FILE_NOT_FOUND = "file_not_found"
     CONFIGURATION = "configuration"
+    EXCEL_FILE_NOT_FOUND = "excel_file_not_found"
+    EXCEL_SHEET_NOT_FOUND = "excel_sheet_not_found"
+    EXCEL_INVALID_RANGE = "excel_invalid_range"
+    EXCEL_SERVICES_DISABLED = "excel_services_disabled"
     UNKNOWN = "unknown"
 
 
@@ -162,6 +166,52 @@ def get_configuration_error(original_error: Exception) -> SharePointError:
     )
 
 
+def get_excel_file_not_found_error(
+    file_path: str, original_error: Exception
+) -> SharePointError:
+    """Generate Excel file not found error message"""
+    return SharePointError(
+        category=ErrorCategory.EXCEL_FILE_NOT_FOUND,
+        message=f"The specified Excel file was not found: {file_path}",
+        solution="Please verify the file path is correct and the file exists. You can search for the file using sharepoint_docs_search with file_extensions=['xlsx'] to get the correct path.",
+        original_error=original_error,
+    )
+
+
+def get_excel_sheet_not_found_error(
+    sheet_name: str, original_error: Exception
+) -> SharePointError:
+    """Generate Excel sheet not found error message"""
+    return SharePointError(
+        category=ErrorCategory.EXCEL_SHEET_NOT_FOUND,
+        message=f"The specified sheet was not found: {sheet_name}",
+        solution="Please use the list_sheets operation first to get the available sheet names, then use the correct sheet name.",
+        original_error=original_error,
+    )
+
+
+def get_excel_invalid_range_error(
+    range_spec: str, original_error: Exception
+) -> SharePointError:
+    """Generate Excel invalid range error message"""
+    return SharePointError(
+        category=ErrorCategory.EXCEL_INVALID_RANGE,
+        message=f"The specified cell range is invalid: {range_spec}",
+        solution="Please use a valid range format like 'Sheet1!A1:C10' or 'A1:C10' if the sheet is specified elsewhere.",
+        original_error=original_error,
+    )
+
+
+def get_excel_services_disabled_error(original_error: Exception) -> SharePointError:
+    """Generate Excel Services disabled error message"""
+    return SharePointError(
+        category=ErrorCategory.EXCEL_SERVICES_DISABLED,
+        message="Excel Services is not enabled or not available for this SharePoint site.",
+        solution="Please contact your SharePoint administrator to enable Excel Services for this site, or verify that the file is stored in a location where Excel Services is available.",
+        original_error=original_error,
+    )
+
+
 def get_unknown_error(original_error: Exception) -> SharePointError:
     """Generate unknown error message"""
     return SharePointError(
@@ -173,19 +223,44 @@ def get_unknown_error(original_error: Exception) -> SharePointError:
 
 
 def handle_sharepoint_error(
-    error: Exception, context: str = "", is_onedrive_file: bool = False
+    error: Exception,
+    context: str = "",
+    is_onedrive_file: bool = False,
+    excel_context: dict[str, str | None] | None = None,
 ) -> SharePointError:
     """
     Classify SharePoint-related errors into appropriate categories and generate natural language messages
 
     Args:
         error: The exception that occurred
-        context: The context where the error occurred ("auth", "search", "download", etc.)
+        context: The context where the error occurred ("auth", "search", "download", "excel_*", etc.)
+        is_onedrive_file: Whether the operation is for OneDrive file
+        excel_context: Excel operation context with file_path, sheet_name, range_spec
 
     Returns:
         SharePointError: Natural language error message
     """
     error_str = str(error).lower()
+
+    # Excel操作のエラー分類
+    if context.startswith("excel_") and excel_context:
+        if hasattr(error, "response") and hasattr(error.response, "status_code"):
+            status_code = error.response.status_code
+            if status_code == 404:
+                file_path = excel_context.get("file_path") or ""
+                return get_excel_file_not_found_error(file_path, error)
+            elif status_code == 403:
+                return get_excel_services_disabled_error(error)
+            elif status_code == 400:
+                # 400エラーの詳細をチェック
+                if excel_context.get("sheet_name") and "sheet" in error_str:
+                    return get_excel_sheet_not_found_error(
+                        excel_context["sheet_name"], error
+                    )
+                elif excel_context.get("range_spec") and "range" in error_str:
+                    return get_excel_invalid_range_error(
+                        excel_context["range_spec"], error
+                    )
 
     # Classification by HTTP status code
     if hasattr(error, "response") and hasattr(error.response, "status_code"):
