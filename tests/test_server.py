@@ -2,7 +2,7 @@ import pytest
 from unittest.mock import patch, Mock
 import base64
 
-from src.server import sharepoint_docs_search, sharepoint_docs_download
+from src.server import sharepoint_docs_search, sharepoint_docs_download, sharepoint_excel_operations
 
 
 class TestSharePointDocsSearch:
@@ -160,3 +160,123 @@ class TestGetSharePointClient:
                     # 2回目の呼び出しでは新しいインスタンスを作成しない
                     assert mock_client_class.call_count == 1
                     assert client1 == client2
+
+
+class TestSharePointExcelOperations:
+    """sharepoint_excel_operations 関数のテスト"""
+
+    @pytest.fixture
+    def mock_excel_client(self):
+        """Mock SharePoint Excel client"""
+        mock_client = Mock()
+        mock_client.list_sheets.return_value = '<?xml version="1.0"?><sheets><sheet>Sheet1</sheet></sheets>'
+        mock_client.get_sheet_image.return_value = base64.b64encode(b"fake-image-data").decode("utf-8")
+        mock_client.get_range_data.return_value = '<?xml version="1.0"?><range><cell>A1</cell></range>'
+        return mock_client
+
+    @pytest.mark.unit
+    def test_list_sheets_operation(self, mock_config, mock_excel_client):
+        """list_sheets操作のテスト"""
+        with patch("src.server._get_sharepoint_excel_client", return_value=mock_excel_client):
+            with patch("src.server.config", mock_config):
+                result = sharepoint_excel_operations(
+                    operation="list_sheets",
+                    file_path="/sites/test/Shared Documents/test.xlsx"
+                )
+
+                assert '<?xml version="1.0"?>' in result
+                assert '<sheet>Sheet1</sheet>' in result
+                mock_excel_client.list_sheets.assert_called_once_with(
+                    "/sites/test/Shared Documents/test.xlsx"
+                )
+
+    @pytest.mark.unit
+    def test_get_image_operation(self, mock_config, mock_excel_client):
+        """get_image操作のテスト"""
+        with patch("src.server._get_sharepoint_excel_client", return_value=mock_excel_client):
+            with patch("src.server.config", mock_config):
+                result = sharepoint_excel_operations(
+                    operation="get_image",
+                    file_path="/sites/test/Shared Documents/test.xlsx",
+                    sheet_name="Sheet1"
+                )
+
+                # base64エンコードされた画像データが返される
+                assert result == base64.b64encode(b"fake-image-data").decode("utf-8")
+                mock_excel_client.get_sheet_image.assert_called_once_with(
+                    "/sites/test/Shared Documents/test.xlsx",
+                    "Sheet1"
+                )
+
+    @pytest.mark.unit
+    def test_get_range_operation(self, mock_config, mock_excel_client):
+        """get_range操作のテスト"""
+        with patch("src.server._get_sharepoint_excel_client", return_value=mock_excel_client):
+            with patch("src.server.config", mock_config):
+                result = sharepoint_excel_operations(
+                    operation="get_range",
+                    file_path="/sites/test/Shared Documents/test.xlsx",
+                    range_spec="Sheet1!A1:C10"
+                )
+
+                assert '<?xml version="1.0"?>' in result
+                assert '<range><cell>A1</cell></range>' in result
+                mock_excel_client.get_range_data.assert_called_once_with(
+                    "/sites/test/Shared Documents/test.xlsx",
+                    "Sheet1!A1:C10"
+                )
+
+    @pytest.mark.unit
+    def test_invalid_operation_type(self, mock_config, mock_excel_client):
+        """無効な操作タイプのテスト"""
+        with patch("src.server._get_sharepoint_excel_client", return_value=mock_excel_client):
+            with patch("src.server.config", mock_config):
+                with pytest.raises(ValueError) as exc_info:
+                    sharepoint_excel_operations(
+                        operation="invalid_operation",
+                        file_path="/sites/test/Shared Documents/test.xlsx"
+                    )
+
+                assert "Invalid operation: invalid_operation" in str(exc_info.value)
+
+    @pytest.mark.unit
+    def test_get_image_missing_sheet_name(self, mock_config, mock_excel_client):
+        """get_image操作でsheet_nameが欠けている場合のテスト"""
+        with patch("src.server._get_sharepoint_excel_client", return_value=mock_excel_client):
+            with patch("src.server.config", mock_config):
+                with pytest.raises(ValueError) as exc_info:
+                    sharepoint_excel_operations(
+                        operation="get_image",
+                        file_path="/sites/test/Shared Documents/test.xlsx"
+                    )
+
+                assert "sheet_name is required for get_image operation" in str(exc_info.value)
+
+    @pytest.mark.unit
+    def test_get_range_missing_range_spec(self, mock_config, mock_excel_client):
+        """get_range操作でrange_specが欠けている場合のテスト"""
+        with patch("src.server._get_sharepoint_excel_client", return_value=mock_excel_client):
+            with patch("src.server.config", mock_config):
+                with pytest.raises(ValueError) as exc_info:
+                    sharepoint_excel_operations(
+                        operation="get_range",
+                        file_path="/sites/test/Shared Documents/test.xlsx"
+                    )
+
+                assert "range_spec is required for get_range operation" in str(exc_info.value)
+
+    @pytest.mark.unit
+    def test_excel_operation_error_handling(self, mock_config, mock_excel_client):
+        """Excel操作のエラーハンドリングテスト"""
+        mock_excel_client.list_sheets.side_effect = Exception("Excel operation failed")
+
+        with patch("src.server._get_sharepoint_excel_client", return_value=mock_excel_client):
+            with patch("src.server.config", mock_config):
+                with pytest.raises(Exception) as exc_info:
+                    sharepoint_excel_operations(
+                        operation="list_sheets",
+                        file_path="/sites/test/Shared Documents/test.xlsx"
+                    )
+
+                # エラーハンドリング関数が呼ばれることを確認
+                assert "Excel operation failed" in str(exc_info.value.__cause__)
