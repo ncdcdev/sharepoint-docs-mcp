@@ -448,25 +448,33 @@ def sharepoint_docs_download(file_path: str, ctx: Context | None = None) -> str:
         raise handle_sharepoint_error(e, "download") from e
 
 
-def sharepoint_excel_to_json(
+def sharepoint_excel(
     file_path: str,
+    query: str | None = None,
+    sheet: str | None = None,
+    cell_range: str | None = None,
     include_formatting: bool = False,
     ctx: Context | None = None,
 ) -> str:
     """
-    SharePoint上のExcelファイルを解析してJSON形式で返す
+    SharePoint上のExcelファイルを操作
 
     Args:
-        file_path: Excelファイルのパス（検索結果から取得）
-        include_formatting: 書式情報を含めるかどうか
-            False (デフォルト): value, coordinate のみの軽量レスポンス
-            True: value, coordinate, data_type, fill, merged, width, height を含む
+        file_path: Excelファイルのパス
+        query: 検索キーワード（指定すると検索モード）
+        sheet: シート名（特定シートのみ取得）
+        cell_range: セル範囲（例: "A1:D10"）
+        include_formatting: 書式情報を含めるか
         ctx: FastMCP context (injected automatically)
 
     Returns:
-        JSON文字列（全シート・全セルのデータ）
+        JSON文字列
     """
-    logging.info(f"Converting Excel to JSON: {file_path} (include_formatting={include_formatting})")
+    logging.info(
+        f"SharePoint Excel operation: {file_path} "
+        f"(query={query}, sheet={sheet}, cell_range={cell_range}, "
+        f"include_formatting={include_formatting})"
+    )
 
     try:
         # SharePointクライアントを取得（既存のダウンロード機能を使用）
@@ -475,11 +483,20 @@ def sharepoint_excel_to_json(
         # Excel解析クライアントを作成
         parser = SharePointExcelParser(client)
 
-        # 解析してJSONを返す
-        return parser.parse_to_json(file_path, include_formatting)
+        # 検索モード
+        if query:
+            return parser.search_cells(file_path, query)
+
+        # 読み取りモード
+        return parser.parse_to_json(
+            file_path,
+            include_formatting=include_formatting,
+            sheet_name=sheet,
+            cell_range=cell_range,
+        )
 
     except Exception as e:
-        logging.error(f"Excel to JSON conversion failed: {str(e)}")
+        logging.error(f"SharePoint Excel operation failed: {str(e)}")
         raise handle_sharepoint_error(e, "excel_parse") from e
 
 
@@ -489,8 +506,10 @@ def register_tools():
     mcp.tool(description=config.download_tool_description)(sharepoint_docs_download)
     mcp.tool(
         description=(
-            "Parse Excel file in SharePoint and return data in JSON format. "
-            "By default returns lightweight response with value and coordinate only. "
-            "Set include_formatting=true to get data_type, fill colors, merged cells, and dimensions."
+            "Read or search Excel file in SharePoint. "
+            "Use 'query' parameter to search for specific content and find cell locations. "
+            "Use 'sheet' and 'cell_range' parameters to read specific sections. "
+            "Workflow: 1) Search with query to find relevant cells, "
+            "2) Read specific cell_range based on search results."
         )
-    )(sharepoint_excel_to_json)
+    )(sharepoint_excel)

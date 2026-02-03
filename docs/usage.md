@@ -168,7 +168,9 @@ SHAREPOINT_SITE_NAME=@onedrive,sales-team,customer-portal
 
 ## Excel Operations Usage Examples
 
-You can parse Excel files in SharePoint and retrieve data in JSON format. By default, returns lightweight response with value and coordinate only. Use `include_formatting=true` for additional formatting information.
+The `sharepoint_excel` tool allows you to read and search Excel files in SharePoint. It supports two modes:
+- **Search Mode**: Find specific content and locate cells (use `query` parameter)
+- **Read Mode**: Get data from sheets with optional sheet/range filtering
 
 ### Prerequisites
 
@@ -176,67 +178,95 @@ You can parse Excel files in SharePoint and retrieve data in JSON format. By def
 - Appropriate access permissions required
 - No Excel Services dependency
 
+### Tool Parameters
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `file_path` | str | Required | Excel file path |
+| `query` | str \| None | None | Search keyword (enables search mode) |
+| `sheet` | str \| None | None | Sheet name (get specific sheet only) |
+| `cell_range` | str \| None | None | Cell range (e.g., "A1:D10") |
+| `include_formatting` | bool | False | Include formatting information |
+
 ### Basic Workflow
 
-1. **Search for Excel Files**
+**Recommended: Search First, Then Read Specific Range**
+
 ```python
-# Use sharepoint_docs_search tool
-results = sharepoint_docs_search(
-    query="budget",
-    file_extensions=["xlsx"]
+# Step 1: Search for relevant content
+result = sharepoint_excel(file_path="/path/to/file.xlsx", query="Total")
+# → Find that "Total" is in Sheet1 at cell C10
+
+# Step 2: Read the surrounding data
+data = sharepoint_excel(file_path="/path/to/file.xlsx", sheet="Sheet1", range="A1:D15")
+```
+
+### Usage Patterns
+
+#### 1. Search Mode (with query parameter)
+```python
+# Search for cells containing "budget"
+result = sharepoint_excel(
+    file_path="/sites/finance/Shared Documents/report.xlsx",
+    query="budget"
 )
-# Get file_path from results
-file_path = results[0]["path"]
-# Example: "/sites/finance/Shared Documents/budget_2024.xlsx"
 ```
 
-2. **Parse Excel File to JSON (Default: Lightweight)**
-```python
-# Use sharepoint_excel_to_json tool (default: lightweight response)
-json_data = sharepoint_excel_to_json(file_path=file_path)
-
-# Parse JSON response
-import json
-data = json.loads(json_data)
-
-# Access sheet information
-for sheet in data["sheets"]:
-    print(f"Sheet: {sheet['name']}")
-    print(f"Dimensions: {sheet['dimensions']}")
-
-    # Access cell data (value and coordinate only)
-    for row in sheet["rows"]:
-        for cell in row:
-            print(f"{cell['coordinate']}: {cell['value']}")
+**Search Response:**
+```json
+{
+  "file_path": "/sites/finance/Shared Documents/report.xlsx",
+  "mode": "search",
+  "query": "budget",
+  "match_count": 3,
+  "matches": [
+    {"sheet": "Sheet1", "coordinate": "A1", "value": "Budget Report"},
+    {"sheet": "Sheet1", "coordinate": "B5", "value": "Monthly Budget"},
+    {"sheet": "Summary", "coordinate": "C3", "value": "Budget Total"}
+  ]
+}
 ```
 
-3. **Parse Excel File with Formatting (Optional)**
+#### 2. Read All Data (Default)
 ```python
-# Use include_formatting=true for additional information
-json_data = sharepoint_excel_to_json(
-    file_path=file_path,
+# Get all sheets and all data
+result = sharepoint_excel(
+    file_path="/sites/finance/Shared Documents/report.xlsx"
+)
+```
+
+#### 3. Read Specific Sheet
+```python
+# Get data from specific sheet only
+result = sharepoint_excel(
+    file_path="/sites/finance/Shared Documents/report.xlsx",
+    sheet="Summary"
+)
+```
+
+#### 4. Read Specific Range
+```python
+# Get data from specific range within a sheet
+result = sharepoint_excel(
+    file_path="/sites/finance/Shared Documents/report.xlsx",
+    sheet="Sheet1",
+    cell_range="A1:D10"
+)
+```
+
+#### 5. Read with Formatting Information
+```python
+# Get data with formatting (colors, merged cells, etc.)
+result = sharepoint_excel(
+    file_path="/sites/finance/Shared Documents/report.xlsx",
+    sheet="Sheet1",
     include_formatting=True
 )
-
-# Parse JSON response
-data = json.loads(json_data)
-
-# Access cell data with formatting
-for sheet in data["sheets"]:
-    for row in sheet["rows"]:
-        for cell in row:
-            print(f"{cell['coordinate']}: {cell['value']}")
-            if "fill" in cell:
-                print(f"  Fill color: {cell['fill']['fg_color']}")
-            if "merged" in cell:
-                print(f"  Merged range: {cell['merged']['range']}")
 ```
 
 ### JSON Output Format
 
-#### Default Format (Lightweight)
-
-By default, returns only essential cell information for optimal performance:
+#### Read Mode (Default)
 
 ```json
 {
@@ -247,14 +277,33 @@ By default, returns only essential cell information for optimal performance:
       "dimensions": "A1:E10",
       "rows": [
         [
-          {
-            "value": "Department",
-            "coordinate": "A1"
-          },
-          {
-            "value": 12500,
-            "coordinate": "B1"
-          }
+          {"value": "Department", "coordinate": "A1"},
+          {"value": 12500, "coordinate": "B1"}
+        ]
+      ]
+    }
+  ]
+}
+```
+
+#### Read Mode with Range
+
+```json
+{
+  "file_path": "/sites/test/Shared Documents/budget.xlsx",
+  "sheets": [
+    {
+      "name": "Summary",
+      "dimensions": "A1:E10",
+      "requested_range": "A1:B2",
+      "rows": [
+        [
+          {"value": "Department", "coordinate": "A1"},
+          {"value": "Budget", "coordinate": "B1"}
+        ],
+        [
+          {"value": "Sales", "coordinate": "A2"},
+          {"value": 50000, "coordinate": "B2"}
         ]
       ]
     }
@@ -263,8 +312,6 @@ By default, returns only essential cell information for optimal performance:
 ```
 
 #### With Formatting (include_formatting=true)
-
-When `include_formatting=true`, includes additional formatting information:
 
 ```json
 {
@@ -313,64 +360,57 @@ When `include_formatting=true`, includes additional formatting information:
 
 ### Common Use Cases
 
-**Extract All Budget Data**
+**Find and Extract Budget Data**
 ```python
 # 1. Search for budget file
 results = sharepoint_docs_search(query="budget 2024", file_extensions=["xlsx"])
 file_path = results[0]["path"]
 
-# 2. Get all Excel data as JSON
-json_data = sharepoint_excel_to_json(file_path=file_path)
-data = json.loads(json_data)
+# 2. Search for the data you need
+search_result = sharepoint_excel(file_path=file_path, query="Total Revenue")
+# → Found at Sheet1:C15
 
-# 3. Process specific sheet
-for sheet in data["sheets"]:
-    if sheet["name"] == "Budget":
-        for row in sheet["rows"]:
-            # Extract values from each cell
-            values = [cell["value"] for cell in row]
-            print(values)
+# 3. Get the relevant section
+data = sharepoint_excel(file_path=file_path, sheet="Sheet1", range="A1:D20")
 ```
 
 **Analyze Cell Formatting**
 ```python
-# 1. Get Excel data with formatting
-json_data = sharepoint_excel_to_json(file_path=file_path, include_formatting=True)
+# Get Excel data with formatting
+json_data = sharepoint_excel(file_path=file_path, include_formatting=True)
 data = json.loads(json_data)
 
-# 2. Find cells with specific formatting
+# Find cells with specific formatting
 for sheet in data["sheets"]:
     for row in sheet["rows"]:
         for cell in row:
-            # Find colored cells
             if cell.get("fill", {}).get("fg_color"):
                 print(f"Colored cell at {cell['coordinate']}: {cell['value']}")
-                print(f"  Color: {cell['fill']['fg_color']}")
 ```
 
-**Export to Different Format**
+**Export Specific Sheet to CSV**
 ```python
-# 1. Get Excel data
-json_data = sharepoint_excel_to_json(file_path=file_path)
+# Get specific sheet data
+json_data = sharepoint_excel(file_path=file_path, sheet="Summary")
 data = json.loads(json_data)
 
-# 2. Convert to CSV-like format
+# Convert to CSV
 import csv
-for sheet in data["sheets"]:
-    with open(f"{sheet['name']}.csv", "w", newline="") as f:
-        writer = csv.writer(f)
-        for row in sheet["rows"]:
-            values = [cell["value"] if cell["value"] is not None else "" for cell in row]
-            writer.writerow(values)
+sheet = data["sheets"][0]
+with open(f"{sheet['name']}.csv", "w", newline="") as f:
+    writer = csv.writer(f)
+    for row in sheet["rows"]:
+        values = [cell["value"] if cell["value"] is not None else "" for cell in row]
+        writer.writerow(values)
 ```
 
 **Process Multiple Sheets**
 ```python
-# 1. Get all Excel data
-json_data = sharepoint_excel_to_json(file_path=file_path)
+# Get all Excel data
+json_data = sharepoint_excel(file_path=file_path)
 data = json.loads(json_data)
 
-# 2. Process each sheet
+# Process each sheet
 summary = {}
 for sheet in data["sheets"]:
     sheet_name = sheet["name"]

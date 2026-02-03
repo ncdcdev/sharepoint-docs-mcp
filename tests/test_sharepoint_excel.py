@@ -1,3 +1,4 @@
+import datetime
 import json
 from io import BytesIO
 from unittest.mock import Mock
@@ -301,3 +302,198 @@ class TestSharePointExcelParser:
         # font と alignment は含まれない
         assert "font" not in cell
         assert "alignment" not in cell
+
+    def test_datetime_serialization(self):
+        """datetime型の値が正しくシリアライズされることのテスト"""
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "DateTimeSheet"
+
+        # 各種datetime型の値を設定
+        ws["A1"] = datetime.datetime(2024, 1, 15, 14, 30, 45)
+        ws["A2"] = datetime.date(2024, 1, 15)
+        ws["A3"] = datetime.time(14, 30, 45)
+        ws["A4"] = datetime.timedelta(days=1, hours=2, minutes=30)
+
+        excel_bytes = BytesIO()
+        wb.save(excel_bytes)
+        excel_bytes.seek(0)
+
+        self.mock_download_client.download_file.return_value = excel_bytes.getvalue()
+
+        parser = SharePointExcelParser(self.mock_download_client)
+        result_json = parser.parse_to_json("/test/datetime.xlsx")
+
+        # JSONパースが成功することを確認（datetime型が適切にシリアライズされている）
+        result = json.loads(result_json)
+        rows = result["sheets"][0]["rows"]
+
+        # 文字列に変換されていることを確認
+        assert rows[0][0]["value"] == "2024-01-15 14:30:45"
+        # openpyxlはdateをdatetimeとして読み込む（時刻部分は00:00:00）
+        assert rows[1][0]["value"] == "2024-01-15 00:00:00"
+        assert rows[2][0]["value"] == "14:30:45"
+        # timedeltaは文字列表現に変換される
+        assert rows[3][0]["value"] == "1 day, 2:30:00"
+
+    def test_search_cells_basic(self):
+        """セル検索の基本テスト"""
+        excel_bytes = self._create_test_excel()
+        self.mock_download_client.download_file.return_value = excel_bytes
+
+        parser = SharePointExcelParser(self.mock_download_client)
+        result_json = parser.search_cells("/test/file.xlsx", "John")
+
+        result = json.loads(result_json)
+        assert result["file_path"] == "/test/file.xlsx"
+        assert result["mode"] == "search"
+        assert result["query"] == "John"
+        assert result["match_count"] == 1
+        assert len(result["matches"]) == 1
+        assert result["matches"][0]["sheet"] == "Sheet1"
+        assert result["matches"][0]["coordinate"] == "A2"
+        assert result["matches"][0]["value"] == "John"
+
+    def test_search_cells_multiple_matches(self):
+        """複数マッチする検索のテスト"""
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Sheet1"
+        ws["A1"] = "売上報告"
+        ws["A2"] = "月間売上"
+        ws["B2"] = 1000
+        ws["A3"] = "売上合計"
+        ws["B3"] = "=SUM(B1:B2)"
+
+        excel_bytes = BytesIO()
+        wb.save(excel_bytes)
+        excel_bytes.seek(0)
+
+        self.mock_download_client.download_file.return_value = excel_bytes.getvalue()
+
+        parser = SharePointExcelParser(self.mock_download_client)
+        result_json = parser.search_cells("/test/file.xlsx", "売上")
+
+        result = json.loads(result_json)
+        assert result["match_count"] == 3
+        assert len(result["matches"]) == 3
+        coordinates = [m["coordinate"] for m in result["matches"]]
+        assert "A1" in coordinates
+        assert "A2" in coordinates
+        assert "A3" in coordinates
+
+    def test_search_cells_no_match(self):
+        """マッチしない検索のテスト"""
+        excel_bytes = self._create_test_excel()
+        self.mock_download_client.download_file.return_value = excel_bytes
+
+        parser = SharePointExcelParser(self.mock_download_client)
+        result_json = parser.search_cells("/test/file.xlsx", "NotFound")
+
+        result = json.loads(result_json)
+        assert result["match_count"] == 0
+        assert result["matches"] == []
+
+    def test_search_cells_multiple_sheets(self):
+        """複数シートにまたがる検索のテスト"""
+        excel_bytes = self._create_multi_sheet_excel()
+        self.mock_download_client.download_file.return_value = excel_bytes
+
+        parser = SharePointExcelParser(self.mock_download_client)
+        result_json = parser.search_cells("/test/file.xlsx", "Data")
+
+        result = json.loads(result_json)
+        assert result["match_count"] == 2
+        assert len(result["matches"]) == 2
+        sheets = [m["sheet"] for m in result["matches"]]
+        assert "Sheet1" in sheets
+        assert "Sheet2" in sheets
+
+    def test_parse_specific_sheet(self):
+        """特定シートのみ取得するテスト"""
+        excel_bytes = self._create_multi_sheet_excel()
+        self.mock_download_client.download_file.return_value = excel_bytes
+
+        parser = SharePointExcelParser(self.mock_download_client)
+        result_json = parser.parse_to_json("/test/file.xlsx", sheet_name="Sheet2")
+
+        result = json.loads(result_json)
+        assert len(result["sheets"]) == 1
+        assert result["sheets"][0]["name"] == "Sheet2"
+        assert result["sheets"][0]["rows"][0][0]["value"] == "Data2"
+
+    def test_parse_nonexistent_sheet(self):
+        """存在しないシート名を指定した場合のエラーテスト"""
+        excel_bytes = self._create_test_excel()
+        self.mock_download_client.download_file.return_value = excel_bytes
+
+        parser = SharePointExcelParser(self.mock_download_client)
+        with pytest.raises(ValueError) as exc_info:
+            parser.parse_to_json("/test/file.xlsx", sheet_name="NonExistent")
+
+        assert "NonExistent" in str(exc_info.value)
+        assert "not found" in str(exc_info.value)
+
+    def test_parse_cell_range(self):
+        """セル範囲指定のテスト"""
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Sheet1"
+        # 5x5のデータを作成
+        for row in range(1, 6):
+            for col in range(1, 6):
+                ws.cell(row=row, column=col, value=f"R{row}C{col}")
+
+        excel_bytes = BytesIO()
+        wb.save(excel_bytes)
+        excel_bytes.seek(0)
+
+        self.mock_download_client.download_file.return_value = excel_bytes.getvalue()
+
+        parser = SharePointExcelParser(self.mock_download_client)
+        result_json = parser.parse_to_json(
+            "/test/file.xlsx", sheet_name="Sheet1", cell_range="B2:D4"
+        )
+
+        result = json.loads(result_json)
+        assert result["sheets"][0]["requested_range"] == "B2:D4"
+        # 3行3列のデータが取得される
+        assert len(result["sheets"][0]["rows"]) == 3
+        assert len(result["sheets"][0]["rows"][0]) == 3
+        # 最初のセルはB2（R2C2）
+        assert result["sheets"][0]["rows"][0][0]["value"] == "R2C2"
+        assert result["sheets"][0]["rows"][0][0]["coordinate"] == "B2"
+        # 最後のセルはD4（R4C4）
+        assert result["sheets"][0]["rows"][2][2]["value"] == "R4C4"
+        assert result["sheets"][0]["rows"][2][2]["coordinate"] == "D4"
+
+    def test_parse_single_cell_range(self):
+        """単一セル範囲指定のテスト"""
+        excel_bytes = self._create_test_excel()
+        self.mock_download_client.download_file.return_value = excel_bytes
+
+        parser = SharePointExcelParser(self.mock_download_client)
+        result_json = parser.parse_to_json(
+            "/test/file.xlsx", sheet_name="Sheet1", cell_range="A1"
+        )
+
+        result = json.loads(result_json)
+        assert result["sheets"][0]["requested_range"] == "A1"
+        assert len(result["sheets"][0]["rows"]) == 1
+        assert len(result["sheets"][0]["rows"][0]) == 1
+        assert result["sheets"][0]["rows"][0][0]["value"] == "Name"
+
+    def test_parse_sheet_and_range_combined(self):
+        """シート名と範囲を組み合わせたテスト"""
+        excel_bytes = self._create_multi_sheet_excel()
+        self.mock_download_client.download_file.return_value = excel_bytes
+
+        parser = SharePointExcelParser(self.mock_download_client)
+        result_json = parser.parse_to_json(
+            "/test/file.xlsx", sheet_name="Sheet1", cell_range="A1"
+        )
+
+        result = json.loads(result_json)
+        assert len(result["sheets"]) == 1
+        assert result["sheets"][0]["name"] == "Sheet1"
+        assert result["sheets"][0]["rows"][0][0]["value"] == "Data1"

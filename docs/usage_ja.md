@@ -168,7 +168,9 @@ SHAREPOINT_SITE_NAME=@onedrive,sales-team,customer-portal
 
 ## Excel操作の使用例
 
-SharePoint上のExcelファイルを解析してJSON形式でデータを取得できます。デフォルトでは値と座標のみの軽量レスポンスを返します。`include_formatting=true`で書式情報も取得できます。
+`sharepoint_excel`ツールを使用して、SharePoint上のExcelファイルの読み取りと検索ができます。2つのモードをサポートしています：
+- **検索モード**: 特定のコンテンツを検索してセル位置を特定（`query`パラメータを使用）
+- **読み取りモード**: シート/範囲フィルタリングオプション付きでデータを取得
 
 ### 前提条件
 
@@ -176,67 +178,95 @@ SharePoint上のExcelファイルを解析してJSON形式でデータを取得�
 - 適切なアクセス権限があること
 - Excel Services不要
 
+### ツールパラメータ
+
+| パラメータ | 型 | デフォルト | 説明 |
+|-----------|------|---------|-------------|
+| `file_path` | str | 必須 | Excelファイルのパス |
+| `query` | str \| None | None | 検索キーワード（検索モードを有効化） |
+| `sheet` | str \| None | None | シート名（特定シートのみ取得） |
+| `cell_range` | str \| None | None | セル範囲（例: "A1:D10"） |
+| `include_formatting` | bool | False | 書式情報を含めるか |
+
 ### 基本的なワークフロー
 
-1. **Excelファイルを検索**
+**推奨: まず検索し、その後特定範囲を読み取る**
+
 ```python
-# sharepoint_docs_search ツールを使用
-results = sharepoint_docs_search(
-    query="予算",
-    file_extensions=["xlsx"]
+# ステップ1: 関連コンテンツを検索
+result = sharepoint_excel(file_path="/path/to/file.xlsx", query="合計")
+# → "合計"がSheet1のセルC10にあることが分かる
+
+# ステップ2: 周辺データを読み取る
+data = sharepoint_excel(file_path="/path/to/file.xlsx", sheet="Sheet1", range="A1:D15")
+```
+
+### 使用パターン
+
+#### 1. 検索モード（queryパラメータ使用）
+```python
+# "予算"を含むセルを検索
+result = sharepoint_excel(
+    file_path="/sites/finance/Shared Documents/report.xlsx",
+    query="予算"
 )
-# 結果から file_path を取得
-file_path = results[0]["path"]
-# 例: "/sites/finance/Shared Documents/budget_2024.xlsx"
 ```
 
-2. **ExcelファイルをJSONに変換（デフォルト：軽量）**
-```python
-# sharepoint_excel_to_json ツールを使用（デフォルト：軽量レスポンス）
-json_data = sharepoint_excel_to_json(file_path=file_path)
-
-# JSONレスポンスを解析
-import json
-data = json.loads(json_data)
-
-# シート情報へのアクセス
-for sheet in data["sheets"]:
-    print(f"シート: {sheet['name']}")
-    print(f"範囲: {sheet['dimensions']}")
-
-    # セルデータへのアクセス（値と座標のみ）
-    for row in sheet["rows"]:
-        for cell in row:
-            print(f"{cell['coordinate']}: {cell['value']}")
+**検索レスポンス:**
+```json
+{
+  "file_path": "/sites/finance/Shared Documents/report.xlsx",
+  "mode": "search",
+  "query": "予算",
+  "match_count": 3,
+  "matches": [
+    {"sheet": "Sheet1", "coordinate": "A1", "value": "予算報告"},
+    {"sheet": "Sheet1", "coordinate": "B5", "value": "月間予算"},
+    {"sheet": "Summary", "coordinate": "C3", "value": "予算合計"}
+  ]
+}
 ```
 
-3. **書式情報を含む解析（オプション）**
+#### 2. 全データ取得（デフォルト）
 ```python
-# include_formatting=true で追加情報を取得
-json_data = sharepoint_excel_to_json(
-    file_path=file_path,
+# 全シート・全データを取得
+result = sharepoint_excel(
+    file_path="/sites/finance/Shared Documents/report.xlsx"
+)
+```
+
+#### 3. 特定シートの取得
+```python
+# 特定シートのデータのみ取得
+result = sharepoint_excel(
+    file_path="/sites/finance/Shared Documents/report.xlsx",
+    sheet="Summary"
+)
+```
+
+#### 4. 特定範囲の取得
+```python
+# シート内の特定範囲のデータを取得
+result = sharepoint_excel(
+    file_path="/sites/finance/Shared Documents/report.xlsx",
+    sheet="Sheet1",
+    cell_range="A1:D10"
+)
+```
+
+#### 5. 書式情報を含む読み取り
+```python
+# 書式（色、結合セルなど）を含むデータを取得
+result = sharepoint_excel(
+    file_path="/sites/finance/Shared Documents/report.xlsx",
+    sheet="Sheet1",
     include_formatting=True
 )
-
-# JSONレスポンスを解析
-data = json.loads(json_data)
-
-# 書式情報を含むセルデータへのアクセス
-for sheet in data["sheets"]:
-    for row in sheet["rows"]:
-        for cell in row:
-            print(f"{cell['coordinate']}: {cell['value']}")
-            if "fill" in cell:
-                print(f"  塗りつぶし色: {cell['fill']['fg_color']}")
-            if "merged" in cell:
-                print(f"  結合範囲: {cell['merged']['range']}")
 ```
 
 ### JSON出力形式
 
-#### デフォルト形式（軽量）
-
-デフォルトでは、パフォーマンス最適化のため必須のセル情報のみを返します
+#### 読み取りモード（デフォルト）
 
 ```json
 {
@@ -247,14 +277,33 @@ for sheet in data["sheets"]:
       "dimensions": "A1:E10",
       "rows": [
         [
-          {
-            "value": "部門",
-            "coordinate": "A1"
-          },
-          {
-            "value": 12500,
-            "coordinate": "B1"
-          }
+          {"value": "部門", "coordinate": "A1"},
+          {"value": 12500, "coordinate": "B1"}
+        ]
+      ]
+    }
+  ]
+}
+```
+
+#### 範囲指定時の読み取りモード
+
+```json
+{
+  "file_path": "/sites/test/Shared Documents/budget.xlsx",
+  "sheets": [
+    {
+      "name": "Summary",
+      "dimensions": "A1:E10",
+      "requested_range": "A1:B2",
+      "rows": [
+        [
+          {"value": "部門", "coordinate": "A1"},
+          {"value": "予算", "coordinate": "B1"}
+        ],
+        [
+          {"value": "営業", "coordinate": "A2"},
+          {"value": 50000, "coordinate": "B2"}
         ]
       ]
     }
@@ -263,8 +312,6 @@ for sheet in data["sheets"]:
 ```
 
 #### 書式情報を含む形式（include_formatting=true）
-
-`include_formatting=true`を指定すると、追加の書式情報を含みます
 
 ```json
 {
@@ -301,83 +348,69 @@ for sheet in data["sheets"]:
 ### 利用可能なセル情報
 
 **デフォルト（常に含まれる）**
-- value
-  - セル値（文字列、数値、日付、数式など）
-- coordinate
-  - セル位置（例: "A1"、"B2"）
+- **value**: セル値（文字列、数値、日付、数式など）
+- **coordinate**: セル位置（例: "A1"、"B2"）
 
 **include_formatting=true の場合**
-- data_type
-  - データ型コード（`s`=文字列、`n`=数値、`f`=数式など）
-- fill
-  - 塗りつぶし色情報（パターンタイプ、前景色/背景色）
-- merged
-  - 結合セル情報（範囲、位置）
-- width
-  - 列幅
-- height
-  - 行高
+- **data_type**: データ型コード（`s`=文字列、`n`=数値、`f`=数式など）
+- **fill**: 塗りつぶし色情報（パターンタイプ、前景色/背景色）
+- **merged**: 結合セル情報（範囲、位置）
+- **width**: 列幅
+- **height**: 行高
 
 ### 一般的な使用例
 
-**すべての予算データを抽出**
+**予算データを検索して抽出**
 ```python
 # 1. 予算ファイルを検索
 results = sharepoint_docs_search(query="予算 2024", file_extensions=["xlsx"])
 file_path = results[0]["path"]
 
-# 2. 全てのExcelデータをJSONで取得
-json_data = sharepoint_excel_to_json(file_path=file_path)
-data = json.loads(json_data)
+# 2. 必要なデータを検索
+search_result = sharepoint_excel(file_path=file_path, query="売上合計")
+# → Sheet1:C15 で見つかった
 
-# 3. 特定のシートを処理
-for sheet in data["sheets"]:
-    if sheet["name"] == "予算":
-        for row in sheet["rows"]:
-            # 各セルから値を抽出
-            values = [cell["value"] for cell in row]
-            print(values)
+# 3. 関連セクションを取得
+data = sharepoint_excel(file_path=file_path, sheet="Sheet1", range="A1:D20")
 ```
 
 **セル書式の分析**
 ```python
-# 1. 書式情報を含むExcelデータを取得
-json_data = sharepoint_excel_to_json(file_path=file_path, include_formatting=True)
+# 書式情報を含むExcelデータを取得
+json_data = sharepoint_excel(file_path=file_path, include_formatting=True)
 data = json.loads(json_data)
 
-# 2. 特定の書式を持つセルを検索
+# 特定の書式を持つセルを検索
 for sheet in data["sheets"]:
     for row in sheet["rows"]:
         for cell in row:
-            # 色付きセルを検索
             if cell.get("fill", {}).get("fg_color"):
                 print(f"色付きセル {cell['coordinate']}: {cell['value']}")
-                print(f"  色: {cell['fill']['fg_color']}")
 ```
 
-**別の形式にエクスポート**
+**特定シートをCSVにエクスポート**
 ```python
-# 1. Excelデータを取得
-json_data = sharepoint_excel_to_json(file_path=file_path)
+# 特定シートのデータを取得
+json_data = sharepoint_excel(file_path=file_path, sheet="Summary")
 data = json.loads(json_data)
 
-# 2. CSV形式に変換
+# CSVに変換
 import csv
-for sheet in data["sheets"]:
-    with open(f"{sheet['name']}.csv", "w", newline="", encoding="utf-8") as f:
-        writer = csv.writer(f)
-        for row in sheet["rows"]:
-            values = [cell["value"] if cell["value"] is not None else "" for cell in row]
-            writer.writerow(values)
+sheet = data["sheets"][0]
+with open(f"{sheet['name']}.csv", "w", newline="", encoding="utf-8") as f:
+    writer = csv.writer(f)
+    for row in sheet["rows"]:
+        values = [cell["value"] if cell["value"] is not None else "" for cell in row]
+        writer.writerow(values)
 ```
 
 **複数シートの処理**
 ```python
-# 1. 全てのExcelデータを取得
-json_data = sharepoint_excel_to_json(file_path=file_path)
+# 全てのExcelデータを取得
+json_data = sharepoint_excel(file_path=file_path)
 data = json.loads(json_data)
 
-# 2. 各シートを処理
+# 各シートを処理
 summary = {}
 for sheet in data["sheets"]:
     sheet_name = sheet["name"]

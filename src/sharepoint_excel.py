@@ -23,7 +23,66 @@ class SharePointExcelParser:
         """
         self.download_client = download_client
 
-    def parse_to_json(self, file_path: str, include_formatting: bool = False) -> str:
+    def search_cells(self, file_path: str, query: str) -> str:
+        """
+        セル内容を検索して該当位置を返す
+
+        Args:
+            file_path: Excelファイルのパス
+            query: 検索キーワード
+
+        Returns:
+            JSON文字列（マッチしたセルの位置情報）
+        """
+        logger.info(f"Searching cells in Excel file: {file_path} (query={query})")
+
+        try:
+            # ファイルをダウンロード
+            file_bytes = self.download_client.download_file(file_path)
+            logger.info(f"Downloaded {len(file_bytes)} bytes")
+
+            # BytesIOでメモリ上に展開
+            file_stream = BytesIO(file_bytes)
+
+            # openpyxlで読み込み
+            workbook = load_workbook(file_stream, data_only=False, rich_text=True)
+
+            matches = []
+            for sheet_name in workbook.sheetnames:
+                sheet = workbook[sheet_name]
+                if sheet.dimensions:
+                    for row in sheet.iter_rows():
+                        for cell in row:
+                            if cell.value is not None:
+                                cell_value_str = str(cell.value)
+                                if query in cell_value_str:
+                                    matches.append({
+                                        "sheet": sheet_name,
+                                        "coordinate": cell.coordinate,
+                                        "value": self._serialize_value(cell.value),
+                                    })
+
+            logger.info(f"Found {len(matches)} matches for query '{query}'")
+
+            return json.dumps({
+                "file_path": file_path,
+                "mode": "search",
+                "query": query,
+                "match_count": len(matches),
+                "matches": matches,
+            }, ensure_ascii=False, indent=2)
+
+        except Exception as e:
+            logger.error(f"Failed to search cells in Excel file: {str(e)}")
+            raise
+
+    def parse_to_json(
+        self,
+        file_path: str,
+        include_formatting: bool = False,
+        sheet_name: str | None = None,
+        cell_range: str | None = None,
+    ) -> str:
         """
         Excelファイルを解析してJSON形式で返す
 
@@ -32,11 +91,16 @@ class SharePointExcelParser:
             include_formatting: 書式情報を含めるかどうか
                 False (デフォルト): value, coordinate のみ
                 True: value, coordinate, data_type, fill, merged, width, height を含む
+            sheet_name: 特定シートのみ取得（Noneで全シート）
+            cell_range: セル範囲指定（例: "A1:D10"）
 
         Returns:
             JSON文字列（全シート・全セルのデータ）
         """
-        logger.info(f"Parsing Excel file: {file_path} (include_formatting={include_formatting})")
+        logger.info(
+            f"Parsing Excel file: {file_path} "
+            f"(include_formatting={include_formatting}, sheet={sheet_name}, range={cell_range})"
+        )
 
         try:
             # ファイルをダウンロード
@@ -49,12 +113,23 @@ class SharePointExcelParser:
             # openpyxlで読み込み（data_only=Falseで数式も取得）
             workbook = load_workbook(file_stream, data_only=False, rich_text=True)
 
-            # 全シートを解析
+            # シートリストを取得
+            if sheet_name:
+                if sheet_name not in workbook.sheetnames:
+                    raise ValueError(
+                        f"Sheet '{sheet_name}' not found. "
+                        f"Available sheets: {workbook.sheetnames}"
+                    )
+                sheets_to_parse = [sheet_name]
+            else:
+                sheets_to_parse = workbook.sheetnames
+
+            # シートを解析
             result = {"file_path": file_path, "sheets": []}
 
-            for sheet_name in workbook.sheetnames:
-                sheet = workbook[sheet_name]
-                sheet_data = self._parse_sheet(sheet, include_formatting)
+            for name in sheets_to_parse:
+                sheet = workbook[name]
+                sheet_data = self._parse_sheet(sheet, include_formatting, cell_range)
                 result["sheets"].append(sheet_data)
 
             logger.info(f"Parsed {len(result['sheets'])} sheets")
@@ -64,13 +139,19 @@ class SharePointExcelParser:
             logger.error(f"Failed to parse Excel file: {str(e)}")
             raise
 
-    def _parse_sheet(self, sheet, include_formatting: bool) -> dict[str, Any]:
+    def _parse_sheet(
+        self,
+        sheet,
+        include_formatting: bool,
+        cell_range: str | None = None,
+    ) -> dict[str, Any]:
         """
         シートを解析してdict形式で返す
 
         Args:
             sheet: openpyxl Worksheet
             include_formatting: 書式情報を含めるかどうか
+            cell_range: セル範囲指定（例: "A1:D10"）
 
         Returns:
             シートデータのdict
@@ -82,7 +163,25 @@ class SharePointExcelParser:
         }
 
         # セル範囲を取得
-        if sheet.dimensions:
+        if cell_range:
+            # 指定された範囲のみを取得
+            sheet_data["requested_range"] = cell_range
+            range_data = sheet[cell_range]
+            # 単一セルの場合（Cellオブジェクト）
+            if not isinstance(range_data, tuple):
+                cell_data = self._parse_cell(range_data, include_formatting)
+                sheet_data["rows"].append([cell_data])
+            else:
+                for row in range_data:
+                    row_data = []
+                    # 単一列の場合はCellオブジェクトが直接来る
+                    if not isinstance(row, tuple):
+                        row = (row,)
+                    for cell in row:
+                        cell_data = self._parse_cell(cell, include_formatting)
+                        row_data.append(cell_data)
+                    sheet_data["rows"].append(row_data)
+        elif sheet.dimensions:
             for row in sheet.iter_rows():
                 row_data = []
                 for cell in row:
@@ -105,7 +204,7 @@ class SharePointExcelParser:
         """
         # 基本情報（常に含む）
         cell_data = {
-            "value": cell.value,
+            "value": self._serialize_value(cell.value),
             "coordinate": cell.coordinate,
         }
 
@@ -147,6 +246,26 @@ class SharePointExcelParser:
                         cell_data["height"] = row_dim.height
 
         return cell_data
+
+    def _serialize_value(self, value: Any) -> Any:
+        """
+        セル値をJSONシリアライズ可能な形式に変換
+
+        Args:
+            value: セル値
+
+        Returns:
+            JSONシリアライズ可能な値
+        """
+        if value is None:
+            return None
+
+        # 基本的な型（JSONシリアライズ可能）はそのまま
+        if isinstance(value, (str, int, float, bool)):
+            return value
+
+        # その他の型（datetime, timedelta等）は文字列に変換
+        return str(value)
 
     def _color_to_hex(self, color: Color | None) -> str | None:
         """
