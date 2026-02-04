@@ -454,6 +454,7 @@ def sharepoint_excel(
     sheet: str | None = None,
     cell_range: str | None = None,
     include_formatting: bool = False,
+    include_header: bool = False,
     ctx: Context | None = None,
 ) -> str:
     """
@@ -465,6 +466,10 @@ def sharepoint_excel(
         sheet: シート名（特定シートのみ取得）
         cell_range: セル範囲（例: "A1:D10"）
         include_formatting: 書式情報を含めるか
+        include_header: ヘッダー情報を分離して返すか
+            False (デフォルト): すべてのデータをrowsに含める
+            True: freeze_panesを使用してheader_rowsとdata_rowsに分離
+                 固定行がある場合、cell_range指定時は固定範囲も自動的に含める
         ctx: FastMCP context (injected automatically)
 
     Returns:
@@ -473,7 +478,7 @@ def sharepoint_excel(
     logging.info(
         f"SharePoint Excel operation: {file_path} "
         f"(query={query}, sheet={sheet}, cell_range={cell_range}, "
-        f"include_formatting={include_formatting})"
+        f"include_formatting={include_formatting}, include_header={include_header})"
     )
 
     try:
@@ -483,7 +488,7 @@ def sharepoint_excel(
         # Excel解析クライアントを作成
         parser = SharePointExcelParser(client)
 
-        # 検索モード
+        # 検索モード（include_headerは無視）
         if query:
             return parser.search_cells(file_path, query)
 
@@ -493,6 +498,7 @@ def sharepoint_excel(
             include_formatting=include_formatting,
             sheet_name=sheet,
             cell_range=cell_range,
+            include_header=include_header,
         )
 
     except Exception as e:
