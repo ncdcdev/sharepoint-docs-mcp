@@ -10,6 +10,7 @@ from typing import Any
 from openpyxl import load_workbook
 from openpyxl.cell import Cell
 from openpyxl.styles import Color
+from openpyxl.utils import get_column_letter
 
 logger = logging.getLogger(__name__)
 
@@ -163,6 +164,17 @@ class SharePointExcelParser:
             "rows": [],
         }
 
+        # マージセル情報をキャッシュ（パフォーマンス最適化）
+        merged_cell_map: dict[str, str] | None = None
+        if include_formatting and sheet.merged_cells.ranges:
+            merged_cell_map = {}
+            for merged_range in sheet.merged_cells.ranges:
+                for cell_coord in merged_range.cells:
+                    # cell_coord is (row, col) tuple
+                    col_letter = get_column_letter(cell_coord[1])
+                    coord_str = f"{col_letter}{cell_coord[0]}"
+                    merged_cell_map[coord_str] = str(merged_range)
+
         # セル範囲を取得
         if cell_range:
             # 指定された範囲のみを取得
@@ -181,25 +193,31 @@ class SharePointExcelParser:
                 rows_to_process = range_data
 
             for row in rows_to_process:
-                row_data = [self._parse_cell(cell, include_formatting) for cell in row]
+                row_data = [self._parse_cell(cell, include_formatting, merged_cell_map) for cell in row]
                 sheet_data["rows"].append(row_data)
         elif sheet.dimensions:
             for row in sheet.iter_rows():
                 row_data = []
                 for cell in row:
-                    cell_data = self._parse_cell(cell, include_formatting)
+                    cell_data = self._parse_cell(cell, include_formatting, merged_cell_map)
                     row_data.append(cell_data)
                 sheet_data["rows"].append(row_data)
 
         return sheet_data
 
-    def _parse_cell(self, cell, include_formatting: bool) -> dict[str, Any]:
+    def _parse_cell(
+        self,
+        cell,
+        include_formatting: bool,
+        merged_cell_map: dict[str, str] | None = None,
+    ) -> dict[str, Any]:
         """
         セルを解析してdict形式で返す
 
         Args:
             cell: openpyxl Cell
             include_formatting: 書式情報を含めるかどうか
+            merged_cell_map: マージセル座標からマージ範囲へのマップ（パフォーマンス最適化用）
 
         Returns:
             セルデータのdict
@@ -222,17 +240,15 @@ class SharePointExcelParser:
                     "bg_color": self._color_to_hex(cell.fill.bgColor),
                 }
 
-            # セル結合情報
-            if hasattr(cell, "parent") and cell.parent:
-                sheet = cell.parent
-                for merged_range in sheet.merged_cells.ranges:
-                    if cell.coordinate in merged_range:
-                        cell_data["merged"] = {
-                            "range": str(merged_range),
-                            "is_top_left": cell.coordinate
-                            == merged_range.start_cell.coordinate,
-                        }
-                        break
+            # セル結合情報（キャッシュを使用してO(1)で検索）
+            if merged_cell_map and cell.coordinate in merged_cell_map:
+                merged_range_str = merged_cell_map[cell.coordinate]
+                # 左上セルかどうかを判定（マージ範囲の最初の座標と比較）
+                range_start = merged_range_str.split(":")[0]
+                cell_data["merged"] = {
+                    "range": merged_range_str,
+                    "is_top_left": cell.coordinate == range_start,
+                }
 
             # セルサイズ情報（MergedCellはcolumn_letterを持たない可能性がある）
             if hasattr(cell, "column_letter") and hasattr(cell, "row"):

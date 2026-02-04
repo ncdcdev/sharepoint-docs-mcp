@@ -219,8 +219,9 @@ class TestSharePointExcelParser:
         assert result["sheets"][0]["name"] == "EmptySheet"
         # openpyxlは空のシートでも最低1つのセル（A1）を持つ
         assert result["sheets"][0]["dimensions"] is not None
-        # 1行1列のデータが含まれる可能性がある
-        assert len(result["sheets"][0]["rows"]) >= 0
+        # 空のシートでも行データが取得できる
+        rows = result["sheets"][0]["rows"]
+        assert isinstance(rows, list)
 
     def test_color_to_hex_rgb(self):
         """RGB色の16進数変換テスト"""

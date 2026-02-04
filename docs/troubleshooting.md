@@ -53,7 +53,7 @@ Access token request failed
 #### Invalid Excel File Format
 
 ```
-File is not a valid Excel file or is corrupted
+The file is not a valid Excel file or is corrupted. Please verify the file is a valid .xlsx file. Try opening it in Excel locally to check for corruption, or re-upload the file to SharePoint.
 ```
 
 **Solutions:**
@@ -64,7 +64,7 @@ File is not a valid Excel file or is corrupted
 #### Excel File Not Found
 
 ```
-The specified Excel file was not found: /sites/team/documents/report.xlsx
+The specified Excel file was not found: /sites/team/documents/report.xlsx Please verify the file path is correct and the file exists. You can search for the file using sharepoint_docs_search with file_extensions=['xlsx'] to get the correct path.
 ```
 
 **Solutions:**
@@ -75,7 +75,7 @@ The specified Excel file was not found: /sites/team/documents/report.xlsx
 #### Sheet Not Found
 
 ```
-Sheet 'Sheet2' not found. Available sheets: ['Sheet1', 'Summary']
+The specified sheet was not found: Sheet2 Run sharepoint_excel without specifying 'sheet' to list available sheets (check sheets[].name in the response), then use a valid sheet name.
 ```
 
 **Solutions:**
@@ -86,7 +86,7 @@ Sheet 'Sheet2' not found. Available sheets: ['Sheet1', 'Summary']
 #### Invalid Cell Range
 
 ```
-Invalid cell range: ZZ999999
+The specified cell range is invalid: ZZ999999 Please use a valid range format like 'A1:C10' or 'A1'. Ensure the range is within the actual bounds of the Excel file.
 ```
 
 **Solutions:**

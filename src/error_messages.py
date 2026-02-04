@@ -240,25 +240,30 @@ def handle_sharepoint_error(
     Returns:
         SharePointError: Natural language error message
     """
+    # SharePointErrorは再ラップしない
+    if isinstance(error, SharePointError):
+        return error
+
     error_str = str(error).lower()
+    error_type_name = type(error).__name__.lower()
 
     # Excel操作のエラー分類（openpyxlベース）
     if context.startswith("excel_") or context == "excel_parse":
+        # ファイル形式エラー（zipfile.BadZipFile, openpyxl例外など）を先に判定
+        # "invalid" を含むファイル形式エラーを先に処理
+        if "badzip" in error_type_name or "not a valid" in error_str or "corrupt" in error_str:
+            return get_excel_invalid_file_error(error)
+
         # ValueErrorはシート名が見つからない場合
         if isinstance(error, ValueError):
             if "not found" in error_str and "sheet" in error_str:
                 sheet_name = excel_context.get("sheet_name") if excel_context else None
                 return get_excel_sheet_not_found_error(sheet_name or "unknown", error)
 
-        # openpyxlの無効な座標例外
-        error_type_name = type(error).__name__.lower()
-        if "coordinate" in error_type_name or "invalid" in error_type_name:
+        # openpyxlの無効な座標例外（"coordinate" を明示的にチェック）
+        if "coordinate" in error_type_name:
             range_spec = excel_context.get("range_spec") if excel_context else None
             return get_excel_invalid_range_error(range_spec or "unknown", error)
-
-        # ファイル形式エラー（zipfile.BadZipFile, openpyxl例外など）
-        if "badzip" in error_type_name or "not a valid" in error_str or "corrupt" in error_str:
-            return get_excel_invalid_file_error(error)
 
         # HTTP 404エラー（ファイルが見つからない）
         if hasattr(error, "response") and hasattr(error.response, "status_code"):

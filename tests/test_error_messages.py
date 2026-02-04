@@ -1,8 +1,14 @@
-import pytest
-from unittest.mock import Mock
-import requests
+import zipfile
 
-from src.error_messages import handle_sharepoint_error
+import pytest
+import requests
+from unittest.mock import Mock
+
+from src.error_messages import (
+    ErrorCategory,
+    SharePointError,
+    handle_sharepoint_error,
+)
 
 
 class TestHandleSharePointError:
@@ -112,3 +118,94 @@ class TestHandleSharePointError:
 
         assert "error" in str(result).lower()
         assert "configuration" in str(result).lower() or "administrator" in str(result).lower()
+
+
+class TestExcelErrorClassification:
+    """Excel操作のエラー分類テスト"""
+
+    @pytest.mark.unit
+    def test_excel_file_not_found_http_404(self):
+        """HTTP 404エラーのExcelコンテキストでの分類テスト"""
+        mock_response = Mock()
+        mock_response.status_code = 404
+        mock_response.text = "Not Found"
+
+        http_error = requests.HTTPError()
+        http_error.response = mock_response
+
+        result = handle_sharepoint_error(
+            http_error,
+            "excel_parse",
+            excel_context={"file_path": "/sites/test/test.xlsx"},
+        )
+
+        assert result.category == ErrorCategory.EXCEL_FILE_NOT_FOUND
+        assert "test.xlsx" in str(result)
+
+    @pytest.mark.unit
+    def test_excel_sheet_not_found(self):
+        """シートが見つからないエラーの分類テスト"""
+        error = ValueError("Sheet 'NonExistent' not found. Available sheets: ['Sheet1']")
+
+        result = handle_sharepoint_error(
+            error,
+            "excel_parse",
+            excel_context={"sheet_name": "NonExistent"},
+        )
+
+        assert result.category == ErrorCategory.EXCEL_SHEET_NOT_FOUND
+        assert "NonExistent" in str(result)
+
+    @pytest.mark.unit
+    def test_excel_invalid_file_badzip(self):
+        """無効なExcelファイル（BadZipFile）のエラー分類テスト"""
+        error = zipfile.BadZipFile("File is not a zip file")
+
+        result = handle_sharepoint_error(error, "excel_parse")
+
+        assert result.category == ErrorCategory.EXCEL_INVALID_FILE
+        assert "valid" in str(result).lower()
+
+    @pytest.mark.unit
+    def test_excel_invalid_file_corrupt(self):
+        """破損したExcelファイルのエラー分類テスト"""
+        error = Exception("This file is not a valid xlsx file or is corrupted")
+
+        result = handle_sharepoint_error(error, "excel_parse")
+
+        assert result.category == ErrorCategory.EXCEL_INVALID_FILE
+
+    @pytest.mark.unit
+    def test_sharepoint_error_not_rewrapped(self):
+        """SharePointErrorが再ラップされないことのテスト"""
+        original_error = SharePointError(
+            category=ErrorCategory.EXCEL_SHEET_NOT_FOUND,
+            message="Original message",
+            solution="Original solution",
+        )
+
+        result = handle_sharepoint_error(original_error, "excel_parse")
+
+        # 同じオブジェクトが返される
+        assert result is original_error
+        assert result.category == ErrorCategory.EXCEL_SHEET_NOT_FOUND
+        assert result.message == "Original message"
+
+    @pytest.mark.unit
+    def test_excel_context_preserves_file_path(self):
+        """excel_contextのfile_pathが保持されることのテスト"""
+        mock_response = Mock()
+        mock_response.status_code = 404
+        mock_response.text = "Not Found"
+
+        http_error = requests.HTTPError()
+        http_error.response = mock_response
+
+        file_path = "/sites/finance/Shared Documents/budget.xlsx"
+        result = handle_sharepoint_error(
+            http_error,
+            "excel_parse",
+            excel_context={"file_path": file_path},
+        )
+
+        assert file_path in str(result)
