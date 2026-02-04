@@ -64,6 +64,9 @@ class SharePointConfig:
             "SHAREPOINT_DOWNLOAD_TOOL_DESCRIPTION", "Download a file from SharePoint"
         )
 
+        # 無効化するツールの設定
+        self._disabled_tools_str = os.getenv("SHAREPOINT_DISABLED_TOOLS", "")
+
     @property
     def site_url(self) -> str:
         """サイトURLを取得（サイト名が指定されている場合のみ）"""
@@ -258,6 +261,32 @@ class SharePointConfig:
     def is_valid(self) -> bool:
         """設定が有効かどうかを返す"""
         return len(self.validate()) == 0
+
+    @property
+    def disabled_tools(self) -> set[str]:
+        """無効化されたツール名のセットを返す
+
+        環境変数 SHAREPOINT_DISABLED_TOOLS で指定されたツールのセット。
+        有効な値: search, download, excel
+        """
+        if not self._disabled_tools_str:
+            return set()
+        return {
+            tool.strip().lower()
+            for tool in self._disabled_tools_str.split(",")
+            if tool.strip()
+        }
+
+    def is_tool_enabled(self, tool_name: str) -> bool:
+        """指定されたツールが有効かどうかを返す
+
+        Args:
+            tool_name: ツール名 (search, download, excel)
+
+        Returns:
+            ツールが有効な場合True、無効な場合False
+        """
+        return tool_name.lower() not in self.disabled_tools
 
 
 # グローバル設定インスタンス

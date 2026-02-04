@@ -303,3 +303,119 @@ class TestOneDriveConfig:
             # 有効なメールアドレスのみが含まれる
             assert len(targets) == 1
             assert targets[0]["email"] == "user@company.com"
+
+
+class TestDisabledTools:
+    """ツール無効化機能のテスト"""
+
+    def test_no_disabled_tools_by_default(self):
+        """デフォルトでは全ツールが有効であることのテスト"""
+        env_vars = {
+            "SHAREPOINT_BASE_URL": "https://test.sharepoint.com",
+            "SHAREPOINT_TENANT_ID": "test-tenant-id",
+            "SHAREPOINT_CLIENT_ID": "test-client-id",
+            "SHAREPOINT_CERTIFICATE_TEXT": "cert",
+            "SHAREPOINT_PRIVATE_KEY_TEXT": "key",
+        }
+
+        with patch.dict(os.environ, env_vars, clear=True):
+            config = SharePointConfig()
+
+            assert config.disabled_tools == set()
+            assert config.is_tool_enabled("search") is True
+            assert config.is_tool_enabled("download") is True
+            assert config.is_tool_enabled("excel") is True
+
+    def test_disable_single_tool(self):
+        """単一ツールを無効化するテスト"""
+        env_vars = {
+            "SHAREPOINT_BASE_URL": "https://test.sharepoint.com",
+            "SHAREPOINT_TENANT_ID": "test-tenant-id",
+            "SHAREPOINT_CLIENT_ID": "test-client-id",
+            "SHAREPOINT_CERTIFICATE_TEXT": "cert",
+            "SHAREPOINT_PRIVATE_KEY_TEXT": "key",
+            "SHAREPOINT_DISABLED_TOOLS": "excel",
+        }
+
+        with patch.dict(os.environ, env_vars, clear=True):
+            config = SharePointConfig()
+
+            assert config.disabled_tools == {"excel"}
+            assert config.is_tool_enabled("search") is True
+            assert config.is_tool_enabled("download") is True
+            assert config.is_tool_enabled("excel") is False
+
+    def test_disable_multiple_tools(self):
+        """複数ツールを無効化するテスト"""
+        env_vars = {
+            "SHAREPOINT_BASE_URL": "https://test.sharepoint.com",
+            "SHAREPOINT_TENANT_ID": "test-tenant-id",
+            "SHAREPOINT_CLIENT_ID": "test-client-id",
+            "SHAREPOINT_CERTIFICATE_TEXT": "cert",
+            "SHAREPOINT_PRIVATE_KEY_TEXT": "key",
+            "SHAREPOINT_DISABLED_TOOLS": "excel,download",
+        }
+
+        with patch.dict(os.environ, env_vars, clear=True):
+            config = SharePointConfig()
+
+            assert config.disabled_tools == {"excel", "download"}
+            assert config.is_tool_enabled("search") is True
+            assert config.is_tool_enabled("download") is False
+            assert config.is_tool_enabled("excel") is False
+
+    def test_disable_all_tools(self):
+        """全ツールを無効化するテスト"""
+        env_vars = {
+            "SHAREPOINT_BASE_URL": "https://test.sharepoint.com",
+            "SHAREPOINT_TENANT_ID": "test-tenant-id",
+            "SHAREPOINT_CLIENT_ID": "test-client-id",
+            "SHAREPOINT_CERTIFICATE_TEXT": "cert",
+            "SHAREPOINT_PRIVATE_KEY_TEXT": "key",
+            "SHAREPOINT_DISABLED_TOOLS": "search,download,excel",
+        }
+
+        with patch.dict(os.environ, env_vars, clear=True):
+            config = SharePointConfig()
+
+            assert config.is_tool_enabled("search") is False
+            assert config.is_tool_enabled("download") is False
+            assert config.is_tool_enabled("excel") is False
+
+    def test_case_insensitive_tool_names(self):
+        """ツール名の大文字小文字を区別しないテスト"""
+        env_vars = {
+            "SHAREPOINT_BASE_URL": "https://test.sharepoint.com",
+            "SHAREPOINT_TENANT_ID": "test-tenant-id",
+            "SHAREPOINT_CLIENT_ID": "test-client-id",
+            "SHAREPOINT_CERTIFICATE_TEXT": "cert",
+            "SHAREPOINT_PRIVATE_KEY_TEXT": "key",
+            "SHAREPOINT_DISABLED_TOOLS": "EXCEL,Download",
+        }
+
+        with patch.dict(os.environ, env_vars, clear=True):
+            config = SharePointConfig()
+
+            assert config.is_tool_enabled("excel") is False
+            assert config.is_tool_enabled("EXCEL") is False
+            assert config.is_tool_enabled("download") is False
+            assert config.is_tool_enabled("Download") is False
+            assert config.is_tool_enabled("search") is True
+
+    def test_whitespace_handling(self):
+        """空白文字の処理テスト"""
+        env_vars = {
+            "SHAREPOINT_BASE_URL": "https://test.sharepoint.com",
+            "SHAREPOINT_TENANT_ID": "test-tenant-id",
+            "SHAREPOINT_CLIENT_ID": "test-client-id",
+            "SHAREPOINT_CERTIFICATE_TEXT": "cert",
+            "SHAREPOINT_PRIVATE_KEY_TEXT": "key",
+            "SHAREPOINT_DISABLED_TOOLS": " excel , download ",
+        }
+
+        with patch.dict(os.environ, env_vars, clear=True):
+            config = SharePointConfig()
+
+            assert config.disabled_tools == {"excel", "download"}
+            assert config.is_tool_enabled("excel") is False
+            assert config.is_tool_enabled("download") is False
