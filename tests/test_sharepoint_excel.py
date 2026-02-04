@@ -97,6 +97,32 @@ class TestSharePointExcelParser:
         excel_bytes.seek(0)
         return excel_bytes.getvalue()
 
+    def _create_frozen_panes_excel(self, freeze_panes: str) -> bytes:
+        """固定行・列を含むテスト用Excelファイルを作成"""
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "FrozenSheet"
+
+        # ヘッダー行を作成
+        ws["A1"] = "Header1"
+        ws["B1"] = "Header2"
+        ws["C1"] = "Header3"
+        ws["D1"] = "Header4"
+
+        # データ行を作成
+        for row in range(2, 11):
+            for col in range(1, 5):
+                ws.cell(row=row, column=col, value=f"Data{row-1}_{col}")
+
+        # freeze_panesを設定
+        ws.freeze_panes = freeze_panes
+
+        # BytesIOに保存
+        excel_bytes = BytesIO()
+        wb.save(excel_bytes)
+        excel_bytes.seek(0)
+        return excel_bytes.getvalue()
+
     def test_parse_simple_excel(self):
         """シンプルなExcelファイルの解析テスト（デフォルト：最小限の情報）"""
         excel_bytes = self._create_test_excel()
@@ -498,3 +524,146 @@ class TestSharePointExcelParser:
         assert len(result["sheets"]) == 1
         assert result["sheets"][0]["name"] == "Sheet1"
         assert result["sheets"][0]["rows"][0][0]["value"] == "Data1"
+
+    def test_parse_with_freeze_panes_both(self):
+        """freeze_panes="B2"（行と列の両方固定）のテスト"""
+        excel_bytes = self._create_frozen_panes_excel("B2")
+        self.mock_download_client.download_file.return_value = excel_bytes
+
+        parser = SharePointExcelParser(self.mock_download_client)
+        result_json = parser.parse_to_json("/test/frozen.xlsx", include_header=True)
+
+        result = json.loads(result_json)
+        sheet = result["sheets"][0]
+
+        # freeze_panes情報を確認
+        assert sheet["freeze_panes"] == "B2"
+        assert sheet["frozen_rows"] == 1
+        assert sheet["frozen_cols"] == 1
+
+        # ヘッダー行を確認
+        assert len(sheet["header_rows"]) == 1
+        assert sheet["header_rows"][0][0]["value"] == "Header1"
+        assert sheet["header_rows"][0][1]["value"] == "Header2"
+
+        # データ行を確認
+        assert len(sheet["data_rows"]) == 9
+        assert sheet["data_rows"][0][0]["value"] == "Data1_1"
+        assert sheet["data_rows"][0][1]["value"] == "Data1_2"
+
+    def test_parse_with_freeze_panes_rows_only(self):
+        """freeze_panes="A2"（行のみ固定）のテスト"""
+        excel_bytes = self._create_frozen_panes_excel("A2")
+        self.mock_download_client.download_file.return_value = excel_bytes
+
+        parser = SharePointExcelParser(self.mock_download_client)
+        result_json = parser.parse_to_json("/test/frozen.xlsx", include_header=True)
+
+        result = json.loads(result_json)
+        sheet = result["sheets"][0]
+
+        # freeze_panes情報を確認
+        assert sheet["freeze_panes"] == "A2"
+        assert sheet["frozen_rows"] == 1
+        assert sheet["frozen_cols"] == 0
+
+        # ヘッダー行を確認
+        assert len(sheet["header_rows"]) == 1
+        assert sheet["header_rows"][0][0]["value"] == "Header1"
+
+        # データ行を確認
+        assert len(sheet["data_rows"]) == 9
+        assert sheet["data_rows"][0][0]["value"] == "Data1_1"
+
+    def test_parse_with_no_freeze_panes(self):
+        """freeze_panes=Noneのテスト"""
+        excel_bytes = self._create_test_excel()
+        self.mock_download_client.download_file.return_value = excel_bytes
+
+        parser = SharePointExcelParser(self.mock_download_client)
+        result_json = parser.parse_to_json("/test/file.xlsx", include_header=True)
+
+        result = json.loads(result_json)
+        sheet = result["sheets"][0]
+
+        # freeze_panes情報を確認
+        assert "freeze_panes" not in sheet
+        assert sheet["frozen_rows"] == 0
+        assert sheet["frozen_cols"] == 0
+
+        # ヘッダーなし、すべてデータ行
+        assert len(sheet["header_rows"]) == 0
+        assert len(sheet["data_rows"]) == 2
+        assert sheet["data_rows"][0][0]["value"] == "Name"
+
+    def test_parse_range_with_overlapping_headers(self):
+        """cell_range内にヘッダーが含まれる場合のテスト"""
+        excel_bytes = self._create_frozen_panes_excel("B2")
+        self.mock_download_client.download_file.return_value = excel_bytes
+
+        parser = SharePointExcelParser(self.mock_download_client)
+        result_json = parser.parse_to_json(
+            "/test/frozen.xlsx", include_header=True, cell_range="A1:D5"
+        )
+
+        result = json.loads(result_json)
+        sheet = result["sheets"][0]
+
+        # ヘッダー行を確認（行1）
+        assert len(sheet["header_rows"]) == 1
+        assert sheet["header_rows"][0][0]["value"] == "Header1"
+
+        # データ行を確認（行2-5）
+        assert len(sheet["data_rows"]) == 4
+        assert sheet["data_rows"][0][0]["value"] == "Data1_1"
+        assert sheet["data_rows"][3][0]["value"] == "Data4_1"
+
+    def test_parse_range_with_non_overlapping_headers(self):
+        """ヘッダーがcell_range外にある場合のテスト（拡張して取得）"""
+        excel_bytes = self._create_frozen_panes_excel("B2")
+        self.mock_download_client.download_file.return_value = excel_bytes
+
+        parser = SharePointExcelParser(self.mock_download_client)
+        result_json = parser.parse_to_json(
+            "/test/frozen.xlsx", include_header=True, cell_range="A5:D10"
+        )
+
+        result = json.loads(result_json)
+        sheet = result["sheets"][0]
+
+        # requested_rangeは元のまま
+        assert sheet["requested_range"] == "A5:D10"
+
+        # ヘッダー行が自動的に追加される（行1）
+        assert len(sheet["header_rows"]) == 1
+        assert sheet["header_rows"][0][0]["value"] == "Header1"
+        assert sheet["header_rows"][0][0]["coordinate"] == "A1"
+
+        # データ行は指定範囲のまま（行5-10）
+        assert len(sheet["data_rows"]) == 6
+        assert sheet["data_rows"][0][0]["value"] == "Data4_1"
+        assert sheet["data_rows"][0][0]["coordinate"] == "A5"
+
+    def test_parse_backward_compatibility(self):
+        """include_header=Falseで既存動作を確認（後方互換性）"""
+        excel_bytes = self._create_frozen_panes_excel("B2")
+        self.mock_download_client.download_file.return_value = excel_bytes
+
+        parser = SharePointExcelParser(self.mock_download_client)
+        result_json = parser.parse_to_json("/test/frozen.xlsx", include_header=False)
+
+        result = json.loads(result_json)
+        sheet = result["sheets"][0]
+
+        # freeze_panes情報は含まれない
+        assert "freeze_panes" not in sheet
+        assert "frozen_rows" not in sheet
+        assert "frozen_cols" not in sheet
+        assert "header_rows" not in sheet
+        assert "data_rows" not in sheet
+
+        # 既存のrows形式
+        assert "rows" in sheet
+        assert len(sheet["rows"]) == 10
+        assert sheet["rows"][0][0]["value"] == "Header1"
+        assert sheet["rows"][1][0]["value"] == "Data1_1"

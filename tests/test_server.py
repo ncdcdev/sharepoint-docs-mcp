@@ -194,6 +194,7 @@ class TestSharePointExcel:
                     include_formatting=False,
                     sheet_name=None,
                     cell_range=None,
+                    include_header=False,
                 )
 
     @pytest.mark.unit
@@ -228,6 +229,7 @@ class TestSharePointExcel:
                     include_formatting=False,
                     sheet_name="Sheet2",
                     cell_range=None,
+                    include_header=False,
                 )
 
     @pytest.mark.unit
@@ -246,6 +248,7 @@ class TestSharePointExcel:
                     include_formatting=False,
                     sheet_name="Sheet1",
                     cell_range="A1:D10",
+                    include_header=False,
                 )
 
     @pytest.mark.unit
@@ -263,6 +266,7 @@ class TestSharePointExcel:
                     include_formatting=True,
                     sheet_name=None,
                     cell_range=None,
+                    include_header=False,
                 )
 
     @pytest.mark.unit
