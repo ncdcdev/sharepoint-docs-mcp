@@ -200,7 +200,7 @@ class TestSharePointExcel:
         """Excel検索モードのテスト"""
         with patch("src.server._get_sharepoint_client", return_value=mock_sharepoint_client):
             with patch("src.server.config", mock_config):
-                result = sharepoint_excel(
+                sharepoint_excel(
                     file_path="/sites/test/Shared Documents/test.xlsx",
                     query="売上"
                 )

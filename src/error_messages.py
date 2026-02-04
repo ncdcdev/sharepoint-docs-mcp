@@ -185,7 +185,7 @@ def get_excel_sheet_not_found_error(
     return SharePointError(
         category=ErrorCategory.EXCEL_SHEET_NOT_FOUND,
         message=f"The specified sheet was not found: {sheet_name}",
-        solution="Please use the list_sheets operation first to get the available sheet names, then use the correct sheet name.",
+        solution="Run sharepoint_excel without specifying 'sheet' to list available sheets (check sheets[].name in the response), then use a valid sheet name.",
         original_error=original_error,
     )
 
