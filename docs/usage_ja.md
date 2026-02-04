@@ -187,6 +187,7 @@ SHAREPOINT_SITE_NAME=@onedrive,sales-team,customer-portal
 | `sheet` | str \| None | None | シート名（特定シートのみ取得） |
 | `cell_range` | str \| None | None | セル範囲（例: "A1:D10"） |
 | `include_formatting` | bool | False | 書式情報を含めるか |
+| `include_header` | bool | False | ヘッダー行を自動検出して分離するか（`freeze_panes`を使用） |
 
 ### 基本的なワークフロー
 
@@ -262,6 +263,51 @@ result = sharepoint_excel(
     sheet="Sheet1",
     include_formatting=True
 )
+```
+
+#### 6. ヘッダー行の自動検出
+```python
+# freeze_panesを使用してヘッダー行とデータ行を自動分離
+result = sharepoint_excel(
+    file_path="/sites/finance/Shared Documents/report.xlsx",
+    sheet="Sheet1",
+    include_header=True
+)
+```
+
+**ヘッダー検出レスポンス:**
+```json
+{
+  "file_path": "/sites/finance/Shared Documents/report.xlsx",
+  "sheets": [{
+    "name": "Sheet1",
+    "freeze_panes": "B2",
+    "frozen_rows": 1,
+    "frozen_cols": 1,
+    "header_rows": [
+      [
+        {"value": "商品名", "coordinate": "A1"},
+        {"value": "価格", "coordinate": "B1"},
+        {"value": "在庫", "coordinate": "C1"}
+      ]
+    ],
+    "data_rows": [
+      [
+        {"value": "商品A", "coordinate": "A2"},
+        {"value": 1000, "coordinate": "B2"},
+        {"value": 50, "coordinate": "C2"}
+      ],
+      ...
+    ]
+  }]
+}
+```
+
+**特徴:**
+- Excelの固定行・列（freeze_panes）を自動検出
+- ヘッダー行とデータ行を分離して返す
+- `cell_range`指定時、固定行範囲を自動的に含める
+- 後方互換性: `include_header=False`（デフォルト）では既存の`rows`形式
 ```
 
 ### JSON出力形式

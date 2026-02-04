@@ -187,6 +187,7 @@ The `sharepoint_excel` tool allows you to read and search Excel files in SharePo
 | `sheet` | str \| None | None | Sheet name (get specific sheet only) |
 | `cell_range` | str \| None | None | Cell range (e.g., "A1:D10") |
 | `include_formatting` | bool | False | Include formatting information |
+| `include_header` | bool | False | Auto-detect and separate header rows using `freeze_panes` |
 
 ### Basic Workflow
 
@@ -262,6 +263,51 @@ result = sharepoint_excel(
     sheet="Sheet1",
     include_formatting=True
 )
+```
+
+#### 6. Automatic Header Detection
+```python
+# Auto-detect and separate header and data rows using freeze_panes
+result = sharepoint_excel(
+    file_path="/sites/finance/Shared Documents/report.xlsx",
+    sheet="Sheet1",
+    include_header=True
+)
+```
+
+**Header Detection Response:**
+```json
+{
+  "file_path": "/sites/finance/Shared Documents/report.xlsx",
+  "sheets": [{
+    "name": "Sheet1",
+    "freeze_panes": "B2",
+    "frozen_rows": 1,
+    "frozen_cols": 1,
+    "header_rows": [
+      [
+        {"value": "Product", "coordinate": "A1"},
+        {"value": "Price", "coordinate": "B1"},
+        {"value": "Stock", "coordinate": "C1"}
+      ]
+    ],
+    "data_rows": [
+      [
+        {"value": "Product A", "coordinate": "A2"},
+        {"value": 1000, "coordinate": "B2"},
+        {"value": 50, "coordinate": "C2"}
+      ],
+      ...
+    ]
+  }]
+}
+```
+
+**Features:**
+- Auto-detects Excel freeze panes (frozen rows/columns)
+- Separates header rows and data rows in response
+- When `cell_range` is specified, automatically includes frozen range
+- Backward compatible: `include_header=False` (default) returns existing `rows` format
 ```
 
 ### JSON Output Format
