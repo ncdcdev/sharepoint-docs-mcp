@@ -509,15 +509,33 @@ def sharepoint_excel(
 
 
 def register_tools():
-    """Register MCP tools"""
-    mcp.tool(description=config.search_tool_description)(sharepoint_docs_search)
-    mcp.tool(description=config.download_tool_description)(sharepoint_docs_download)
-    mcp.tool(
-        description=(
-            "Read or search Excel file in SharePoint. "
-            "Use 'query' parameter to search for specific content and find cell locations. "
-            "Use 'sheet' and 'cell_range' parameters to read specific sections. "
-            "Workflow: 1) Search with query to find relevant cells, "
-            "2) Read specific cell_range based on search results."
-        )
-    )(sharepoint_excel)
+    """Register MCP tools
+
+    Tools can be disabled via SHAREPOINT_DISABLED_TOOLS environment variable.
+    Example: SHAREPOINT_DISABLED_TOOLS=sharepoint_excel,sharepoint_docs_download
+    """
+    if config.is_tool_enabled("sharepoint_docs_search"):
+        mcp.tool(description=config.search_tool_description)(sharepoint_docs_search)
+        logging.info("Registered tool: sharepoint_docs_search")
+    else:
+        logging.info("Tool disabled: sharepoint_docs_search")
+
+    if config.is_tool_enabled("sharepoint_docs_download"):
+        mcp.tool(description=config.download_tool_description)(sharepoint_docs_download)
+        logging.info("Registered tool: sharepoint_docs_download")
+    else:
+        logging.info("Tool disabled: sharepoint_docs_download")
+
+    if config.is_tool_enabled("sharepoint_excel"):
+        mcp.tool(
+            description=(
+                "Read or search Excel file in SharePoint. "
+                "Use 'query' parameter to search for specific content and find cell locations. "
+                "Use 'sheet' and 'cell_range' parameters to read specific sections. "
+                "Workflow: 1) Search with query to find relevant cells, "
+                "2) Read specific cell_range based on search results."
+            )
+        )(sharepoint_excel)
+        logging.info("Registered tool: sharepoint_excel")
+    else:
+        logging.info("Tool disabled: sharepoint_excel")

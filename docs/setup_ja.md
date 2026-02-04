@@ -240,3 +240,25 @@ MCPツールの説明文を日本語などにカスタマイズできます
 SHAREPOINT_SEARCH_TOOL_DESCRIPTION=社内文書を検索します
 SHAREPOINT_DOWNLOAD_TOOL_DESCRIPTION=検索結果からファイルをダウンロードします
 ```
+
+## ツールの無効化
+
+特定のツールを無効化して、AIのコンテキスト使用量を削減できます
+
+- `SHAREPOINT_DISABLED_TOOLS`: 無効化するツールのカンマ区切りリスト
+
+利用可能なツール名
+- `sharepoint_docs_search`
+- `sharepoint_docs_download`
+- `sharepoint_excel`
+
+例：
+```bash
+# Excel操作のみ無効化
+SHAREPOINT_DISABLED_TOOLS=sharepoint_excel
+
+# 複数ツールを無効化
+SHAREPOINT_DISABLED_TOOLS=sharepoint_excel,sharepoint_docs_download
+```
+
+ツールが無効化されると、MCPサーバーに登録されず、ツール一覧に表示されなくなります。すべての機能を必要としないAIクライアントのコンテキストサイズを削減するのに役立ちます。
