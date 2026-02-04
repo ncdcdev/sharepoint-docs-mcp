@@ -91,7 +91,7 @@ class SharePointExcelParser:
         include_formatting: bool = False,
         sheet_name: str | None = None,
         cell_range: str | None = None,
-        include_header: bool = False,
+        include_header: bool = True,
     ) -> str:
         """
         Excelファイルを解析してJSON形式で返す
@@ -104,8 +104,8 @@ class SharePointExcelParser:
             sheet_name: 特定シートのみ取得（Noneで全シート）
             cell_range: セル範囲指定（例: "A1:D10"）
             include_header: ヘッダー情報を分離して返すかどうか
-                False (デフォルト): rows にすべてのデータを含む
-                True: header_rows と data_rows に分離（freeze_panes を使用）
+                True (デフォルト): header_rows と data_rows に分離（freeze_panes を使用）
+                False: rows にすべてのデータを含む
 
         Returns:
             JSON文字列（全シート・全セルのデータ）

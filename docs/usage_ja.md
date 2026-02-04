@@ -187,7 +187,7 @@ SHAREPOINT_SITE_NAME=@onedrive,sales-team,customer-portal
 | `sheet` | str \| None | None | シート名（特定シートのみ取得） |
 | `cell_range` | str \| None | None | セル範囲（例: "A1:D10"） |
 | `include_formatting` | bool | False | 書式情報を含めるか |
-| `include_header` | bool | False | ヘッダー行を自動検出して分離するか（`freeze_panes`を使用） |
+| `include_header` | bool | True | ヘッダー行を自動検出して分離するか（`freeze_panes`を使用） |
 
 ### 基本的なワークフロー
 
@@ -305,9 +305,9 @@ result = sharepoint_excel(
 
 **特徴:**
 - Excelの固定行・列（freeze_panes）を自動検出
-- ヘッダー行とデータ行を分離して返す
+- ヘッダー行とデータ行を分離して返す（デフォルト動作）
 - `cell_range`指定時、固定行範囲を自動的に含める
-- 後方互換性: `include_header=False`（デフォルト）では既存の`rows`形式
+- `include_header=False`を指定すると、従来の`rows`形式で返す
 ```
 
 ### JSON出力形式

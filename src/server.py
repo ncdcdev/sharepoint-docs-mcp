@@ -454,7 +454,7 @@ def sharepoint_excel(
     sheet: str | None = None,
     cell_range: str | None = None,
     include_formatting: bool = False,
-    include_header: bool = False,
+    include_header: bool = True,
     ctx: Context | None = None,
 ) -> str:
     """
@@ -467,9 +467,9 @@ def sharepoint_excel(
         cell_range: セル範囲（例: "A1:D10"）
         include_formatting: 書式情報を含めるか
         include_header: ヘッダー情報を分離して返すか
-            False (デフォルト): すべてのデータをrowsに含める
-            True: freeze_panesを使用してheader_rowsとdata_rowsに分離
+            True (デフォルト): freeze_panesを使用してheader_rowsとdata_rowsに分離
                  固定行がある場合、cell_range指定時は固定範囲も自動的に含める
+            False: すべてのデータをrowsに含める
         ctx: FastMCP context (injected automatically)
 
     Returns:

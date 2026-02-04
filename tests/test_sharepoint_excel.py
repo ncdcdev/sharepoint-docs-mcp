@@ -128,9 +128,9 @@ class TestSharePointExcelParser:
         excel_bytes = self._create_test_excel()
         self.mock_download_client.download_file.return_value = excel_bytes
 
-        # 解析（デフォルト：include_formatting=False）
+        # 解析（include_header=Falseで従来形式）
         parser = SharePointExcelParser(self.mock_download_client)
-        result_json = parser.parse_to_json("/test/file.xlsx")
+        result_json = parser.parse_to_json("/test/file.xlsx", include_header=False)
 
         # 検証
         result = json.loads(result_json)
@@ -157,7 +157,7 @@ class TestSharePointExcelParser:
         self.mock_download_client.download_file.return_value = excel_bytes
 
         parser = SharePointExcelParser(self.mock_download_client)
-        result_json = parser.parse_to_json("/test/formatted.xlsx", include_formatting=True)
+        result_json = parser.parse_to_json("/test/formatted.xlsx", include_formatting=True, include_header=False)
 
         result = json.loads(result_json)
         assert result["sheets"][0]["name"] == "FormattedSheet"
@@ -177,7 +177,7 @@ class TestSharePointExcelParser:
         self.mock_download_client.download_file.return_value = excel_bytes
 
         parser = SharePointExcelParser(self.mock_download_client)
-        result_json = parser.parse_to_json("/test/multi.xlsx")
+        result_json = parser.parse_to_json("/test/multi.xlsx", include_header=False)
 
         result = json.loads(result_json)
         assert len(result["sheets"]) == 2
@@ -192,7 +192,7 @@ class TestSharePointExcelParser:
         self.mock_download_client.download_file.return_value = excel_bytes
 
         parser = SharePointExcelParser(self.mock_download_client)
-        result_json = parser.parse_to_json("/test/merged.xlsx", include_formatting=True)
+        result_json = parser.parse_to_json("/test/merged.xlsx", include_formatting=True, include_header=False)
 
         result = json.loads(result_json)
         assert result["sheets"][0]["name"] == "MergedSheet"
@@ -239,7 +239,7 @@ class TestSharePointExcelParser:
         self.mock_download_client.download_file.return_value = excel_bytes.getvalue()
 
         parser = SharePointExcelParser(self.mock_download_client)
-        result_json = parser.parse_to_json("/test/empty.xlsx")
+        result_json = parser.parse_to_json("/test/empty.xlsx", include_header=False)
 
         result = json.loads(result_json)
         assert result["sheets"][0]["name"] == "EmptySheet"
@@ -255,7 +255,7 @@ class TestSharePointExcelParser:
         self.mock_download_client.download_file.return_value = excel_bytes
 
         parser = SharePointExcelParser(self.mock_download_client)
-        result_json = parser.parse_to_json("/test/formatted.xlsx", include_formatting=True)
+        result_json = parser.parse_to_json("/test/formatted.xlsx", include_formatting=True, include_header=False)
 
         result = json.loads(result_json)
         header_cell = result["sheets"][0]["rows"][0][0]
@@ -281,7 +281,7 @@ class TestSharePointExcelParser:
         self.mock_download_client.download_file.return_value = excel_bytes.getvalue()
 
         parser = SharePointExcelParser(self.mock_download_client)
-        result_json = parser.parse_to_json("/test/formula.xlsx")
+        result_json = parser.parse_to_json("/test/formula.xlsx", include_header=False)
 
         result = json.loads(result_json)
         # 数式セルの値を確認（data_only=Falseなので数式文字列が入る）
@@ -294,7 +294,7 @@ class TestSharePointExcelParser:
         self.mock_download_client.download_file.return_value = excel_bytes
 
         parser = SharePointExcelParser(self.mock_download_client)
-        result_json = parser.parse_to_json("/test/formatted.xlsx")
+        result_json = parser.parse_to_json("/test/formatted.xlsx", include_header=False)
 
         result = json.loads(result_json)
         cell = result["sheets"][0]["rows"][0][0]
@@ -316,7 +316,7 @@ class TestSharePointExcelParser:
         self.mock_download_client.download_file.return_value = excel_bytes
 
         parser = SharePointExcelParser(self.mock_download_client)
-        result_json = parser.parse_to_json("/test/formatted.xlsx", include_formatting=True)
+        result_json = parser.parse_to_json("/test/formatted.xlsx", include_formatting=True, include_header=False)
 
         result = json.loads(result_json)
         cell = result["sheets"][0]["rows"][0][0]
@@ -349,7 +349,7 @@ class TestSharePointExcelParser:
         self.mock_download_client.download_file.return_value = excel_bytes.getvalue()
 
         parser = SharePointExcelParser(self.mock_download_client)
-        result_json = parser.parse_to_json("/test/datetime.xlsx")
+        result_json = parser.parse_to_json("/test/datetime.xlsx", include_header=False)
 
         # JSONパースが成功することを確認（datetime型が適切にシリアライズされている）
         result = json.loads(result_json)
@@ -442,7 +442,7 @@ class TestSharePointExcelParser:
         self.mock_download_client.download_file.return_value = excel_bytes
 
         parser = SharePointExcelParser(self.mock_download_client)
-        result_json = parser.parse_to_json("/test/file.xlsx", sheet_name="Sheet2")
+        result_json = parser.parse_to_json("/test/file.xlsx", sheet_name="Sheet2", include_header=False)
 
         result = json.loads(result_json)
         assert len(result["sheets"]) == 1
@@ -479,7 +479,7 @@ class TestSharePointExcelParser:
 
         parser = SharePointExcelParser(self.mock_download_client)
         result_json = parser.parse_to_json(
-            "/test/file.xlsx", sheet_name="Sheet1", cell_range="B2:D4"
+            "/test/file.xlsx", sheet_name="Sheet1", cell_range="B2:D4", include_header=False
         )
 
         result = json.loads(result_json)
@@ -501,7 +501,7 @@ class TestSharePointExcelParser:
 
         parser = SharePointExcelParser(self.mock_download_client)
         result_json = parser.parse_to_json(
-            "/test/file.xlsx", sheet_name="Sheet1", cell_range="A1"
+            "/test/file.xlsx", sheet_name="Sheet1", cell_range="A1", include_header=False
         )
 
         result = json.loads(result_json)
@@ -517,7 +517,7 @@ class TestSharePointExcelParser:
 
         parser = SharePointExcelParser(self.mock_download_client)
         result_json = parser.parse_to_json(
-            "/test/file.xlsx", sheet_name="Sheet1", cell_range="A1"
+            "/test/file.xlsx", sheet_name="Sheet1", cell_range="A1", include_header=False
         )
 
         result = json.loads(result_json)

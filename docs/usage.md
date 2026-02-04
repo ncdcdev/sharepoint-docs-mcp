@@ -187,7 +187,7 @@ The `sharepoint_excel` tool allows you to read and search Excel files in SharePo
 | `sheet` | str \| None | None | Sheet name (get specific sheet only) |
 | `cell_range` | str \| None | None | Cell range (e.g., "A1:D10") |
 | `include_formatting` | bool | False | Include formatting information |
-| `include_header` | bool | False | Auto-detect and separate header rows using `freeze_panes` |
+| `include_header` | bool | True | Auto-detect and separate header rows using `freeze_panes` |
 
 ### Basic Workflow
 
@@ -305,9 +305,9 @@ result = sharepoint_excel(
 
 **Features:**
 - Auto-detects Excel freeze panes (frozen rows/columns)
-- Separates header rows and data rows in response
+- Separates header rows and data rows in response (default behavior)
 - When `cell_range` is specified, automatically includes frozen range
-- Backward compatible: `include_header=False` (default) returns existing `rows` format
+- Set `include_header=False` to return legacy `rows` format
 ```
 
 ### JSON Output Format
