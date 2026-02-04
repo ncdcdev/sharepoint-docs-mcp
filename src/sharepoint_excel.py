@@ -10,7 +10,8 @@ from typing import Any
 from openpyxl import load_workbook
 from openpyxl.cell import Cell
 from openpyxl.styles import Color
-from openpyxl.utils import get_column_letter
+from openpyxl.utils import column_index_from_string, get_column_letter
+from openpyxl.utils.cell import coordinate_from_string
 
 logger = logging.getLogger(__name__)
 
@@ -90,6 +91,7 @@ class SharePointExcelParser:
         include_formatting: bool = False,
         sheet_name: str | None = None,
         cell_range: str | None = None,
+        include_header: bool = False,
     ) -> str:
         """
         Excelファイルを解析してJSON形式で返す
@@ -101,6 +103,9 @@ class SharePointExcelParser:
                 True: value, coordinate, data_type, fill, merged, width, height を含む
             sheet_name: 特定シートのみ取得（Noneで全シート）
             cell_range: セル範囲指定（例: "A1:D10"）
+            include_header: ヘッダー情報を分離して返すかどうか
+                False (デフォルト): rows にすべてのデータを含む
+                True: header_rows と data_rows に分離（freeze_panes を使用）
 
         Returns:
             JSON文字列（全シート・全セルのデータ）
@@ -137,7 +142,9 @@ class SharePointExcelParser:
 
             for name in sheets_to_parse:
                 sheet = workbook[name]
-                sheet_data = self._parse_sheet(sheet, include_formatting, cell_range)
+                sheet_data = self._parse_sheet(
+                    sheet, include_formatting, cell_range, include_header
+                )
                 result["sheets"].append(sheet_data)
 
             logger.info(f"Parsed {len(result['sheets'])} sheets")
@@ -152,6 +159,7 @@ class SharePointExcelParser:
         sheet,
         include_formatting: bool,
         cell_range: str | None = None,
+        include_header: bool = False,
     ) -> dict[str, Any]:
         """
         シートを解析してdict形式で返す
@@ -160,6 +168,7 @@ class SharePointExcelParser:
             sheet: openpyxl Worksheet
             include_formatting: 書式情報を含めるかどうか
             cell_range: セル範囲指定（例: "A1:D10"）
+            include_header: ヘッダー情報を分離して返すかどうか
 
         Returns:
             シートデータのdict
@@ -167,8 +176,17 @@ class SharePointExcelParser:
         sheet_data = {
             "name": sheet.title,
             "dimensions": str(sheet.dimensions) if sheet.dimensions else None,
-            "rows": [],
         }
+
+        # freeze_panes情報の取得
+        frozen_rows = 0
+        frozen_cols = 0
+        if include_header:
+            frozen_rows, frozen_cols = self._parse_freeze_panes(sheet.freeze_panes)
+            if sheet.freeze_panes:
+                sheet_data["freeze_panes"] = sheet.freeze_panes
+            sheet_data["frozen_rows"] = frozen_rows
+            sheet_data["frozen_cols"] = frozen_cols
 
         # マージセル情報をキャッシュ（パフォーマンス最適化）
         merged_cell_map: dict[str, str] | None = None
@@ -181,30 +199,49 @@ class SharePointExcelParser:
                     coord_str = f"{col_letter}{cell_coord[0]}"
                     merged_cell_map[coord_str] = str(merged_range)
 
-        # セル範囲を取得
+        # セル範囲の拡張（include_headerがTrueで固定行がある場合）
+        all_rows = []
         if cell_range:
-            # 指定された範囲のみを取得
             sheet_data["requested_range"] = cell_range
-            range_data = sheet[cell_range]
 
-            # 統一的にタプルのタプル形式に変換
-            if isinstance(range_data, Cell):
-                # 単一セルの場合
-                rows_to_process = ((range_data,),)
-            elif range_data and not isinstance(range_data[0], tuple):
-                # 単一列/行の場合
-                rows_to_process = (range_data,)
+            # セル範囲を拡張してヘッダーを含める
+            if include_header and frozen_rows > 0:
+                header_range, data_range = self._expand_range_with_headers(
+                    cell_range, frozen_rows, frozen_cols
+                )
+
+                # ヘッダー範囲がある場合は取得
+                if header_range:
+                    header_data = sheet[header_range]
+                    header_rows = self._normalize_range_data(header_data)
+                    for row in header_rows:
+                        row_data = [
+                            self._parse_cell(cell, include_formatting, merged_cell_map)
+                            for cell in row
+                        ]
+                        all_rows.append(row_data)
+
+                # データ範囲を取得
+                range_data = sheet[data_range]
+                data_rows = self._normalize_range_data(range_data)
+                for row in data_rows:
+                    row_data = [
+                        self._parse_cell(cell, include_formatting, merged_cell_map)
+                        for cell in row
+                    ]
+                    all_rows.append(row_data)
             else:
-                # 通常の範囲の場合
-                rows_to_process = range_data
-
-            for row in rows_to_process:
-                row_data = [
-                    self._parse_cell(cell, include_formatting, merged_cell_map)
-                    for cell in row
-                ]
-                sheet_data["rows"].append(row_data)
+                # 通常のセル範囲取得
+                range_data = sheet[cell_range]
+                rows_to_process = self._normalize_range_data(range_data)
+                for row in rows_to_process:
+                    row_data = [
+                        self._parse_cell(cell, include_formatting, merged_cell_map)
+                        for cell in row
+                    ]
+                    all_rows.append(row_data)
         elif sheet.dimensions:
+            # シート全体を取得
             for row in sheet.iter_rows():
                 row_data = []
                 for cell in row:
@@ -212,7 +249,15 @@ class SharePointExcelParser:
                         cell, include_formatting, merged_cell_map
                     )
                     row_data.append(cell_data)
-                sheet_data["rows"].append(row_data)
+                all_rows.append(row_data)
+
+        # レスポンス形式の分岐
+        if include_header:
+            header_rows, data_rows = self._split_rows_by_header(all_rows, frozen_rows)
+            sheet_data["header_rows"] = header_rows
+            sheet_data["data_rows"] = data_rows
+        else:
+            sheet_data["rows"] = all_rows
 
         return sheet_data
 
@@ -320,3 +365,125 @@ class SharePointExcelParser:
             return f"theme_{color.theme}"
 
         return None
+
+    def _parse_freeze_panes(self, freeze_panes: str | None) -> tuple[int, int]:
+        """
+        freeze_panes文字列を解析して固定行数・列数を返す
+
+        Args:
+            freeze_panes: freeze_panes文字列（例: "B2", "A2", "B1", None）
+
+        Returns:
+            (frozen_rows, frozen_cols)のタプル
+            例: "B2" → (1, 1)（行1と列Aが固定）
+                "A2" → (1, 0)（行1のみ固定）
+                "B1" → (0, 1)（列Aのみ固定）
+                None → (0, 0)（固定なし）
+        """
+        if not freeze_panes:
+            return (0, 0)
+
+        try:
+            # "B2" → ("B", 2)
+            col_letter, row = coordinate_from_string(freeze_panes)
+            # "B" → 2
+            col_index = column_index_from_string(col_letter)
+
+            # freeze_panes="B2"の場合、行2より前（行1）と列B（2列目）より前（列A）が固定
+            frozen_rows = row - 1
+            frozen_cols = col_index - 1
+
+            return (frozen_rows, frozen_cols)
+        except Exception as e:
+            logger.warning(f"Failed to parse freeze_panes '{freeze_panes}': {e}")
+            return (0, 0)
+
+    def _expand_range_with_headers(
+        self, cell_range: str, frozen_rows: int, frozen_cols: int
+    ) -> tuple[str | None, str]:
+        """
+        cell_rangeを固定範囲を含むように拡張
+
+        Args:
+            cell_range: セル範囲（例: "A5:D10"）
+            frozen_rows: 固定行数
+            frozen_cols: 固定列数
+
+        Returns:
+            (header_range, data_range)のタプル
+            header_range: ヘッダー範囲（固定行がない場合はNone）
+            data_range: データ範囲（元のcell_range）
+        """
+        if frozen_rows == 0:
+            return (None, cell_range)
+
+        try:
+            # セル範囲を解析
+            if ":" in cell_range:
+                start_cell, end_cell = cell_range.split(":")
+            else:
+                # 単一セルの場合
+                start_cell = cell_range
+                end_cell = cell_range
+
+            start_col, start_row = coordinate_from_string(start_cell)
+            end_col, _ = coordinate_from_string(end_cell)
+
+            # 開始行が固定範囲内の場合は拡張不要
+            if start_row <= frozen_rows:
+                return (None, cell_range)
+
+            # ヘッダー範囲を計算（行1からfrozen_rowsまで、列は元の範囲と同じ）
+            header_range = f"{start_col}1:{end_col}{frozen_rows}"
+
+            return (header_range, cell_range)
+        except Exception as e:
+            logger.warning(
+                f"Failed to expand range '{cell_range}' with frozen_rows={frozen_rows}: {e}"
+            )
+            return (None, cell_range)
+
+    def _split_rows_by_header(
+        self, rows: list[list[dict[str, Any]]], frozen_rows: int
+    ) -> tuple[list[list[dict[str, Any]]], list[list[dict[str, Any]]]]:
+        """
+        取得した行データをヘッダー行とデータ行に分割
+
+        Args:
+            rows: 行データのリスト
+            frozen_rows: 固定行数
+
+        Returns:
+            (header_rows, data_rows)のタプル
+        """
+        if frozen_rows == 0:
+            return ([], rows)
+
+        if len(rows) <= frozen_rows:
+            # すべてヘッダー
+            return (rows, [])
+
+        header_rows = rows[:frozen_rows]
+        data_rows = rows[frozen_rows:]
+
+        return (header_rows, data_rows)
+
+    def _normalize_range_data(self, range_data):
+        """
+        openpyxlの範囲データを統一的なタプルのタプル形式に変換
+
+        Args:
+            range_data: sheet[range]の戻り値
+
+        Returns:
+            タプルのタプル形式の範囲データ
+        """
+        if isinstance(range_data, Cell):
+            # 単一セルの場合
+            return ((range_data,),)
+        elif range_data and not isinstance(range_data[0], tuple):
+            # 単一列/行の場合
+            return (range_data,)
+        else:
+            # 通常の範囲の場合
+            return range_data
