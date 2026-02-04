@@ -512,21 +512,21 @@ def register_tools():
     """Register MCP tools
 
     Tools can be disabled via SHAREPOINT_DISABLED_TOOLS environment variable.
-    Example: SHAREPOINT_DISABLED_TOOLS=excel,download
+    Example: SHAREPOINT_DISABLED_TOOLS=sharepoint_excel,sharepoint_docs_download
     """
-    if config.is_tool_enabled("search"):
+    if config.is_tool_enabled("sharepoint_docs_search"):
         mcp.tool(description=config.search_tool_description)(sharepoint_docs_search)
         logging.info("Registered tool: sharepoint_docs_search")
     else:
         logging.info("Tool disabled: sharepoint_docs_search")
 
-    if config.is_tool_enabled("download"):
+    if config.is_tool_enabled("sharepoint_docs_download"):
         mcp.tool(description=config.download_tool_description)(sharepoint_docs_download)
         logging.info("Registered tool: sharepoint_docs_download")
     else:
         logging.info("Tool disabled: sharepoint_docs_download")
 
-    if config.is_tool_enabled("excel"):
+    if config.is_tool_enabled("sharepoint_excel"):
         mcp.tool(
             description=(
                 "Read or search Excel file in SharePoint. "

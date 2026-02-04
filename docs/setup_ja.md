@@ -248,17 +248,17 @@ SHAREPOINT_DOWNLOAD_TOOL_DESCRIPTION=検索結果からファイルをダウン�
 - `SHAREPOINT_DISABLED_TOOLS`: 無効化するツールのカンマ区切りリスト
 
 利用可能なツール名
-- `search`: sharepoint_docs_searchを無効化
-- `download`: sharepoint_docs_downloadを無効化
-- `excel`: sharepoint_excelを無効化
+- `sharepoint_docs_search`
+- `sharepoint_docs_download`
+- `sharepoint_excel`
 
 例：
 ```bash
 # Excel操作のみ無効化
-SHAREPOINT_DISABLED_TOOLS=excel
+SHAREPOINT_DISABLED_TOOLS=sharepoint_excel
 
 # 複数ツールを無効化
-SHAREPOINT_DISABLED_TOOLS=excel,download
+SHAREPOINT_DISABLED_TOOLS=sharepoint_excel,sharepoint_docs_download
 ```
 
 ツールが無効化されると、MCPサーバーに登録されず、ツール一覧に表示されなくなります。すべての機能を必要としないAIクライアントのコンテキストサイズを削減するのに役立ちます。

@@ -322,9 +322,9 @@ class TestDisabledTools:
             config = SharePointConfig()
 
             assert config.disabled_tools == set()
-            assert config.is_tool_enabled("search") is True
-            assert config.is_tool_enabled("download") is True
-            assert config.is_tool_enabled("excel") is True
+            assert config.is_tool_enabled("sharepoint_docs_search") is True
+            assert config.is_tool_enabled("sharepoint_docs_download") is True
+            assert config.is_tool_enabled("sharepoint_excel") is True
 
     def test_disable_single_tool(self):
         """単一ツールを無効化するテスト"""
@@ -334,16 +334,16 @@ class TestDisabledTools:
             "SHAREPOINT_CLIENT_ID": "test-client-id",
             "SHAREPOINT_CERTIFICATE_TEXT": "cert",
             "SHAREPOINT_PRIVATE_KEY_TEXT": "key",
-            "SHAREPOINT_DISABLED_TOOLS": "excel",
+            "SHAREPOINT_DISABLED_TOOLS": "sharepoint_excel",
         }
 
         with patch.dict(os.environ, env_vars, clear=True):
             config = SharePointConfig()
 
-            assert config.disabled_tools == {"excel"}
-            assert config.is_tool_enabled("search") is True
-            assert config.is_tool_enabled("download") is True
-            assert config.is_tool_enabled("excel") is False
+            assert config.disabled_tools == {"sharepoint_excel"}
+            assert config.is_tool_enabled("sharepoint_docs_search") is True
+            assert config.is_tool_enabled("sharepoint_docs_download") is True
+            assert config.is_tool_enabled("sharepoint_excel") is False
 
     def test_disable_multiple_tools(self):
         """複数ツールを無効化するテスト"""
@@ -353,16 +353,16 @@ class TestDisabledTools:
             "SHAREPOINT_CLIENT_ID": "test-client-id",
             "SHAREPOINT_CERTIFICATE_TEXT": "cert",
             "SHAREPOINT_PRIVATE_KEY_TEXT": "key",
-            "SHAREPOINT_DISABLED_TOOLS": "excel,download",
+            "SHAREPOINT_DISABLED_TOOLS": "sharepoint_excel,sharepoint_docs_download",
         }
 
         with patch.dict(os.environ, env_vars, clear=True):
             config = SharePointConfig()
 
-            assert config.disabled_tools == {"excel", "download"}
-            assert config.is_tool_enabled("search") is True
-            assert config.is_tool_enabled("download") is False
-            assert config.is_tool_enabled("excel") is False
+            assert config.disabled_tools == {"sharepoint_excel", "sharepoint_docs_download"}
+            assert config.is_tool_enabled("sharepoint_docs_search") is True
+            assert config.is_tool_enabled("sharepoint_docs_download") is False
+            assert config.is_tool_enabled("sharepoint_excel") is False
 
     def test_disable_all_tools(self):
         """全ツールを無効化するテスト"""
@@ -372,15 +372,15 @@ class TestDisabledTools:
             "SHAREPOINT_CLIENT_ID": "test-client-id",
             "SHAREPOINT_CERTIFICATE_TEXT": "cert",
             "SHAREPOINT_PRIVATE_KEY_TEXT": "key",
-            "SHAREPOINT_DISABLED_TOOLS": "search,download,excel",
+            "SHAREPOINT_DISABLED_TOOLS": "sharepoint_docs_search,sharepoint_docs_download,sharepoint_excel",
         }
 
         with patch.dict(os.environ, env_vars, clear=True):
             config = SharePointConfig()
 
-            assert config.is_tool_enabled("search") is False
-            assert config.is_tool_enabled("download") is False
-            assert config.is_tool_enabled("excel") is False
+            assert config.is_tool_enabled("sharepoint_docs_search") is False
+            assert config.is_tool_enabled("sharepoint_docs_download") is False
+            assert config.is_tool_enabled("sharepoint_excel") is False
 
     def test_case_insensitive_tool_names(self):
         """ツール名の大文字小文字を区別しないテスト"""
@@ -390,17 +390,17 @@ class TestDisabledTools:
             "SHAREPOINT_CLIENT_ID": "test-client-id",
             "SHAREPOINT_CERTIFICATE_TEXT": "cert",
             "SHAREPOINT_PRIVATE_KEY_TEXT": "key",
-            "SHAREPOINT_DISABLED_TOOLS": "EXCEL,Download",
+            "SHAREPOINT_DISABLED_TOOLS": "SHAREPOINT_EXCEL,SharePoint_Docs_Download",
         }
 
         with patch.dict(os.environ, env_vars, clear=True):
             config = SharePointConfig()
 
-            assert config.is_tool_enabled("excel") is False
-            assert config.is_tool_enabled("EXCEL") is False
-            assert config.is_tool_enabled("download") is False
-            assert config.is_tool_enabled("Download") is False
-            assert config.is_tool_enabled("search") is True
+            assert config.is_tool_enabled("sharepoint_excel") is False
+            assert config.is_tool_enabled("SHAREPOINT_EXCEL") is False
+            assert config.is_tool_enabled("sharepoint_docs_download") is False
+            assert config.is_tool_enabled("SharePoint_Docs_Download") is False
+            assert config.is_tool_enabled("sharepoint_docs_search") is True
 
     def test_whitespace_handling(self):
         """空白文字の処理テスト"""
@@ -410,12 +410,12 @@ class TestDisabledTools:
             "SHAREPOINT_CLIENT_ID": "test-client-id",
             "SHAREPOINT_CERTIFICATE_TEXT": "cert",
             "SHAREPOINT_PRIVATE_KEY_TEXT": "key",
-            "SHAREPOINT_DISABLED_TOOLS": " excel , download ",
+            "SHAREPOINT_DISABLED_TOOLS": " sharepoint_excel , sharepoint_docs_download ",
         }
 
         with patch.dict(os.environ, env_vars, clear=True):
             config = SharePointConfig()
 
-            assert config.disabled_tools == {"excel", "download"}
-            assert config.is_tool_enabled("excel") is False
-            assert config.is_tool_enabled("download") is False
+            assert config.disabled_tools == {"sharepoint_excel", "sharepoint_docs_download"}
+            assert config.is_tool_enabled("sharepoint_excel") is False
+            assert config.is_tool_enabled("sharepoint_docs_download") is False

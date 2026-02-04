@@ -248,17 +248,17 @@ You can disable specific tools to reduce AI context usage:
 - `SHAREPOINT_DISABLED_TOOLS`: Comma-separated list of tools to disable
 
 Available tool names:
-- `search`: Disable sharepoint_docs_search
-- `download`: Disable sharepoint_docs_download
-- `excel`: Disable sharepoint_excel
+- `sharepoint_docs_search`
+- `sharepoint_docs_download`
+- `sharepoint_excel`
 
 Example:
 ```bash
 # Disable Excel operations only
-SHAREPOINT_DISABLED_TOOLS=excel
+SHAREPOINT_DISABLED_TOOLS=sharepoint_excel
 
 # Disable multiple tools
-SHAREPOINT_DISABLED_TOOLS=excel,download
+SHAREPOINT_DISABLED_TOOLS=sharepoint_excel,sharepoint_docs_download
 ```
 
 When a tool is disabled, it is not registered with the MCP server and will not appear in the tool list. This helps reduce context size for AI clients that don't need all features.

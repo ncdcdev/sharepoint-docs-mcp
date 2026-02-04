@@ -267,7 +267,7 @@ class SharePointConfig:
         """無効化されたツール名のセットを返す
 
         環境変数 SHAREPOINT_DISABLED_TOOLS で指定されたツールのセット。
-        有効な値: search, download, excel
+        有効な値: sharepoint_docs_search, sharepoint_docs_download, sharepoint_excel
         """
         if not self._disabled_tools_str:
             return set()
@@ -281,7 +281,7 @@ class SharePointConfig:
         """指定されたツールが有効かどうかを返す
 
         Args:
-            tool_name: ツール名 (search, download, excel)
+            tool_name: ツール名 (sharepoint_docs_search, sharepoint_docs_download, sharepoint_excel)
 
         Returns:
             ツールが有効な場合True、無効な場合False
