@@ -8,6 +8,7 @@ from io import BytesIO
 from typing import Any
 
 from openpyxl import load_workbook
+from openpyxl.cell import Cell
 from openpyxl.styles import Color
 
 logger = logging.getLogger(__name__)
@@ -167,20 +168,21 @@ class SharePointExcelParser:
             # 指定された範囲のみを取得
             sheet_data["requested_range"] = cell_range
             range_data = sheet[cell_range]
-            # 単一セルの場合（Cellオブジェクト）
-            if not isinstance(range_data, tuple):
-                cell_data = self._parse_cell(range_data, include_formatting)
-                sheet_data["rows"].append([cell_data])
+
+            # 統一的にタプルのタプル形式に変換
+            if isinstance(range_data, Cell):
+                # 単一セルの場合
+                rows_to_process = ((range_data,),)
+            elif range_data and not isinstance(range_data[0], tuple):
+                # 単一列/行の場合
+                rows_to_process = (range_data,)
             else:
-                for row in range_data:
-                    row_data = []
-                    # 単一列の場合はCellオブジェクトが直接来る
-                    if not isinstance(row, tuple):
-                        row = (row,)
-                    for cell in row:
-                        cell_data = self._parse_cell(cell, include_formatting)
-                        row_data.append(cell_data)
-                    sheet_data["rows"].append(row_data)
+                # 通常の範囲の場合
+                rows_to_process = range_data
+
+            for row in rows_to_process:
+                row_data = [self._parse_cell(cell, include_formatting) for cell in row]
+                sheet_data["rows"].append(row_data)
         elif sheet.dimensions:
             for row in sheet.iter_rows():
                 row_data = []

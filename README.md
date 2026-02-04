@@ -31,11 +31,13 @@ Two authentication methods are supported:
 - **sharepoint_docs_download**
   - File download from search results
   - Automatic method selection for SharePoint vs OneDrive files
-- **sharepoint_excel_to_json**
-  - Parse Excel files in SharePoint and return data as JSON
+- **sharepoint_excel**
+  - Read or search Excel files in SharePoint
+  - Search mode: find cells containing specific text with `query` parameter
+  - Read mode: get data from specific sheets/ranges with `sheet` and `cell_range` parameters
   - Default: lightweight response with value and coordinate only
   - Optional: include formatting (data_type, fill colors, merged cells, dimensions)
-  - No Excel Services dependency - uses direct file download + parsing
+  - No Excel Services dependency - uses direct file download + openpyxl parsing
 
 ### OneDrive Support
 

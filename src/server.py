@@ -497,7 +497,15 @@ def sharepoint_excel(
 
     except Exception as e:
         logging.error(f"SharePoint Excel operation failed: {str(e)}")
-        raise handle_sharepoint_error(e, "excel_parse") from e
+        raise handle_sharepoint_error(
+            e,
+            "excel_parse",
+            excel_context={
+                "file_path": file_path,
+                "sheet_name": sheet,
+                "range_spec": cell_range,
+            },
+        ) from e
 
 
 def register_tools():

@@ -198,7 +198,7 @@ result = sharepoint_excel(file_path="/path/to/file.xlsx", query="合計")
 # → "合計"がSheet1のセルC10にあることが分かる
 
 # ステップ2: 周辺データを読み取る
-data = sharepoint_excel(file_path="/path/to/file.xlsx", sheet="Sheet1", range="A1:D15")
+data = sharepoint_excel(file_path="/path/to/file.xlsx", sheet="Sheet1", cell_range="A1:D15")
 ```
 
 ### 使用パターン
@@ -371,7 +371,7 @@ search_result = sharepoint_excel(file_path=file_path, query="売上合計")
 # → Sheet1:C15 で見つかった
 
 # 3. 関連セクションを取得
-data = sharepoint_excel(file_path=file_path, sheet="Sheet1", range="A1:D20")
+data = sharepoint_excel(file_path=file_path, sheet="Sheet1", cell_range="A1:D20")
 ```
 
 **セル書式の分析**

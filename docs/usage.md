@@ -198,7 +198,7 @@ result = sharepoint_excel(file_path="/path/to/file.xlsx", query="Total")
 # → Find that "Total" is in Sheet1 at cell C10
 
 # Step 2: Read the surrounding data
-data = sharepoint_excel(file_path="/path/to/file.xlsx", sheet="Sheet1", range="A1:D15")
+data = sharepoint_excel(file_path="/path/to/file.xlsx", sheet="Sheet1", cell_range="A1:D15")
 ```
 
 ### Usage Patterns
@@ -371,7 +371,7 @@ search_result = sharepoint_excel(file_path=file_path, query="Total Revenue")
 # → Found at Sheet1:C15
 
 # 3. Get the relevant section
-data = sharepoint_excel(file_path=file_path, sheet="Sheet1", range="A1:D20")
+data = sharepoint_excel(file_path=file_path, sheet="Sheet1", cell_range="A1:D20")
 ```
 
 **Analyze Cell Formatting**
@@ -397,7 +397,7 @@ data = json.loads(json_data)
 # Convert to CSV
 import csv
 sheet = data["sheets"][0]
-with open(f"{sheet['name']}.csv", "w", newline="") as f:
+with open(f"{sheet['name']}.csv", "w", newline="", encoding="utf-8") as f:
     writer = csv.writer(f)
     for row in sheet["rows"]:
         values = [cell["value"] if cell["value"] is not None else "" for cell in row]
@@ -423,5 +423,5 @@ for sheet in data["sheets"]:
         "columns": col_count
     }
 
-print(json.dumps(summary, indent=2))
+print(json.dumps(summary, indent=2, ensure_ascii=False))
 ```

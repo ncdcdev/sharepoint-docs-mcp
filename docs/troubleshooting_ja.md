@@ -50,16 +50,16 @@ Access token request failed
 
 ### 5. Excel操作エラー
 
-#### Excel Servicesが無効
+#### 無効なExcelファイル形式
 
 ```
-Excel Services is not enabled or not available for this SharePoint site.
+File is not a valid Excel file or is corrupted
 ```
 
 **解決方法**
-- SharePoint管理者にExcel Servicesの有効化を依頼
-- 対象のSharePointサイトでExcel Servicesが利用可能か確認
-- ファイルがExcel Servicesが有効な場所に保存されているか確認
+- ファイルが有効な.xlsxファイルか確認（.xlsや他の形式ではない）
+- ファイルが破損していないか、ローカルのExcelで開いて確認
+- ファイルをSharePointに再アップロードしてみる
 
 #### Excelファイルが見つからない
 
@@ -75,24 +75,24 @@ The specified Excel file was not found: /sites/team/documents/report.xlsx
 #### シートが見つからない
 
 ```
-The specified sheet was not found: Sheet2
+Sheet 'Sheet2' not found. Available sheets: ['Sheet1', 'Summary']
 ```
 
 **解決方法**
-- `list_sheets`操作でシート一覧を確認
-- シート名のスペルが正しいか確認
-- シート名に特殊文字（シングルクォートなど）が含まれる場合は正確に指定
+- まず`sheet`パラメータなしでファイルを読み取り、利用可能なシート一覧を確認
+- シート名のスペルが正しいか確認（大文字小文字を区別）
+- シート名の前後にスペースがないか確認
 
 #### 無効なセル範囲
 
 ```
-The specified cell range is invalid: InvalidRange
+Invalid cell range: ZZ999999
 ```
 
 **解決方法**
-- セル範囲の形式が正しいか確認（例: "Sheet1!A1:C10"）
-- シート名がセル範囲に含まれているか確認
+- セル範囲の形式が正しいか確認（例: "A1:C10" または "A1"）
 - セル範囲がExcelファイルの実際の範囲内か確認
+- 列文字と行番号が有効か確認
 
 ## デバッグ方法
 

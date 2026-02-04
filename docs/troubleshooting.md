@@ -50,16 +50,16 @@ Access token request failed
 
 ### 5. Excel Operations Errors
 
-#### Excel Services Disabled
+#### Invalid Excel File Format
 
 ```
-Excel Services is not enabled or not available for this SharePoint site.
+File is not a valid Excel file or is corrupted
 ```
 
 **Solutions:**
-- Request SharePoint administrator to enable Excel Services
-- Verify Excel Services is available for the target SharePoint site
-- Confirm file is stored in a location where Excel Services is enabled
+- Verify the file is a valid .xlsx file (not .xls or other formats)
+- Check if the file is corrupted by opening it in Excel locally
+- Try re-uploading the file to SharePoint
 
 #### Excel File Not Found
 
@@ -75,24 +75,24 @@ The specified Excel file was not found: /sites/team/documents/report.xlsx
 #### Sheet Not Found
 
 ```
-The specified sheet was not found: Sheet2
+Sheet 'Sheet2' not found. Available sheets: ['Sheet1', 'Summary']
 ```
 
 **Solutions:**
-- Use `list_sheets` operation to confirm available sheets
-- Verify sheet name spelling is correct
-- Ensure special characters (like single quotes) are specified correctly
+- First read the file without `sheet` parameter to see all available sheets
+- Verify sheet name spelling is correct (case-sensitive)
+- Check for leading/trailing spaces in sheet names
 
 #### Invalid Cell Range
 
 ```
-The specified cell range is invalid: InvalidRange
+Invalid cell range: ZZ999999
 ```
 
 **Solutions:**
-- Verify cell range format is correct (e.g., "Sheet1!A1:C10")
-- Confirm sheet name is included in the range specification
+- Verify cell range format is correct (e.g., "A1:C10" or "A1")
 - Check if the range is within the actual bounds of the Excel file
+- Ensure column letters and row numbers are valid
 
 ## Debugging Methods
 

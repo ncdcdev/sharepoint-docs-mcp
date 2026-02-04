@@ -20,7 +20,7 @@ class ErrorCategory(Enum):
     EXCEL_FILE_NOT_FOUND = "excel_file_not_found"
     EXCEL_SHEET_NOT_FOUND = "excel_sheet_not_found"
     EXCEL_INVALID_RANGE = "excel_invalid_range"
-    EXCEL_SERVICES_DISABLED = "excel_services_disabled"
+    EXCEL_INVALID_FILE = "excel_invalid_file"
     UNKNOWN = "unknown"
 
 
@@ -197,17 +197,17 @@ def get_excel_invalid_range_error(
     return SharePointError(
         category=ErrorCategory.EXCEL_INVALID_RANGE,
         message=f"The specified cell range is invalid: {range_spec}",
-        solution="Please use a valid range format like 'Sheet1!A1:C10' or 'A1:C10' if the sheet is specified elsewhere.",
+        solution="Please use a valid range format like 'A1:C10' or 'A1'. Ensure the range is within the actual bounds of the Excel file.",
         original_error=original_error,
     )
 
 
-def get_excel_services_disabled_error(original_error: Exception) -> SharePointError:
-    """Generate Excel Services disabled error message"""
+def get_excel_invalid_file_error(original_error: Exception) -> SharePointError:
+    """Generate Excel invalid file error message"""
     return SharePointError(
-        category=ErrorCategory.EXCEL_SERVICES_DISABLED,
-        message="Excel Services is not enabled or not available for this SharePoint site.",
-        solution="Please contact your SharePoint administrator to enable Excel Services for this site, or verify that the file is stored in a location where Excel Services is available.",
+        category=ErrorCategory.EXCEL_INVALID_FILE,
+        message="The file is not a valid Excel file or is corrupted.",
+        solution="Please verify the file is a valid .xlsx file. Try opening it in Excel locally to check for corruption, or re-upload the file to SharePoint.",
         original_error=original_error,
     )
 
@@ -242,25 +242,30 @@ def handle_sharepoint_error(
     """
     error_str = str(error).lower()
 
-    # Excel操作のエラー分類
-    if context.startswith("excel_") and excel_context:
+    # Excel操作のエラー分類（openpyxlベース）
+    if context.startswith("excel_") or context == "excel_parse":
+        # ValueErrorはシート名が見つからない場合
+        if isinstance(error, ValueError):
+            if "not found" in error_str and "sheet" in error_str:
+                sheet_name = excel_context.get("sheet_name") if excel_context else None
+                return get_excel_sheet_not_found_error(sheet_name or "unknown", error)
+
+        # openpyxlの無効な座標例外
+        error_type_name = type(error).__name__.lower()
+        if "coordinate" in error_type_name or "invalid" in error_type_name:
+            range_spec = excel_context.get("range_spec") if excel_context else None
+            return get_excel_invalid_range_error(range_spec or "unknown", error)
+
+        # ファイル形式エラー（zipfile.BadZipFile, openpyxl例外など）
+        if "badzip" in error_type_name or "not a valid" in error_str or "corrupt" in error_str:
+            return get_excel_invalid_file_error(error)
+
+        # HTTP 404エラー（ファイルが見つからない）
         if hasattr(error, "response") and hasattr(error.response, "status_code"):
             status_code = error.response.status_code
             if status_code == 404:
-                file_path = excel_context.get("file_path") or ""
-                return get_excel_file_not_found_error(file_path, error)
-            elif status_code == 403:
-                return get_excel_services_disabled_error(error)
-            elif status_code == 400:
-                # 400エラーの詳細をチェック
-                if excel_context.get("sheet_name") and "sheet" in error_str:
-                    return get_excel_sheet_not_found_error(
-                        excel_context["sheet_name"], error
-                    )
-                elif excel_context.get("range_spec") and "range" in error_str:
-                    return get_excel_invalid_range_error(
-                        excel_context["range_spec"], error
-                    )
+                file_path = excel_context.get("file_path") if excel_context else ""
+                return get_excel_file_not_found_error(file_path or "", error)
 
     # Classification by HTTP status code
     if hasattr(error, "response") and hasattr(error.response, "status_code"):

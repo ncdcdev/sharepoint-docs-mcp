@@ -79,15 +79,3 @@ def mock_sharepoint_client():
         client_instance.download_file.return_value = b"mock file content"
         mock_client.return_value = client_instance
         yield client_instance
-
-
-@pytest.fixture
-def mock_sharepoint_excel_client():
-    """Mock SharePoint Excel client"""
-    with patch("src.sharepoint_excel.SharePointExcelClient") as mock_client:
-        client_instance = Mock()
-        client_instance.list_sheets.return_value = '<?xml version="1.0"?><sheets><sheet>Sheet1</sheet></sheets>'
-        client_instance.get_sheet_image.return_value = "ZmFrZS1pbWFnZS1kYXRh"  # base64: "fake-image-data"
-        client_instance.get_range_data.return_value = '<?xml version="1.0"?><range><cell>A1</cell></range>'
-        mock_client.return_value = client_instance
-        yield client_instance
