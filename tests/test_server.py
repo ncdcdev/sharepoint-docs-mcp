@@ -217,7 +217,7 @@ class TestSharePointExcel:
         """シート指定パラメータのテスト"""
         with patch("src.server._get_sharepoint_client", return_value=mock_sharepoint_client):
             with patch("src.server.config", mock_config):
-                result = sharepoint_excel(
+                sharepoint_excel(
                     file_path="/sites/test/Shared Documents/test.xlsx",
                     sheet="Sheet2"
                 )
@@ -234,7 +234,7 @@ class TestSharePointExcel:
         """セル範囲指定パラメータのテスト"""
         with patch("src.server._get_sharepoint_client", return_value=mock_sharepoint_client):
             with patch("src.server.config", mock_config):
-                result = sharepoint_excel(
+                sharepoint_excel(
                     file_path="/sites/test/Shared Documents/test.xlsx",
                     sheet="Sheet1",
                     cell_range="A1:D10"
@@ -252,7 +252,7 @@ class TestSharePointExcel:
         """書式情報ありのテスト"""
         with patch("src.server._get_sharepoint_client", return_value=mock_sharepoint_client):
             with patch("src.server.config", mock_config):
-                result = sharepoint_excel(
+                sharepoint_excel(
                     file_path="/sites/test/Shared Documents/test.xlsx",
                     include_formatting=True
                 )

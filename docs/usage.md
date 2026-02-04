@@ -394,13 +394,23 @@ for sheet in data["sheets"]:
 json_data = sharepoint_excel(file_path=file_path, sheet="Summary")
 data = json.loads(json_data)
 
+# Helper to prevent CSV formula injection
+def sanitize_csv_value(value):
+    if value is None:
+        return ""
+    s = str(value)
+    # Prevent formula injection in Excel
+    if s and s[0] in ("=", "+", "-", "@"):
+        return "'" + s
+    return s
+
 # Convert to CSV
 import csv
 sheet = data["sheets"][0]
 with open(f"{sheet['name']}.csv", "w", newline="", encoding="utf-8") as f:
     writer = csv.writer(f)
     for row in sheet["rows"]:
-        values = [cell["value"] if cell["value"] is not None else "" for cell in row]
+        values = [sanitize_csv_value(cell.get("value")) for cell in row]
         writer.writerow(values)
 ```
 
