@@ -7,12 +7,13 @@ from urllib.parse import parse_qs, urlencode, urlparse, urlsplit, urlunsplit
 from fastmcp import Context, FastMCP
 from fastmcp.server.auth import AccessToken, TokenVerifier
 from fastmcp.server.auth.oidc_proxy import OIDCProxy
-from fastmcp.server.dependencies import get_access_token
+from fastmcp.server.dependencies import get_access_token, get_http_request
 from mcp.server.auth.provider import AuthorizationParams
 
 from src.config import config
 from src.error_messages import handle_sharepoint_error
 from src.sharepoint_auth import SharePointCertificateAuth
+from src.sharepoint_excel import SharePointExcelParser
 from src.sharepoint_search import SharePointSearchClient
 
 
@@ -252,7 +253,7 @@ def _get_token_from_request(ctx: Context | None = None) -> str | None:
     # Try to get from HTTP header first (direct token)
     if ctx:
         try:
-            request = ctx.get_http_request()
+            request = get_http_request()
         except RuntimeError as e:
             # Not in HTTP context (e.g., stdio mode) - expected behavior
             logging.debug(f"Not in HTTP context, skipping Authorization header: {e}")
@@ -447,7 +448,76 @@ def sharepoint_docs_download(file_path: str, ctx: Context | None = None) -> str:
         raise handle_sharepoint_error(e, "download") from e
 
 
+def sharepoint_excel(
+    file_path: str,
+    query: str | None = None,
+    sheet: str | None = None,
+    cell_range: str | None = None,
+    include_formatting: bool = False,
+    ctx: Context | None = None,
+) -> str:
+    """
+    SharePoint上のExcelファイルを操作
+
+    Args:
+        file_path: Excelファイルのパス
+        query: 検索キーワード（指定すると検索モード）
+        sheet: シート名（特定シートのみ取得）
+        cell_range: セル範囲（例: "A1:D10"）
+        include_formatting: 書式情報を含めるか
+        ctx: FastMCP context (injected automatically)
+
+    Returns:
+        JSON文字列
+    """
+    logging.info(
+        f"SharePoint Excel operation: {file_path} "
+        f"(query={query}, sheet={sheet}, cell_range={cell_range}, "
+        f"include_formatting={include_formatting})"
+    )
+
+    try:
+        # SharePointクライアントを取得（既存のダウンロード機能を使用）
+        client = _get_sharepoint_client(ctx)
+
+        # Excel解析クライアントを作成
+        parser = SharePointExcelParser(client)
+
+        # 検索モード
+        if query:
+            return parser.search_cells(file_path, query)
+
+        # 読み取りモード
+        return parser.parse_to_json(
+            file_path,
+            include_formatting=include_formatting,
+            sheet_name=sheet,
+            cell_range=cell_range,
+        )
+
+    except Exception as e:
+        logging.error(f"SharePoint Excel operation failed: {str(e)}")
+        raise handle_sharepoint_error(
+            e,
+            "excel_parse",
+            excel_context={
+                "file_path": file_path,
+                "sheet_name": sheet,
+                "range_spec": cell_range,
+            },
+        ) from e
+
+
 def register_tools():
     """Register MCP tools"""
     mcp.tool(description=config.search_tool_description)(sharepoint_docs_search)
     mcp.tool(description=config.download_tool_description)(sharepoint_docs_download)
+    mcp.tool(
+        description=(
+            "Read or search Excel file in SharePoint. "
+            "Use 'query' parameter to search for specific content and find cell locations. "
+            "Use 'sheet' and 'cell_range' parameters to read specific sections. "
+            "Workflow: 1) Search with query to find relevant cells, "
+            "2) Read specific cell_range based on search results."
+        )
+    )(sharepoint_excel)

@@ -8,6 +8,7 @@ This guide covers how to use the SharePoint MCP server with various clients and 
 - [MCP Inspector Verification](#mcp-inspector-verification)
 - [Claude Desktop Integration](#claude-desktop-integration)
 - [Search Usage Examples](#search-usage-examples)
+- [Excel Operations Usage Examples](#excel-operations-usage-examples)
 
 ## MCP Server Startup
 
@@ -163,4 +164,274 @@ SHAREPOINT_SITE_NAME=@onedrive,project-a-team,project-a-docs
 # Search sales OneDrive folders and customer sites
 SHAREPOINT_ONEDRIVE_PATHS=sales1@company.com:/Documents/Customers,sales2@company.com:/Documents/Proposals
 SHAREPOINT_SITE_NAME=@onedrive,sales-team,customer-portal
+```
+
+## Excel Operations Usage Examples
+
+The `sharepoint_excel` tool allows you to read and search Excel files in SharePoint. It supports two modes:
+- **Search Mode**: Find specific content and locate cells (use `query` parameter)
+- **Read Mode**: Get data from sheets with optional sheet/range filtering
+
+### Prerequisites
+
+- Excel files must be stored in a SharePoint library or OneDrive
+- Appropriate access permissions required
+- No Excel Services dependency
+
+### Tool Parameters
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `file_path` | str | Required | Excel file path |
+| `query` | str \| None | None | Search keyword (enables search mode) |
+| `sheet` | str \| None | None | Sheet name (get specific sheet only) |
+| `cell_range` | str \| None | None | Cell range (e.g., "A1:D10") |
+| `include_formatting` | bool | False | Include formatting information |
+
+### Basic Workflow
+
+**Recommended: Search First, Then Read Specific Range**
+
+```python
+# Step 1: Search for relevant content
+result = sharepoint_excel(file_path="/path/to/file.xlsx", query="Total")
+# → Find that "Total" is in Sheet1 at cell C10
+
+# Step 2: Read the surrounding data
+data = sharepoint_excel(file_path="/path/to/file.xlsx", sheet="Sheet1", cell_range="A1:D15")
+```
+
+### Usage Patterns
+
+#### 1. Search Mode (with query parameter)
+```python
+# Search for cells containing "budget"
+result = sharepoint_excel(
+    file_path="/sites/finance/Shared Documents/report.xlsx",
+    query="budget"
+)
+```
+
+**Search Response:**
+```json
+{
+  "file_path": "/sites/finance/Shared Documents/report.xlsx",
+  "mode": "search",
+  "query": "budget",
+  "match_count": 3,
+  "matches": [
+    {"sheet": "Sheet1", "coordinate": "A1", "value": "Budget Report"},
+    {"sheet": "Sheet1", "coordinate": "B5", "value": "Monthly Budget"},
+    {"sheet": "Summary", "coordinate": "C3", "value": "Budget Total"}
+  ]
+}
+```
+
+#### 2. Read All Data (Default)
+```python
+# Get all sheets and all data
+result = sharepoint_excel(
+    file_path="/sites/finance/Shared Documents/report.xlsx"
+)
+```
+
+#### 3. Read Specific Sheet
+```python
+# Get data from specific sheet only
+result = sharepoint_excel(
+    file_path="/sites/finance/Shared Documents/report.xlsx",
+    sheet="Summary"
+)
+```
+
+#### 4. Read Specific Range
+```python
+# Get data from specific range within a sheet
+result = sharepoint_excel(
+    file_path="/sites/finance/Shared Documents/report.xlsx",
+    sheet="Sheet1",
+    cell_range="A1:D10"
+)
+```
+
+#### 5. Read with Formatting Information
+```python
+# Get data with formatting (colors, merged cells, etc.)
+result = sharepoint_excel(
+    file_path="/sites/finance/Shared Documents/report.xlsx",
+    sheet="Sheet1",
+    include_formatting=True
+)
+```
+
+### JSON Output Format
+
+#### Read Mode (Default)
+
+```json
+{
+  "file_path": "/sites/test/Shared Documents/budget.xlsx",
+  "sheets": [
+    {
+      "name": "Summary",
+      "dimensions": "A1:E10",
+      "rows": [
+        [
+          {"value": "Department", "coordinate": "A1"},
+          {"value": 12500, "coordinate": "B1"}
+        ]
+      ]
+    }
+  ]
+}
+```
+
+#### Read Mode with Range
+
+```json
+{
+  "file_path": "/sites/test/Shared Documents/budget.xlsx",
+  "sheets": [
+    {
+      "name": "Summary",
+      "dimensions": "A1:E10",
+      "requested_range": "A1:B2",
+      "rows": [
+        [
+          {"value": "Department", "coordinate": "A1"},
+          {"value": "Budget", "coordinate": "B1"}
+        ],
+        [
+          {"value": "Sales", "coordinate": "A2"},
+          {"value": 50000, "coordinate": "B2"}
+        ]
+      ]
+    }
+  ]
+}
+```
+
+#### With Formatting (include_formatting=true)
+
+```json
+{
+  "file_path": "/sites/test/Shared Documents/budget.xlsx",
+  "sheets": [
+    {
+      "name": "Summary",
+      "dimensions": "A1:E10",
+      "rows": [
+        [
+          {
+            "value": "Department",
+            "coordinate": "A1",
+            "data_type": "s",
+            "fill": {
+              "pattern_type": "solid",
+              "fg_color": "#CCCCCC",
+              "bg_color": null
+            },
+            "merged": {
+              "range": "A1:B1",
+              "is_top_left": true
+            },
+            "width": 15.0,
+            "height": 20.0
+          }
+        ]
+      ]
+    }
+  ]
+}
+```
+
+### Available Cell Information
+
+**Default (always included):**
+- **value**: Cell value (string, number, date, formula, etc.)
+- **coordinate**: Cell position (e.g., "A1", "B2")
+
+**With include_formatting=true:**
+- **data_type**: Data type code (`s`=string, `n`=number, `f`=formula, etc.)
+- **fill**: Fill color information (pattern type, foreground/background colors)
+- **merged**: Merged cell information (range, position)
+- **width**: Column width
+- **height**: Row height
+
+### Common Use Cases
+
+**Find and Extract Budget Data**
+```python
+# 1. Search for budget file
+results = sharepoint_docs_search(query="budget 2024", file_extensions=["xlsx"])
+file_path = results[0]["path"]
+
+# 2. Search for the data you need
+search_result = sharepoint_excel(file_path=file_path, query="Total Revenue")
+# → Found at Sheet1:C15
+
+# 3. Get the relevant section
+data = sharepoint_excel(file_path=file_path, sheet="Sheet1", cell_range="A1:D20")
+```
+
+**Analyze Cell Formatting**
+```python
+# Get Excel data with formatting
+json_data = sharepoint_excel(file_path=file_path, include_formatting=True)
+data = json.loads(json_data)
+
+# Find cells with specific formatting
+for sheet in data["sheets"]:
+    for row in sheet["rows"]:
+        for cell in row:
+            if cell.get("fill", {}).get("fg_color"):
+                print(f"Colored cell at {cell['coordinate']}: {cell['value']}")
+```
+
+**Export Specific Sheet to CSV**
+```python
+# Get specific sheet data
+json_data = sharepoint_excel(file_path=file_path, sheet="Summary")
+data = json.loads(json_data)
+
+# Helper to prevent CSV formula injection
+def sanitize_csv_value(value):
+    if value is None:
+        return ""
+    s = str(value)
+    # Prevent formula injection in Excel
+    if s and s[0] in ("=", "+", "-", "@"):
+        return "'" + s
+    return s
+
+# Convert to CSV
+import csv
+sheet = data["sheets"][0]
+with open(f"{sheet['name']}.csv", "w", newline="", encoding="utf-8") as f:
+    writer = csv.writer(f)
+    for row in sheet["rows"]:
+        values = [sanitize_csv_value(cell.get("value")) for cell in row]
+        writer.writerow(values)
+```
+
+**Process Multiple Sheets**
+```python
+# Get all Excel data
+json_data = sharepoint_excel(file_path=file_path)
+data = json.loads(json_data)
+
+# Process each sheet
+summary = {}
+for sheet in data["sheets"]:
+    sheet_name = sheet["name"]
+    row_count = len(sheet["rows"])
+    col_count = len(sheet["rows"][0]) if sheet["rows"] else 0
+
+    summary[sheet_name] = {
+        "dimensions": sheet["dimensions"],
+        "rows": row_count,
+        "columns": col_count
+    }
+
+print(json.dumps(summary, indent=2, ensure_ascii=False))
 ```

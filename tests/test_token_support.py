@@ -14,28 +14,27 @@ class TestGetTokenFromRequest:
     @pytest.mark.unit
     def test_get_token_from_authorization_header(self):
         """Test token retrieval from Authorization header"""
-        # Mock Context with HTTP request
+        # Mock get_http_request from dependencies
         mock_ctx = Mock(spec=Context)
         mock_request = Mock()
         mock_request.headers = {"Authorization": "Bearer test-token-from-header"}
-        mock_ctx.get_http_request.return_value = mock_request
 
-        token = _get_token_from_request(mock_ctx)
+        with patch("src.server.get_http_request", return_value=mock_request):
+            token = _get_token_from_request(mock_ctx)
 
         assert token == "test-token-from-header"
-        mock_ctx.get_http_request.assert_called_once()
 
     @pytest.mark.unit
     def test_get_token_from_authorization_header_without_bearer_prefix(self):
         """Test that token without 'Bearer ' prefix is ignored"""
-        # Mock Context with HTTP request
+        # Mock get_http_request from dependencies
         mock_ctx = Mock(spec=Context)
         mock_request = Mock()
         mock_request.headers = {"Authorization": "test-token-without-prefix"}
-        mock_ctx.get_http_request.return_value = mock_request
 
-        with patch("src.server.get_access_token", return_value=None):
-            token = _get_token_from_request(mock_ctx)
+        with patch("src.server.get_http_request", return_value=mock_request):
+            with patch("src.server.get_access_token", return_value=None):
+                token = _get_token_from_request(mock_ctx)
 
         # Should fallback to None since no valid header and no OAuth token
         assert token is None
@@ -44,30 +43,30 @@ class TestGetTokenFromRequest:
     def test_get_token_from_fastmcp_oauth_context(self):
         """Test token retrieval from FastMCP OAuth context"""
         mock_ctx = Mock(spec=Context)
-        mock_ctx.get_http_request.side_effect = RuntimeError("Not in HTTP context")
 
         mock_access_token = Mock(spec=AccessToken)
         mock_access_token.token = "test-oauth-token"
 
-        with patch("src.server.get_access_token", return_value=mock_access_token):
-            token = _get_token_from_request(mock_ctx)
+        with patch("src.server.get_http_request", side_effect=RuntimeError("Not in HTTP context")):
+            with patch("src.server.get_access_token", return_value=mock_access_token):
+                token = _get_token_from_request(mock_ctx)
 
         assert token == "test-oauth-token"
 
     @pytest.mark.unit
     def test_priority_authorization_header_over_oauth(self):
         """Test that Authorization header takes priority over OAuth context"""
-        # Mock Context with both header and OAuth token available
+        # Mock get_http_request from dependencies
         mock_ctx = Mock(spec=Context)
         mock_request = Mock()
         mock_request.headers = {"Authorization": "Bearer header-token"}
-        mock_ctx.get_http_request.return_value = mock_request
 
         mock_access_token = Mock(spec=AccessToken)
         mock_access_token.token = "oauth-token"
 
-        with patch("src.server.get_access_token", return_value=mock_access_token):
-            token = _get_token_from_request(mock_ctx)
+        with patch("src.server.get_http_request", return_value=mock_request):
+            with patch("src.server.get_access_token", return_value=mock_access_token):
+                token = _get_token_from_request(mock_ctx)
 
         # Authorization header should take priority
         assert token == "header-token"
@@ -124,13 +123,14 @@ class TestGetTokenFromRequest:
     @pytest.mark.unit
     def test_bearer_prefix_case_insensitive(self):
         """Test that 'Bearer ' prefix is case-insensitive"""
+        # Mock get_http_request from dependencies
         mock_ctx = Mock(spec=Context)
         mock_request = Mock()
         mock_request.headers = {"Authorization": "bearer lowercase-token"}
-        mock_ctx.get_http_request.return_value = mock_request
 
-        with patch("src.server.get_access_token", return_value=None):
-            token = _get_token_from_request(mock_ctx)
+        with patch("src.server.get_http_request", return_value=mock_request):
+            with patch("src.server.get_access_token", return_value=None):
+                token = _get_token_from_request(mock_ctx)
 
         # Should match lowercase "bearer"
         assert token == "lowercase-token"

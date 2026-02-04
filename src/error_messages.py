@@ -17,6 +17,10 @@ class ErrorCategory(Enum):
     SEARCH_QUERY = "search_query"
     FILE_NOT_FOUND = "file_not_found"
     CONFIGURATION = "configuration"
+    EXCEL_FILE_NOT_FOUND = "excel_file_not_found"
+    EXCEL_SHEET_NOT_FOUND = "excel_sheet_not_found"
+    EXCEL_INVALID_RANGE = "excel_invalid_range"
+    EXCEL_INVALID_FILE = "excel_invalid_file"
     UNKNOWN = "unknown"
 
 
@@ -162,6 +166,52 @@ def get_configuration_error(original_error: Exception) -> SharePointError:
     )
 
 
+def get_excel_file_not_found_error(
+    file_path: str, original_error: Exception
+) -> SharePointError:
+    """Generate Excel file not found error message"""
+    return SharePointError(
+        category=ErrorCategory.EXCEL_FILE_NOT_FOUND,
+        message=f"The specified Excel file was not found: {file_path}",
+        solution="Please verify the file path is correct and the file exists. You can search for the file using sharepoint_docs_search with file_extensions=['xlsx'] to get the correct path.",
+        original_error=original_error,
+    )
+
+
+def get_excel_sheet_not_found_error(
+    sheet_name: str, original_error: Exception
+) -> SharePointError:
+    """Generate Excel sheet not found error message"""
+    return SharePointError(
+        category=ErrorCategory.EXCEL_SHEET_NOT_FOUND,
+        message=f"The specified sheet was not found: {sheet_name}",
+        solution="Run sharepoint_excel without specifying 'sheet' to list available sheets (check sheets[].name in the response), then use a valid sheet name.",
+        original_error=original_error,
+    )
+
+
+def get_excel_invalid_range_error(
+    range_spec: str, original_error: Exception
+) -> SharePointError:
+    """Generate Excel invalid range error message"""
+    return SharePointError(
+        category=ErrorCategory.EXCEL_INVALID_RANGE,
+        message=f"The specified cell range is invalid: {range_spec}",
+        solution="Please use a valid range format like 'A1:C10' or 'A1'. Ensure the range is within the actual bounds of the Excel file.",
+        original_error=original_error,
+    )
+
+
+def get_excel_invalid_file_error(original_error: Exception) -> SharePointError:
+    """Generate Excel invalid file error message"""
+    return SharePointError(
+        category=ErrorCategory.EXCEL_INVALID_FILE,
+        message="The file is not a valid Excel file or is corrupted.",
+        solution="Please verify the file is a valid .xlsx file. Try opening it in Excel locally to check for corruption, or re-upload the file to SharePoint.",
+        original_error=original_error,
+    )
+
+
 def get_unknown_error(original_error: Exception) -> SharePointError:
     """Generate unknown error message"""
     return SharePointError(
@@ -173,19 +223,58 @@ def get_unknown_error(original_error: Exception) -> SharePointError:
 
 
 def handle_sharepoint_error(
-    error: Exception, context: str = "", is_onedrive_file: bool = False
+    error: Exception,
+    context: str = "",
+    is_onedrive_file: bool = False,
+    excel_context: dict[str, str | None] | None = None,
 ) -> SharePointError:
     """
     Classify SharePoint-related errors into appropriate categories and generate natural language messages
 
     Args:
         error: The exception that occurred
-        context: The context where the error occurred ("auth", "search", "download", etc.)
+        context: The context where the error occurred ("auth", "search", "download", "excel_*", etc.)
+        is_onedrive_file: Whether the operation is for OneDrive file
+        excel_context: Excel operation context with file_path, sheet_name, range_spec
 
     Returns:
         SharePointError: Natural language error message
     """
+    # SharePointErrorは再ラップしない
+    if isinstance(error, SharePointError):
+        return error
+
     error_str = str(error).lower()
+    error_type_name = type(error).__name__.lower()
+
+    # Excel操作のエラー分類（openpyxlベース）
+    if context.startswith("excel_") or context == "excel_parse":
+        # ファイル形式エラー（zipfile.BadZipFile, openpyxl例外など）を先に判定
+        # "invalid" を含むファイル形式エラーを先に処理
+        if (
+            "badzip" in error_type_name
+            or "not a valid" in error_str
+            or "corrupt" in error_str
+        ):
+            return get_excel_invalid_file_error(error)
+
+        # ValueErrorはシート名が見つからない場合
+        if isinstance(error, ValueError):
+            if "not found" in error_str and "sheet" in error_str:
+                sheet_name = excel_context.get("sheet_name") if excel_context else None
+                return get_excel_sheet_not_found_error(sheet_name or "unknown", error)
+
+        # openpyxlの無効な座標例外（"coordinate" を明示的にチェック）
+        if "coordinate" in error_type_name:
+            range_spec = excel_context.get("range_spec") if excel_context else None
+            return get_excel_invalid_range_error(range_spec or "unknown", error)
+
+        # HTTP 404エラー（ファイルが見つからない）
+        if hasattr(error, "response") and hasattr(error.response, "status_code"):
+            status_code = error.response.status_code
+            if status_code == 404:
+                file_path = excel_context.get("file_path") if excel_context else ""
+                return get_excel_file_not_found_error(file_path or "", error)
 
     # Classification by HTTP status code
     if hasattr(error, "response") and hasattr(error.response, "status_code"):
