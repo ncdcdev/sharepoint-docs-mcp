@@ -58,21 +58,27 @@ class SharePointExcelParser:
                             if cell.value is not None:
                                 cell_value_str = str(cell.value)
                                 if query in cell_value_str:
-                                    matches.append({
-                                        "sheet": sheet_name,
-                                        "coordinate": cell.coordinate,
-                                        "value": self._serialize_value(cell.value),
-                                    })
+                                    matches.append(
+                                        {
+                                            "sheet": sheet_name,
+                                            "coordinate": cell.coordinate,
+                                            "value": self._serialize_value(cell.value),
+                                        }
+                                    )
 
             logger.info(f"Found {len(matches)} matches for query '{query}'")
 
-            return json.dumps({
-                "file_path": file_path,
-                "mode": "search",
-                "query": query,
-                "match_count": len(matches),
-                "matches": matches,
-            }, ensure_ascii=False, indent=2)
+            return json.dumps(
+                {
+                    "file_path": file_path,
+                    "mode": "search",
+                    "query": query,
+                    "match_count": len(matches),
+                    "matches": matches,
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
 
         except Exception as e:
             logger.error(f"Failed to search cells in Excel file: {str(e)}")
@@ -193,13 +199,18 @@ class SharePointExcelParser:
                 rows_to_process = range_data
 
             for row in rows_to_process:
-                row_data = [self._parse_cell(cell, include_formatting, merged_cell_map) for cell in row]
+                row_data = [
+                    self._parse_cell(cell, include_formatting, merged_cell_map)
+                    for cell in row
+                ]
                 sheet_data["rows"].append(row_data)
         elif sheet.dimensions:
             for row in sheet.iter_rows():
                 row_data = []
                 for cell in row:
-                    cell_data = self._parse_cell(cell, include_formatting, merged_cell_map)
+                    cell_data = self._parse_cell(
+                        cell, include_formatting, merged_cell_map
+                    )
                     row_data.append(cell_data)
                 sheet_data["rows"].append(row_data)
 

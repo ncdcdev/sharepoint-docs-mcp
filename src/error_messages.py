@@ -251,7 +251,11 @@ def handle_sharepoint_error(
     if context.startswith("excel_") or context == "excel_parse":
         # ファイル形式エラー（zipfile.BadZipFile, openpyxl例外など）を先に判定
         # "invalid" を含むファイル形式エラーを先に処理
-        if "badzip" in error_type_name or "not a valid" in error_str or "corrupt" in error_str:
+        if (
+            "badzip" in error_type_name
+            or "not a valid" in error_str
+            or "corrupt" in error_str
+        ):
             return get_excel_invalid_file_error(error)
 
         # ValueErrorはシート名が見つからない場合
