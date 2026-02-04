@@ -1,8 +1,9 @@
 import pytest
 from unittest.mock import patch, Mock
 import base64
+import os
 
-from src.server import sharepoint_docs_search, sharepoint_docs_download, sharepoint_excel
+from src.server import sharepoint_docs_search, sharepoint_docs_download, sharepoint_excel, register_tools
 
 
 class TestSharePointDocsSearch:
@@ -349,3 +350,118 @@ class TestSharePointExcel:
                         sharepoint_excel(
                             file_path="/sites/test/Shared Documents/test.xlsx"
                         )
+
+
+class TestRegisterTools:
+    """register_tools 関数のテスト"""
+
+    @pytest.mark.unit
+    def test_all_tools_registered_by_default(self):
+        """デフォルトでは全ツールが登録されることのテスト"""
+        env_vars = {
+            "SHAREPOINT_BASE_URL": "https://test.sharepoint.com",
+            "SHAREPOINT_TENANT_ID": "test-tenant-id",
+            "SHAREPOINT_CLIENT_ID": "test-client-id",
+            "SHAREPOINT_CERTIFICATE_TEXT": "cert",
+            "SHAREPOINT_PRIVATE_KEY_TEXT": "key",
+        }
+
+        with patch.dict(os.environ, env_vars, clear=True):
+            with patch("src.server.mcp") as mock_mcp:
+                mock_tool_decorator = Mock(return_value=lambda f: f)
+                mock_mcp.tool.return_value = mock_tool_decorator
+
+                # Configを再読み込みして環境変数を反映
+                from importlib import reload
+                import src.config
+                reload(src.config)
+
+                with patch("src.server.config", src.config.config):
+                    register_tools()
+
+                # mcp.tool が3回呼ばれることを確認
+                assert mock_mcp.tool.call_count == 3
+
+    @pytest.mark.unit
+    def test_single_tool_disabled(self):
+        """単一ツールが無効化された場合のテスト"""
+        env_vars = {
+            "SHAREPOINT_BASE_URL": "https://test.sharepoint.com",
+            "SHAREPOINT_TENANT_ID": "test-tenant-id",
+            "SHAREPOINT_CLIENT_ID": "test-client-id",
+            "SHAREPOINT_CERTIFICATE_TEXT": "cert",
+            "SHAREPOINT_PRIVATE_KEY_TEXT": "key",
+            "SHAREPOINT_DISABLED_TOOLS": "sharepoint_excel",
+        }
+
+        with patch.dict(os.environ, env_vars, clear=True):
+            with patch("src.server.mcp") as mock_mcp:
+                mock_tool_decorator = Mock(return_value=lambda f: f)
+                mock_mcp.tool.return_value = mock_tool_decorator
+
+                # Configを再読み込みして環境変数を反映
+                from importlib import reload
+                import src.config
+                reload(src.config)
+
+                with patch("src.server.config", src.config.config):
+                    register_tools()
+
+                # mcp.tool が2回呼ばれることを確認（sharepoint_excelは除外）
+                assert mock_mcp.tool.call_count == 2
+
+    @pytest.mark.unit
+    def test_multiple_tools_disabled(self):
+        """複数ツールが無効化された場合のテスト"""
+        env_vars = {
+            "SHAREPOINT_BASE_URL": "https://test.sharepoint.com",
+            "SHAREPOINT_TENANT_ID": "test-tenant-id",
+            "SHAREPOINT_CLIENT_ID": "test-client-id",
+            "SHAREPOINT_CERTIFICATE_TEXT": "cert",
+            "SHAREPOINT_PRIVATE_KEY_TEXT": "key",
+            "SHAREPOINT_DISABLED_TOOLS": "sharepoint_excel,sharepoint_docs_download",
+        }
+
+        with patch.dict(os.environ, env_vars, clear=True):
+            with patch("src.server.mcp") as mock_mcp:
+                mock_tool_decorator = Mock(return_value=lambda f: f)
+                mock_mcp.tool.return_value = mock_tool_decorator
+
+                # Configを再読み込みして環境変数を反映
+                from importlib import reload
+                import src.config
+                reload(src.config)
+
+                with patch("src.server.config", src.config.config):
+                    register_tools()
+
+                # mcp.tool が1回呼ばれることを確認（sharepoint_docs_searchのみ）
+                assert mock_mcp.tool.call_count == 1
+
+    @pytest.mark.unit
+    def test_all_tools_disabled(self):
+        """全ツールが無効化された場合のテスト"""
+        env_vars = {
+            "SHAREPOINT_BASE_URL": "https://test.sharepoint.com",
+            "SHAREPOINT_TENANT_ID": "test-tenant-id",
+            "SHAREPOINT_CLIENT_ID": "test-client-id",
+            "SHAREPOINT_CERTIFICATE_TEXT": "cert",
+            "SHAREPOINT_PRIVATE_KEY_TEXT": "key",
+            "SHAREPOINT_DISABLED_TOOLS": "sharepoint_docs_search,sharepoint_docs_download,sharepoint_excel",
+        }
+
+        with patch.dict(os.environ, env_vars, clear=True):
+            with patch("src.server.mcp") as mock_mcp:
+                mock_tool_decorator = Mock(return_value=lambda f: f)
+                mock_mcp.tool.return_value = mock_tool_decorator
+
+                # Configを再読み込みして環境変数を反映
+                from importlib import reload
+                import src.config
+                reload(src.config)
+
+                with patch("src.server.config", src.config.config):
+                    register_tools()
+
+                # mcp.tool が0回呼ばれることを確認
+                assert mock_mcp.tool.call_count == 0
