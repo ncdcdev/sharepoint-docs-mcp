@@ -188,6 +188,7 @@ The `sharepoint_excel` tool allows you to read and search Excel files in SharePo
 | `cell_range` | str \| None | None | Cell range (e.g., "A1:D10") |
 | `include_formatting` | bool | False | Include formatting information |
 | `include_header` | bool | True | Auto-detect and separate header rows using `freeze_panes` |
+| `metadata_only` | bool | False | Return only file and worksheet metadata without cell contents |
 
 ### Basic Workflow
 
@@ -309,6 +310,48 @@ result = sharepoint_excel(
 - When `cell_range` is specified, automatically includes frozen range
 - Set `include_header=False` to return legacy `rows` format
 ```
+
+#### 7. Metadata-Only Mode (File Structure Inspection)
+```python
+# Get only file structure without data rows
+result = sharepoint_excel(
+    file_path="/sites/finance/Shared Documents/large-report.xlsx",
+    metadata_only=True
+)
+```
+
+**Metadata-Only Response:**
+```json
+{
+  "file_path": "/sites/finance/Shared Documents/large-report.xlsx",
+  "sheets": [{
+    "name": "Sheet1",
+    "freeze_panes": "B2",
+    "frozen_rows": 1,
+    "frozen_cols": 1,
+    "dimensions": "A1:E1000",
+    "header_rows": [
+      [
+        {"value": "Product", "coordinate": "A1"},
+        {"value": "Price", "coordinate": "B1"},
+        {"value": "Stock", "coordinate": "C1"}
+      ]
+    ],
+    "data_rows": []
+  }]
+}
+```
+
+**Use Cases:**
+- Inspect large file structure before fetching data
+- Understand what headers exist in each sheet
+- Determine the necessary `cell_range` before retrieving full data
+- Reduce token usage
+
+**Recommended Workflow:**
+1. Use `metadata_only=True` to inspect file structure
+2. Identify the required range
+3. Fetch actual data with specific `cell_range`
 
 ### JSON Output Format
 
