@@ -549,6 +549,7 @@ def register_tools():
                 "even when they're outside the specified cell_range - headers will be in 'header_rows', data in 'data_rows'. "
                 "Use 'metadata_only=True' to get only file structure and headers without data rows (useful for understanding file layout). "
                 "Use 'include_formatting=True' to include cell formatting details. "
+                "Note: 'metadata_only' and 'include_header' are ignored in search mode (when using 'query'). "
                 "Workflow: 1) Search with query to find relevant cells, "
                 "2) Read specific cell_range based on search results."
             )
