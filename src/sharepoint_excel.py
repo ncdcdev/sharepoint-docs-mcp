@@ -119,7 +119,7 @@ class SharePointExcelParser:
         logger.info(
             f"Parsing Excel file: {file_path} "
             f"(include_formatting={include_formatting}, sheet={sheet_name}, range={cell_range}, "
-            f"metadata_only={metadata_only})"
+            f"include_header={include_header}, metadata_only={metadata_only})"
         )
 
         try:
@@ -166,7 +166,7 @@ class SharePointExcelParser:
         sheet,
         include_formatting: bool,
         cell_range: str | None = None,
-        include_header: bool = False,
+        include_header: bool = True,
         metadata_only: bool = False,
     ) -> dict[str, Any]:
         """
@@ -216,7 +216,7 @@ class SharePointExcelParser:
             # セル範囲を拡張してヘッダーを含める
             if include_header and frozen_rows > 0:
                 header_range, data_range = self._expand_range_with_headers(
-                    cell_range, frozen_rows, frozen_cols
+                    cell_range, frozen_rows
                 )
 
                 # ヘッダー範囲がある場合は取得
@@ -410,7 +410,7 @@ class SharePointExcelParser:
             return (0, 0)
 
     def _expand_range_with_headers(
-        self, cell_range: str, frozen_rows: int, frozen_cols: int
+        self, cell_range: str, frozen_rows: int
     ) -> tuple[str | None, str]:
         """
         cell_rangeを固定範囲を含むように拡張
@@ -418,7 +418,6 @@ class SharePointExcelParser:
         Args:
             cell_range: セル範囲（例: "A5:D10"）
             frozen_rows: 固定行数
-            frozen_cols: 固定列数
 
         Returns:
             (header_range, data_range)のタプル

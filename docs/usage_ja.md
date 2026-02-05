@@ -188,6 +188,7 @@ SHAREPOINT_SITE_NAME=@onedrive,sales-team,customer-portal
 | `cell_range` | str \| None | None | セル範囲（例: "A1:D10"） |
 | `include_formatting` | bool | False | 書式情報を含めるか |
 | `include_header` | bool | True | ヘッダー行を自動検出して分離するか（`freeze_panes`を使用） |
+| `metadata_only` | bool | False | メタデータ（シート名やセル範囲など）のみを返し、セル内容は取得しないかどうか |
 
 ### 基本的なワークフロー
 
@@ -309,6 +310,48 @@ result = sharepoint_excel(
 - `cell_range`指定時、固定行範囲を自動的に含める
 - `include_header=False`を指定すると、従来の`rows`形式で返す
 ```
+
+#### 7. メタデータのみ取得（ファイル構造の確認）
+```python
+# データ行を除外してファイル構造のみを取得
+result = sharepoint_excel(
+    file_path="/sites/finance/Shared Documents/large-report.xlsx",
+    metadata_only=True
+)
+```
+
+**メタデータのみのレスポンス:**
+```json
+{
+  "file_path": "/sites/finance/Shared Documents/large-report.xlsx",
+  "sheets": [{
+    "name": "Sheet1",
+    "freeze_panes": "B2",
+    "frozen_rows": 1,
+    "frozen_cols": 1,
+    "dimensions": "A1:E1000",
+    "header_rows": [
+      [
+        {"value": "商品名", "coordinate": "A1"},
+        {"value": "価格", "coordinate": "B1"},
+        {"value": "在庫", "coordinate": "C1"}
+      ]
+    ],
+    "data_rows": []
+  }]
+}
+```
+
+**ユースケース:**
+- 大きなファイルの構造を事前に確認
+- どのシートにどんなヘッダーがあるかを把握
+- 必要な`cell_range`を決定してから本データを取得
+- トークン使用量の削減
+
+**推奨ワークフロー:**
+1. `metadata_only=True`でファイル構造を確認
+2. 必要な範囲を特定
+3. `cell_range`を指定して本データを取得
 
 ### JSON出力形式
 
