@@ -455,6 +455,7 @@ def sharepoint_excel(
     cell_range: str | None = None,
     include_formatting: bool = False,
     include_header: bool = True,
+    metadata_only: bool = False,
     ctx: Context | None = None,
 ) -> str:
     """
@@ -466,10 +467,14 @@ def sharepoint_excel(
         sheet: シート名（特定シートのみ取得）
         cell_range: セル範囲（例: "A1:D10"）
         include_formatting: 書式情報を含めるか
-        include_header: ヘッダー情報を分離して返すか
-            True (デフォルト): freeze_panesを使用してheader_rowsとdata_rowsに分離
-                 固定行がある場合、cell_range指定時は固定範囲も自動的に含める
-            False: すべてのデータをrowsに含める
+        include_header: ヘッダー情報を自動追加して返すか
+            True (デフォルト): freeze_panesで固定された行をヘッダーとして認識し、
+                 cell_range指定時にヘッダーが範囲外でも自動的に追加してheader_rowsとdata_rowsに分けて返す
+            False: すべてのデータをrowsに含める（ヘッダー自動追加なし）
+        metadata_only: メタデータのみを返すか（data_rowsを除外）
+            True: ファイル情報、シート名、dimensions、freeze_panes、header_rowsのみ返す
+            False (デフォルト): すべてのデータを含める
+            注: 検索モードでは無視される
         ctx: FastMCP context (injected automatically)
 
     Returns:
@@ -478,7 +483,8 @@ def sharepoint_excel(
     logging.info(
         f"SharePoint Excel operation: {file_path} "
         f"(query={query}, sheet={sheet}, cell_range={cell_range}, "
-        f"include_formatting={include_formatting}, include_header={include_header})"
+        f"include_formatting={include_formatting}, include_header={include_header}, "
+        f"metadata_only={metadata_only})"
     )
 
     try:
@@ -488,7 +494,7 @@ def sharepoint_excel(
         # Excel解析クライアントを作成
         parser = SharePointExcelParser(client)
 
-        # 検索モード（include_headerは無視）
+        # 検索モード（include_header、metadata_onlyは無視）
         if query:
             return parser.search_cells(file_path, query)
 
@@ -499,6 +505,7 @@ def sharepoint_excel(
             sheet_name=sheet,
             cell_range=cell_range,
             include_header=include_header,
+            metadata_only=metadata_only,
         )
 
     except Exception as e:
@@ -538,6 +545,10 @@ def register_tools():
                 "Read or search Excel file in SharePoint. "
                 "Use 'query' parameter to search for specific content and find cell locations. "
                 "Use 'sheet' and 'cell_range' parameters to read specific sections. "
+                "Use 'include_header=True' (default) to automatically include header rows (detected via freeze_panes) "
+                "even when they're outside the specified cell_range - headers will be in 'header_rows', data in 'data_rows'. "
+                "Use 'metadata_only=True' to get only file structure and headers without data rows (useful for understanding file layout). "
+                "Use 'include_formatting=True' to include cell formatting details. "
                 "Workflow: 1) Search with query to find relevant cells, "
                 "2) Read specific cell_range based on search results."
             )
