@@ -225,7 +225,10 @@ class SharePointExcelParser:
 
             # データサイズ検証（DoS対策）
             range_rows, range_cols = self._calculate_range_size(cell_range)
-            if range_rows > config.excel_max_data_rows or range_cols > config.excel_max_data_cols:
+            if (
+                range_rows > config.excel_max_data_rows
+                or range_cols > config.excel_max_data_cols
+            ):
                 raise ValueError(
                     f"データサイズ({range_rows}行 × {range_cols}列)が上限"
                     f"({config.excel_max_data_rows}行 × {config.excel_max_data_cols}列)を超えています。"
@@ -243,24 +246,39 @@ class SharePointExcelParser:
                 if header_range:
                     header_data = sheet[header_range]
                     header_rows_data = self._normalize_range_data(header_data)
-                    all_rows.extend(self._parse_rows(header_rows_data, include_formatting, merged_cell_map))
+                    all_rows.extend(
+                        self._parse_rows(
+                            header_rows_data, include_formatting, merged_cell_map
+                        )
+                    )
 
                 # データ範囲を取得（metadata_onlyの場合はスキップ）
                 if not metadata_only:
                     range_data = sheet[data_range]
                     data_rows_data = self._normalize_range_data(range_data)
-                    all_rows.extend(self._parse_rows(data_rows_data, include_formatting, merged_cell_map))
+                    all_rows.extend(
+                        self._parse_rows(
+                            data_rows_data, include_formatting, merged_cell_map
+                        )
+                    )
             else:
                 # 通常のセル範囲取得（metadata_onlyの場合もヘッダーなしなので取得）
                 if not metadata_only:
                     range_data = sheet[cell_range]
                     rows_to_process = self._normalize_range_data(range_data)
-                    all_rows.extend(self._parse_rows(rows_to_process, include_formatting, merged_cell_map))
+                    all_rows.extend(
+                        self._parse_rows(
+                            rows_to_process, include_formatting, merged_cell_map
+                        )
+                    )
         elif sheet.dimensions:
             # シート全体を取得
             # データサイズ検証（DoS対策）
             sheet_rows, sheet_cols = self._calculate_range_size(sheet.dimensions)
-            if sheet_rows > config.excel_max_data_rows or sheet_cols > config.excel_max_data_cols:
+            if (
+                sheet_rows > config.excel_max_data_rows
+                or sheet_cols > config.excel_max_data_cols
+            ):
                 raise ValueError(
                     f"シート全体のサイズ({sheet_rows}行 × {sheet_cols}列)が上限"
                     f"({config.excel_max_data_rows}行 × {config.excel_max_data_cols}列)を超えています。"
@@ -269,22 +287,18 @@ class SharePointExcelParser:
                 )
 
             # metadata_onlyの場合はヘッダーのみ取得
+            rows_to_process = None
             if metadata_only and include_header and frozen_rows > 0:
                 # ヘッダー行のみ取得
-                for row in sheet.iter_rows(max_row=frozen_rows):
-                    row_data = [
-                        self._parse_cell(cell, include_formatting, merged_cell_map)
-                        for cell in row
-                    ]
-                    all_rows.append(row_data)
+                rows_to_process = tuple(sheet.iter_rows(max_row=frozen_rows))
             elif not metadata_only:
                 # 全データを取得
-                for row in sheet.iter_rows():
-                    row_data = [
-                        self._parse_cell(cell, include_formatting, merged_cell_map)
-                        for cell in row
-                    ]
-                    all_rows.append(row_data)
+                rows_to_process = tuple(sheet.iter_rows())
+
+            if rows_to_process:
+                all_rows.extend(
+                    self._parse_rows(rows_to_process, include_formatting, merged_cell_map)
+                )
 
         # レスポンス形式の分岐
         if include_header:
@@ -451,6 +465,13 @@ class SharePointExcelParser:
 
             start_col_idx = column_index_from_string(start_col)
             end_col_idx = column_index_from_string(end_col)
+
+            # 逆順序の範囲を検出（セキュリティ対策）
+            if end_row < start_row or end_col_idx < start_col_idx:
+                raise ValueError(
+                    f"無効なセル範囲: '{range_str}'。"
+                    f"範囲は正しい順序で指定してください（例: 'A1:Z100'）"
+                )
 
             rows = end_row - start_row + 1
             cols = end_col_idx - start_col_idx + 1
