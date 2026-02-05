@@ -92,6 +92,7 @@ class SharePointExcelParser:
         sheet_name: str | None = None,
         cell_range: str | None = None,
         include_header: bool = True,
+        metadata_only: bool = False,
     ) -> str:
         """
         Excelファイルを解析してJSON形式で返す
@@ -103,16 +104,22 @@ class SharePointExcelParser:
                 True: value, coordinate, data_type, fill, merged, width, height を含む
             sheet_name: 特定シートのみ取得（Noneで全シート）
             cell_range: セル範囲指定（例: "A1:D10"）
-            include_header: ヘッダー情報を分離して返すかどうか
-                True (デフォルト): header_rows と data_rows に分離（freeze_panes を使用）
-                False: rows にすべてのデータを含む
+            include_header: ヘッダー情報を自動追加して返すかどうか
+                True (デフォルト): freeze_panesで固定された行をヘッダーとして認識し、
+                     cell_range指定時にヘッダーが範囲外でも自動的に追加して
+                     header_rows と data_rows に分けて返す
+                False: rows にすべてのデータを含む（ヘッダー自動追加なし）
+            metadata_only: メタデータのみを返すかどうか
+                True: data_rows を空リストにする（header_rows とメタデータのみ返す）
+                False (デフォルト): すべてのデータを含める
 
         Returns:
             JSON文字列（全シート・全セルのデータ）
         """
         logger.info(
             f"Parsing Excel file: {file_path} "
-            f"(include_formatting={include_formatting}, sheet={sheet_name}, range={cell_range})"
+            f"(include_formatting={include_formatting}, sheet={sheet_name}, range={cell_range}, "
+            f"metadata_only={metadata_only})"
         )
 
         try:
@@ -143,7 +150,7 @@ class SharePointExcelParser:
             for name in sheets_to_parse:
                 sheet = workbook[name]
                 sheet_data = self._parse_sheet(
-                    sheet, include_formatting, cell_range, include_header
+                    sheet, include_formatting, cell_range, include_header, metadata_only
                 )
                 result["sheets"].append(sheet_data)
 
@@ -160,6 +167,7 @@ class SharePointExcelParser:
         include_formatting: bool,
         cell_range: str | None = None,
         include_header: bool = False,
+        metadata_only: bool = False,
     ) -> dict[str, Any]:
         """
         シートを解析してdict形式で返す
@@ -169,6 +177,7 @@ class SharePointExcelParser:
             include_formatting: 書式情報を含めるかどうか
             cell_range: セル範囲指定（例: "A1:D10"）
             include_header: ヘッダー情報を分離して返すかどうか
+            metadata_only: メタデータのみを返すかどうか
 
         Returns:
             シートデータのdict
@@ -255,9 +264,11 @@ class SharePointExcelParser:
         if include_header:
             header_rows, data_rows = self._split_rows_by_header(all_rows, frozen_rows)
             sheet_data["header_rows"] = header_rows
-            sheet_data["data_rows"] = data_rows
+            # metadata_onlyの場合はdata_rowsを空リストにする
+            sheet_data["data_rows"] = [] if metadata_only else data_rows
         else:
-            sheet_data["rows"] = all_rows
+            # metadata_onlyの場合はrowsを空リストにする
+            sheet_data["rows"] = [] if metadata_only else all_rows
 
         return sheet_data
 
