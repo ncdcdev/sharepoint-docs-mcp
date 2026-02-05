@@ -188,7 +188,7 @@ The `sharepoint_excel` tool allows you to read and search Excel files in SharePo
 | `cell_range` | str \| None | None | Cell range (e.g., "A1:D10") |
 | `include_formatting` | bool | False | Include formatting information |
 | `include_header` | bool | True | Auto-detect and separate header rows using `freeze_panes` |
-| `metadata_only` | bool | False | Return only file and worksheet metadata without cell contents |
+| `metadata_only` | bool | False | Exclude data rows to return only metadata (reduce response size) |
 
 ### Basic Workflow
 
@@ -346,7 +346,7 @@ result = sharepoint_excel(
 - Inspect large file structure before fetching data
 - Understand what headers exist in each sheet
 - Determine the necessary `cell_range` before retrieving full data
-- Reduce token usage
+- Significantly reduce response size (save tokens)
 
 **Recommended Workflow:**
 1. Use `metadata_only=True` to inspect file structure

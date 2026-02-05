@@ -478,7 +478,7 @@ class SharePointExcelParser:
 
         return (header_rows, data_rows)
 
-    def _normalize_range_data(self, range_data):
+    def _normalize_range_data(self, range_data: Any) -> tuple[tuple[Cell, ...], ...]:
         """
         openpyxlの範囲データを統一的なタプルのタプル形式に変換
 
@@ -491,7 +491,10 @@ class SharePointExcelParser:
         if isinstance(range_data, Cell):
             # 単一セルの場合
             return ((range_data,),)
-        elif range_data and not isinstance(range_data[0], tuple):
+        elif not range_data:
+            # 空の場合
+            return ()
+        elif not isinstance(range_data[0], tuple):
             # 単一列/行の場合
             return (range_data,)
         else:

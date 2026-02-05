@@ -188,7 +188,7 @@ SHAREPOINT_SITE_NAME=@onedrive,sales-team,customer-portal
 | `cell_range` | str \| None | None | セル範囲（例: "A1:D10"） |
 | `include_formatting` | bool | False | 書式情報を含めるか |
 | `include_header` | bool | True | ヘッダー行を自動検出して分離するか（`freeze_panes`を使用） |
-| `metadata_only` | bool | False | メタデータ（シート名やセル範囲など）のみを返し、セル内容は取得しないかどうか |
+| `metadata_only` | bool | False | データ行を除外してメタデータのみ返す（応答サイズを削減） |
 
 ### 基本的なワークフロー
 
@@ -346,7 +346,7 @@ result = sharepoint_excel(
 - 大きなファイルの構造を事前に確認
 - どのシートにどんなヘッダーがあるかを把握
 - 必要な`cell_range`を決定してから本データを取得
-- トークン使用量の削減
+- 応答サイズを大幅に削減（トークン使用量の節約）
 
 **推奨ワークフロー:**
 1. `metadata_only=True`でファイル構造を確認
