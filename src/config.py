@@ -55,6 +55,17 @@ class SharePointConfig:
             os.getenv("SHAREPOINT_ALLOWED_FILE_EXTENSIONS", "pdf,docx,xlsx,pptx,txt")
         )
 
+        # Excel処理の制限設定
+        self.excel_max_frozen_rows = int(
+            os.getenv("SHAREPOINT_EXCEL_MAX_FROZEN_ROWS", "100")
+        )
+        self.excel_max_data_rows = int(
+            os.getenv("SHAREPOINT_EXCEL_MAX_DATA_ROWS", "10000")
+        )
+        self.excel_max_data_cols = int(
+            os.getenv("SHAREPOINT_EXCEL_MAX_DATA_COLS", "10000")
+        )
+
         # ツール説明文のカスタマイズ
         self.search_tool_description = os.getenv(
             "SHAREPOINT_SEARCH_TOOL_DESCRIPTION",

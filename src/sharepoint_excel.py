@@ -13,6 +13,8 @@ from openpyxl.styles import Color
 from openpyxl.utils import column_index_from_string, get_column_letter
 from openpyxl.utils.cell import coordinate_from_string
 
+from src.config import config
+
 logger = logging.getLogger(__name__)
 
 
@@ -187,11 +189,19 @@ class SharePointExcelParser:
             "dimensions": str(sheet.dimensions) if sheet.dimensions else None,
         }
 
-        # freeze_panes情報の取得
+        # freeze_panes情報の取得と検証
         frozen_rows = 0
         frozen_cols = 0
         if include_header:
             frozen_rows, frozen_cols = self._parse_freeze_panes(sheet.freeze_panes)
+
+            # frozen_rows検証（DoS対策）
+            if frozen_rows > config.excel_max_frozen_rows:
+                raise ValueError(
+                    f"ヘッダー行数({frozen_rows})が上限({config.excel_max_frozen_rows})を超えています。"
+                    f"悪意のあるファイルまたは処理には大きすぎるファイルです。"
+                )
+
             if sheet.freeze_panes:
                 sheet_data["freeze_panes"] = sheet.freeze_panes
             sheet_data["frozen_rows"] = frozen_rows
@@ -208,10 +218,20 @@ class SharePointExcelParser:
                     coord_str = f"{col_letter}{cell_coord[0]}"
                     merged_cell_map[coord_str] = str(merged_range)
 
-        # セル範囲の拡張（include_headerがTrueで固定行がある場合）
+        # セル範囲の拡張とデータサイズ検証
         all_rows = []
         if cell_range:
             sheet_data["requested_range"] = cell_range
+
+            # データサイズ検証（DoS対策）
+            range_rows, range_cols = self._calculate_range_size(cell_range)
+            if range_rows > config.excel_max_data_rows or range_cols > config.excel_max_data_cols:
+                raise ValueError(
+                    f"データサイズ({range_rows}行 × {range_cols}列)が上限"
+                    f"({config.excel_max_data_rows}行 × {config.excel_max_data_cols}列)を超えています。"
+                    f"cell_rangeパラメータで必要な範囲を指定してください。"
+                    f"例: cell_range='A1:Z1000'"
+                )
 
             # セル範囲を拡張してヘッダーを含める
             if include_header and frozen_rows > 0:
@@ -222,43 +242,49 @@ class SharePointExcelParser:
                 # ヘッダー範囲がある場合は取得
                 if header_range:
                     header_data = sheet[header_range]
-                    header_rows = self._normalize_range_data(header_data)
-                    for row in header_rows:
-                        row_data = [
-                            self._parse_cell(cell, include_formatting, merged_cell_map)
-                            for cell in row
-                        ]
-                        all_rows.append(row_data)
+                    header_rows_data = self._normalize_range_data(header_data)
+                    all_rows.extend(self._parse_rows(header_rows_data, include_formatting, merged_cell_map))
 
-                # データ範囲を取得
-                range_data = sheet[data_range]
-                data_rows = self._normalize_range_data(range_data)
-                for row in data_rows:
-                    row_data = [
-                        self._parse_cell(cell, include_formatting, merged_cell_map)
-                        for cell in row
-                    ]
-                    all_rows.append(row_data)
+                # データ範囲を取得（metadata_onlyの場合はスキップ）
+                if not metadata_only:
+                    range_data = sheet[data_range]
+                    data_rows_data = self._normalize_range_data(range_data)
+                    all_rows.extend(self._parse_rows(data_rows_data, include_formatting, merged_cell_map))
             else:
-                # 通常のセル範囲取得
-                range_data = sheet[cell_range]
-                rows_to_process = self._normalize_range_data(range_data)
-                for row in rows_to_process:
-                    row_data = [
-                        self._parse_cell(cell, include_formatting, merged_cell_map)
-                        for cell in row
-                    ]
-                    all_rows.append(row_data)
+                # 通常のセル範囲取得（metadata_onlyの場合もヘッダーなしなので取得）
+                if not metadata_only:
+                    range_data = sheet[cell_range]
+                    rows_to_process = self._normalize_range_data(range_data)
+                    all_rows.extend(self._parse_rows(rows_to_process, include_formatting, merged_cell_map))
         elif sheet.dimensions:
             # シート全体を取得
-            for row in sheet.iter_rows():
-                row_data = []
-                for cell in row:
-                    cell_data = self._parse_cell(
-                        cell, include_formatting, merged_cell_map
-                    )
-                    row_data.append(cell_data)
-                all_rows.append(row_data)
+            # データサイズ検証（DoS対策）
+            sheet_rows, sheet_cols = self._calculate_range_size(sheet.dimensions)
+            if sheet_rows > config.excel_max_data_rows or sheet_cols > config.excel_max_data_cols:
+                raise ValueError(
+                    f"シート全体のサイズ({sheet_rows}行 × {sheet_cols}列)が上限"
+                    f"({config.excel_max_data_rows}行 × {config.excel_max_data_cols}列)を超えています。"
+                    f"cell_rangeパラメータで必要な範囲を指定してください。"
+                    f"例: cell_range='A1:Z1000'"
+                )
+
+            # metadata_onlyの場合はヘッダーのみ取得
+            if metadata_only and include_header and frozen_rows > 0:
+                # ヘッダー行のみ取得
+                for row in sheet.iter_rows(max_row=frozen_rows):
+                    row_data = [
+                        self._parse_cell(cell, include_formatting, merged_cell_map)
+                        for cell in row
+                    ]
+                    all_rows.append(row_data)
+            elif not metadata_only:
+                # 全データを取得
+                for row in sheet.iter_rows():
+                    row_data = [
+                        self._parse_cell(cell, include_formatting, merged_cell_map)
+                        for cell in row
+                    ]
+                    all_rows.append(row_data)
 
         # レスポンス形式の分岐
         if include_header:
@@ -332,6 +358,32 @@ class SharePointExcelParser:
 
         return cell_data
 
+    def _parse_rows(
+        self,
+        rows: tuple[tuple[Cell, ...], ...],
+        include_formatting: bool,
+        merged_cell_map: dict[str, str] | None = None,
+    ) -> list[list[dict[str, Any]]]:
+        """
+        行データを解析してリスト形式で返す（コード重複削減用ヘルパー）
+
+        Args:
+            rows: 行データのタプル
+            include_formatting: 書式情報を含めるか
+            merged_cell_map: マージセル情報
+
+        Returns:
+            解析された行データのリスト
+        """
+        parsed_rows = []
+        for row in rows:
+            row_data = [
+                self._parse_cell(cell, include_formatting, merged_cell_map)
+                for cell in row
+            ]
+            parsed_rows.append(row_data)
+        return parsed_rows
+
     def _serialize_value(self, value: Any) -> Any:
         """
         セル値をJSONシリアライズ可能な形式に変換
@@ -376,6 +428,37 @@ class SharePointExcelParser:
             return f"theme_{color.theme}"
 
         return None
+
+    def _calculate_range_size(self, range_str: str) -> tuple[int, int]:
+        """
+        セル範囲文字列から行数と列数を計算
+
+        Args:
+            range_str: セル範囲（例: "A1:D10" または "A1:XFD1048576"）
+
+        Returns:
+            (rows, cols)のタプル
+        """
+        try:
+            if ":" in range_str:
+                start_cell, end_cell = range_str.split(":")
+            else:
+                # 単一セルの場合
+                return (1, 1)
+
+            start_col, start_row = coordinate_from_string(start_cell)
+            end_col, end_row = coordinate_from_string(end_cell)
+
+            start_col_idx = column_index_from_string(start_col)
+            end_col_idx = column_index_from_string(end_col)
+
+            rows = end_row - start_row + 1
+            cols = end_col_idx - start_col_idx + 1
+
+            return (rows, cols)
+        except Exception as e:
+            logger.warning(f"Failed to calculate range size '{range_str}': {e}")
+            return (0, 0)
 
     def _parse_freeze_panes(self, freeze_panes: str | None) -> tuple[int, int]:
         """
