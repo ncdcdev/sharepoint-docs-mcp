@@ -732,3 +732,79 @@ class TestSharePointExcelParser:
 
         # データ行は空リスト（metadata_onlyのため）
         assert sheet["data_rows"] == []
+
+    def test_freeze_panes_scrolled_position_does_not_affect_frozen_rows(self):
+        """スクロール後に保存されたファイルでfrozen_rowsが正しく取得されるテスト
+
+        Excel上で3行固定して行450付近にスクロールして保存すると、
+        pane.topLeftCell="A450"になるが、pane.ySplit=3は不変。
+        旧実装ではsheet.freeze_panes（=topLeftCell）を解析していたため
+        frozen_rows=449と誤判定していたバグを検証する。
+        """
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "ScrolledSheet"
+
+        # ヘッダー3行 + データ行
+        for row in range(1, 11):
+            ws.cell(row=row, column=1, value=f"Row{row}")
+
+        # 3行固定を設定
+        ws.freeze_panes = "A4"
+
+        # スクロール位置を変更（pane.topLeftCellを直接操作）
+        pane = ws.sheet_view.pane
+        pane.topLeftCell = "A450"
+
+        excel_bytes = BytesIO()
+        wb.save(excel_bytes)
+        excel_bytes.seek(0)
+
+        self.mock_download_client.download_file.return_value = excel_bytes.getvalue()
+
+        parser = SharePointExcelParser(self.mock_download_client)
+        result_json = parser.parse_to_json("/test/scrolled.xlsx", include_header=True)
+
+        result = json.loads(result_json)
+        sheet = result["sheets"][0]
+
+        # pane.ySplit=3なので、frozen_rowsは3であるべき（449ではない）
+        assert sheet["frozen_rows"] == 3
+        assert sheet["frozen_cols"] == 0
+        assert sheet["freeze_panes"] == "A4"
+
+        # ヘッダー行は3行
+        assert len(sheet["header_rows"]) == 3
+        assert sheet["header_rows"][0][0]["value"] == "Row1"
+        assert sheet["header_rows"][2][0]["value"] == "Row3"
+
+    def test_split_pane_is_ignored(self):
+        """split pane（state="split"）は固定行として認識されないテスト"""
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "SplitSheet"
+
+        ws["A1"] = "Header"
+        ws["A2"] = "Data"
+
+        # split paneを設定（frozenではなくsplit）
+        from openpyxl.worksheet.views import Pane
+
+        ws.sheet_view.pane = Pane(ySplit=3, xSplit=0, state="split")
+
+        excel_bytes = BytesIO()
+        wb.save(excel_bytes)
+        excel_bytes.seek(0)
+
+        self.mock_download_client.download_file.return_value = excel_bytes.getvalue()
+
+        parser = SharePointExcelParser(self.mock_download_client)
+        result_json = parser.parse_to_json("/test/split.xlsx", include_header=True)
+
+        result = json.loads(result_json)
+        sheet = result["sheets"][0]
+
+        # split paneは固定行として認識されない
+        assert sheet["frozen_rows"] == 0
+        assert sheet["frozen_cols"] == 0
+        assert "freeze_panes" not in sheet

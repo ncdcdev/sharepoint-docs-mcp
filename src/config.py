@@ -63,7 +63,7 @@ class SharePointConfig:
             os.getenv("SHAREPOINT_EXCEL_MAX_DATA_ROWS", "10000")
         )
         self.excel_max_data_cols = int(
-            os.getenv("SHAREPOINT_EXCEL_MAX_DATA_COLS", "10000")
+            os.getenv("SHAREPOINT_EXCEL_MAX_DATA_COLS", "2000")
         )
 
         # ツール説明文のカスタマイズ
