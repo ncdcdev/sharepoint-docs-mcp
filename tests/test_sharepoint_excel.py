@@ -4,7 +4,7 @@ from io import BytesIO
 from unittest.mock import Mock
 
 import pytest
-from openpyxl import Workbook
+from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font, PatternFill
 
 from src.sharepoint_excel import SharePointExcelParser
@@ -152,7 +152,7 @@ class TestSharePointExcelParser:
         assert cell2["coordinate"] == "B2"
 
     def test_parse_with_formatting(self):
-        """書式情報を含むExcelファイルの解析テスト（include_formatting=True）"""
+        """include_formatting=Trueでも出力が変わらないことのテスト"""
         excel_bytes = self._create_formatted_excel()
         self.mock_download_client.download_file.return_value = excel_bytes
 
@@ -162,11 +162,11 @@ class TestSharePointExcelParser:
         result = json.loads(result_json)
         assert result["sheets"][0]["name"] == "FormattedSheet"
 
-        # ヘッダー行の書式を確認
+        # include_formatting=Trueでも書式情報は追加されない
         header_cell = result["sheets"][0]["rows"][0][0]
         assert header_cell["value"] == "Name"
-        assert "data_type" in header_cell
-        assert header_cell["fill"] is not None
+        assert "data_type" not in header_cell
+        assert "fill" not in header_cell
         # fontとalignmentは含まれない
         assert "font" not in header_cell
         assert "alignment" not in header_cell
@@ -187,7 +187,7 @@ class TestSharePointExcelParser:
         assert result["sheets"][1]["rows"][0][0]["value"] == "Data2"
 
     def test_parse_merged_cells(self):
-        """結合セルの解析テスト（include_formatting=True）"""
+        """結合セルの解析テスト（結合情報は常に含まれる）"""
         excel_bytes = self._create_merged_cells_excel()
         self.mock_download_client.download_file.return_value = excel_bytes
 
@@ -197,7 +197,7 @@ class TestSharePointExcelParser:
         result = json.loads(result_json)
         assert result["sheets"][0]["name"] == "MergedSheet"
 
-        # 結合セルの情報を確認（include_formatting=Trueの場合のみ含まれる）
+        # 結合セルの情報を確認（include_formattingに関係なく含まれる）
         merged_cell = result["sheets"][0]["rows"][0][0]
         assert merged_cell["value"] == "Merged Header"
         assert "merged" in merged_cell
@@ -254,15 +254,13 @@ class TestSharePointExcelParser:
         excel_bytes = self._create_formatted_excel()
         self.mock_download_client.download_file.return_value = excel_bytes
 
+        # _color_to_hex の単体動作を確認（include_formattingの有無とは無関係）
         parser = SharePointExcelParser(self.mock_download_client)
-        result_json = parser.parse_to_json("/test/formatted.xlsx", include_formatting=True, include_header=False)
-
-        result = json.loads(result_json)
-        header_cell = result["sheets"][0]["rows"][0][0]
-
-        # 塗りつぶし色の確認
-        if header_cell.get("fill", {}).get("fg_color"):
-            assert header_cell["fill"]["fg_color"].startswith("#")
+        wb = load_workbook(BytesIO(excel_bytes))
+        cell = wb.active["A1"]
+        hex_color = parser._color_to_hex(cell.fill.fgColor)
+        if hex_color:
+            assert hex_color.startswith("#")
 
     def test_parse_with_formulas(self):
         """数式を含むExcelファイルの解析テスト"""
@@ -311,7 +309,7 @@ class TestSharePointExcelParser:
         assert "height" not in cell
 
     def test_formatting_included_when_requested(self):
-        """include_formatting=Trueの場合に書式情報が含まれることのテスト"""
+        """include_formatting=Trueでも追加の書式情報が含まれないことのテスト"""
         excel_bytes = self._create_formatted_excel()
         self.mock_download_client.download_file.return_value = excel_bytes
 
@@ -321,11 +319,11 @@ class TestSharePointExcelParser:
         result = json.loads(result_json)
         cell = result["sheets"][0]["rows"][0][0]
 
-        # include_formatting=True の場合
+        # include_formatting=True の場合でも追加フィールドはない
         assert "value" in cell
         assert "coordinate" in cell
-        assert "data_type" in cell
-        assert "fill" in cell
+        assert "data_type" not in cell
+        assert "fill" not in cell
         # font と alignment は含まれない
         assert "font" not in cell
         assert "alignment" not in cell

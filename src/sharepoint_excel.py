@@ -226,26 +226,39 @@ class SharePointExcelParser:
                 merged_range_str = str(merged_range)
                 range_start = merged_range_str.split(":")[0]
 
-                # アンカー（結合範囲左上）の値を保持
+                # アンカー値を決定（左上が空なら結合範囲内を走査）
+                anchor_coord = range_start
                 anchor_value = self._serialize_value(sheet[range_start].value)
-                merged_anchor_value_map[merged_range_str] = anchor_value
-
-                # 結合範囲そのものを返す（結合セルがある時だけ返す）
-                merged_ranges.append(
-                    {
-                        "range": merged_range_str,
-                        "anchor": {"coordinate": range_start, "value": anchor_value},
-                    }
-                )
 
                 # セル座標 -> 結合範囲 のマップ（O(1)参照用）
                 # ここは「面積」を全部展開するが、通常のExcelの結合範囲は現実的なサイズ。
                 #       もし極端な結合が来たら、別途 input 制限（sheet.dimensions の上限）で守る。
                 for cell_coord in merged_range.cells:
                     # cell_coord is (row, col) tuple
-                    col_letter = get_column_letter(cell_coord[1])
-                    coord_str = f"{col_letter}{cell_coord[0]}"
+                    row_idx, col_idx = cell_coord
+                    col_letter = get_column_letter(col_idx)
+                    coord_str = f"{col_letter}{row_idx}"
                     merged_cell_map[coord_str] = merged_range_str
+
+                    # 左上が空の場合は結合範囲内で最初の非空セルを探す
+                    if anchor_value is None:
+                        cell_value = self._serialize_value(
+                            sheet.cell(row=row_idx, column=col_idx).value
+                        )
+                        if cell_value is not None:
+                            anchor_value = cell_value
+                            anchor_coord = coord_str
+
+                # アンカー値を保存（結合セルの値埋め用）
+                merged_anchor_value_map[merged_range_str] = anchor_value
+
+                # 結合範囲そのものを返す（結合セルがある時だけ返す）
+                merged_ranges.append(
+                    {
+                        "range": merged_range_str,
+                        "anchor": {"coordinate": anchor_coord, "value": anchor_value},
+                    }
+                )
 
             # ここは「結合セルがある時だけ」返す
             if merged_ranges:
