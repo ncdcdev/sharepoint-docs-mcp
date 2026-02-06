@@ -6,6 +6,7 @@ from unittest.mock import Mock
 import pytest
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill
+from openpyxl.worksheet.views import Pane
 
 from src.sharepoint_excel import SharePointExcelParser
 
@@ -788,8 +789,6 @@ class TestSharePointExcelParser:
         ws["A2"] = "Data"
 
         # split paneを設定（frozenではなくsplit）
-        from openpyxl.worksheet.views import Pane
-
         ws.sheet_view.pane = Pane(ySplit=3, xSplit=0, state="split")
 
         excel_bytes = BytesIO()
