@@ -7,6 +7,7 @@ import logging
 import time
 import uuid
 from pathlib import Path
+from urllib.parse import urlparse
 
 import jwt
 import requests
@@ -132,8 +133,6 @@ class SharePointCertificateAuth:
             )
 
             # SharePointサイトのテナント名を取得
-            from urllib.parse import urlparse
-
             parsed_url = urlparse(self.site_url)
             tenant_name = parsed_url.netloc.split(".sharepoint.com")[0]
             scope = f"https://{tenant_name}.sharepoint.com/.default"
