@@ -102,15 +102,17 @@ class SharePointExcelParser:
         Args:
             file_path: Excelファイルのパス
             include_formatting: 書式情報を含めるかどうか
-                False (デフォルト): value, coordinate のみ
-                True: value, coordinate, data_type, fill, merged, width, height を含む
+                現状は指定しても返却内容は変わらない。
+                - value / coordinate は常に返す
+                - 結合セルがある場合は merged を追加し、merged_ranges を返す
+                ※ data_type / fill / width / height は返さない
             sheet_name: 特定シートのみ取得（Noneで全シート）
             cell_range: セル範囲指定（例: "A1:D10"）
             include_header: ヘッダー情報を自動追加して返すかどうか
                 True (デフォルト): freeze_panesで固定された行をヘッダーとして認識し、
                      cell_range指定時にヘッダーが範囲外でも自動的に追加して
                      header_rows と data_rows に分けて返す
-                False: rows にすべてのデータを含む（ヘッダー自動追加なし）
+                False: rows にすべてのデータを含める（ヘッダー自動追加なし）
             metadata_only: メタデータのみを返すかどうか
                 True: data_rows を空リストにする（header_rows とメタデータのみ返す）
                 False (デフォルト): すべてのデータを含める
@@ -197,10 +199,13 @@ class SharePointExcelParser:
 
             # frozen_rows検証（DoS対策）
             if frozen_rows > config.excel_max_frozen_rows:
-                raise ValueError(
-                    f"ヘッダー行数({frozen_rows})が上限({config.excel_max_frozen_rows})を超えています。"
-                    f"悪意のあるファイルまたは処理には大きすぎるファイルです。"
+                logging.warning(
+                    "ヘッダー行数が上限を超えたため、freeze_panesを無視して処理します",
+                    config.excel_max_frozen_rows,
+                    frozen_rows,
                 )
+                frozen_rows = 0
+                frozen_cols = 0
 
             if sheet.freeze_panes:
                 sheet_data["freeze_panes"] = sheet.freeze_panes
@@ -208,15 +213,43 @@ class SharePointExcelParser:
             sheet_data["frozen_cols"] = frozen_cols
 
         # マージセル情報をキャッシュ（パフォーマンス最適化）
+        # 結合セルの場合はmerged_rangesを渡す
         merged_cell_map: dict[str, str] | None = None
-        if include_formatting and sheet.merged_cells.ranges:
+        merged_anchor_value_map: dict[str, Any] | None = None
+        merged_ranges: list[dict[str, Any]] = []
+
+        if sheet.merged_cells.ranges:
             merged_cell_map = {}
+            merged_anchor_value_map = {}
+
             for merged_range in sheet.merged_cells.ranges:
+                merged_range_str = str(merged_range)
+                range_start = merged_range_str.split(":")[0]
+
+                # アンカー（結合範囲左上）の値を保持
+                anchor_value = self._serialize_value(sheet[range_start].value)
+                merged_anchor_value_map[merged_range_str] = anchor_value
+
+                # 結合範囲そのものを返す（結合セルがある時だけ返す）
+                merged_ranges.append(
+                    {
+                        "range": merged_range_str,
+                        "anchor": {"coordinate": range_start, "value": anchor_value},
+                    }
+                )
+
+                # セル座標 -> 結合範囲 のマップ（O(1)参照用）
+                # ここは「面積」を全部展開するが、通常のExcelの結合範囲は現実的なサイズ。
+                #       もし極端な結合が来たら、別途 input 制限（sheet.dimensions の上限）で守る。
                 for cell_coord in merged_range.cells:
                     # cell_coord is (row, col) tuple
                     col_letter = get_column_letter(cell_coord[1])
                     coord_str = f"{col_letter}{cell_coord[0]}"
-                    merged_cell_map[coord_str] = str(merged_range)
+                    merged_cell_map[coord_str] = merged_range_str
+
+            # ここは「結合セルがある時だけ」返す
+            if merged_ranges:
+                sheet_data["merged_ranges"] = merged_ranges
 
         # セル範囲の拡張とデータサイズ検証
         all_rows = []
@@ -248,7 +281,10 @@ class SharePointExcelParser:
                     header_rows_data = self._normalize_range_data(header_data)
                     all_rows.extend(
                         self._parse_rows(
-                            header_rows_data, include_formatting, merged_cell_map
+                            header_rows_data,
+                            include_formatting,
+                            merged_cell_map,
+                            merged_anchor_value_map,
                         )
                     )
 
@@ -258,7 +294,10 @@ class SharePointExcelParser:
                     data_rows_data = self._normalize_range_data(range_data)
                     all_rows.extend(
                         self._parse_rows(
-                            data_rows_data, include_formatting, merged_cell_map
+                            data_rows_data,
+                            include_formatting,
+                            merged_cell_map,
+                            merged_anchor_value_map,
                         )
                     )
             else:
@@ -268,7 +307,10 @@ class SharePointExcelParser:
                     rows_to_process = self._normalize_range_data(range_data)
                     all_rows.extend(
                         self._parse_rows(
-                            rows_to_process, include_formatting, merged_cell_map
+                            rows_to_process,
+                            include_formatting,
+                            merged_cell_map,
+                            merged_anchor_value_map,
                         )
                     )
         elif sheet.dimensions:
@@ -297,7 +339,12 @@ class SharePointExcelParser:
 
             if rows_to_process:
                 all_rows.extend(
-                    self._parse_rows(rows_to_process, include_formatting, merged_cell_map)
+                    self._parse_rows(
+                        rows_to_process,
+                        include_formatting,
+                        merged_cell_map,
+                        merged_anchor_value_map,
+                    )
                 )
 
         # レスポンス形式の分岐
@@ -317,6 +364,7 @@ class SharePointExcelParser:
         cell,
         include_formatting: bool,
         merged_cell_map: dict[str, str] | None = None,
+        merged_anchor_value_map: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """
         セルを解析してdict形式で返す
@@ -325,6 +373,7 @@ class SharePointExcelParser:
             cell: openpyxl Cell
             include_formatting: 書式情報を含めるかどうか
             merged_cell_map: マージセル座標からマージ範囲へのマップ（パフォーマンス最適化用）
+            merged_anchor_value_map: マージ範囲 -> アンカー値 のマップ（結合セルの値埋め用）
 
         Returns:
             セルデータのdict
@@ -335,41 +384,24 @@ class SharePointExcelParser:
             "coordinate": cell.coordinate,
         }
 
+        # セル結合情報（構造理解に必要）
+        if merged_cell_map and cell.coordinate in merged_cell_map:
+            merged_range_str = merged_cell_map[cell.coordinate]
+            range_start = merged_range_str.split(":")[0]
+            cell_data["merged"] = {
+                "range": merged_range_str,
+                "is_top_left": cell.coordinate == range_start,
+            }
+
+            # 結合セル内の空セルにも value を埋める（propagate）
+            if cell_data["value"] is None and merged_anchor_value_map:
+                anchor_value = merged_anchor_value_map.get(merged_range_str)
+                if anchor_value is not None:
+                    cell_data["value"] = anchor_value
+
         # 書式情報（オプション）
-        if include_formatting:
-            cell_data["data_type"] = cell.data_type
-
-            # 塗りつぶし色情報
-            if cell.fill:
-                cell_data["fill"] = {
-                    "pattern_type": cell.fill.patternType,
-                    "fg_color": self._color_to_hex(cell.fill.fgColor),
-                    "bg_color": self._color_to_hex(cell.fill.bgColor),
-                }
-
-            # セル結合情報（キャッシュを使用してO(1)で検索）
-            if merged_cell_map and cell.coordinate in merged_cell_map:
-                merged_range_str = merged_cell_map[cell.coordinate]
-                # 左上セルかどうかを判定（マージ範囲の最初の座標と比較）
-                range_start = merged_range_str.split(":")[0]
-                cell_data["merged"] = {
-                    "range": merged_range_str,
-                    "is_top_left": cell.coordinate == range_start,
-                }
-
-            # セルサイズ情報（MergedCellはcolumn_letterを持たない可能性がある）
-            if hasattr(cell, "column_letter") and hasattr(cell, "row"):
-                if cell.column_letter and cell.row:
-                    sheet = cell.parent
-                    # 列幅
-                    if cell.column_letter in sheet.column_dimensions:
-                        col_dim = sheet.column_dimensions[cell.column_letter]
-                        cell_data["width"] = col_dim.width
-                    # 行高
-                    if cell.row in sheet.row_dimensions:
-                        row_dim = sheet.row_dimensions[cell.row]
-                        cell_data["height"] = row_dim.height
-
+        # 現運用では fill/width/height/data_type は返さない。
+        #       include_formatting を指定しても返却内容は変わらない。
         return cell_data
 
     def _parse_rows(
@@ -377,6 +409,7 @@ class SharePointExcelParser:
         rows: tuple[tuple[Cell, ...], ...],
         include_formatting: bool,
         merged_cell_map: dict[str, str] | None = None,
+        merged_anchor_value_map: dict[str, Any] | None = None,
     ) -> list[list[dict[str, Any]]]:
         """
         行データを解析してリスト形式で返す（コード重複削減用ヘルパー）
@@ -385,6 +418,7 @@ class SharePointExcelParser:
             rows: 行データのタプル
             include_formatting: 書式情報を含めるか
             merged_cell_map: マージセル情報
+            merged_anchor_value_map: マージ範囲 -> アンカー値
 
         Returns:
             解析された行データのリスト
@@ -392,7 +426,12 @@ class SharePointExcelParser:
         parsed_rows = []
         for row in rows:
             row_data = [
-                self._parse_cell(cell, include_formatting, merged_cell_map)
+                self._parse_cell(
+                    cell,
+                    include_formatting,
+                    merged_cell_map,
+                    merged_anchor_value_map,
+                )
                 for cell in row
             ]
             parsed_rows.append(row_data)

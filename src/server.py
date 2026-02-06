@@ -467,6 +467,9 @@ def sharepoint_excel(
         sheet: シート名（特定シートのみ取得）
         cell_range: セル範囲（例: "A1:D10"）
         include_formatting: 書式情報を含めるか
+            現状は指定しても返却内容は変わらない
+            ※結合セル情報（merged / merged_ranges）は常に含まれる
+            ※追加の書式情報（data_type / fill / width / height）は返さない
         include_header: ヘッダー情報を自動追加して返すか
             True (デフォルト): freeze_panesで固定された行をヘッダーとして認識し、
                  cell_range指定時にヘッダーが範囲外でも自動的に追加してheader_rowsとdata_rowsに分けて返す
@@ -548,7 +551,8 @@ def register_tools():
                 "Use 'include_header=True' (default) to automatically include header rows (detected via freeze_panes) "
                 "even when they're outside the specified cell_range - headers will be in 'header_rows', data in 'data_rows'. "
                 "Use 'metadata_only=True' to get only file structure and headers without data rows (useful for understanding file layout). "
-                "Use 'include_formatting=True' to include cell formatting details. "
+                "Merged cell info is included when present. "
+                "'include_formatting' currently does not change the output. "
                 "Note: 'metadata_only' and 'include_header' are ignored in search mode (when using 'query'). "
                 "Workflow: 1) Search with query to find relevant cells, "
                 "2) Read specific cell_range based on search results."

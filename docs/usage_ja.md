@@ -186,7 +186,7 @@ SHAREPOINT_SITE_NAME=@onedrive,sales-team,customer-portal
 | `query` | str \| None | None | 検索キーワード（検索モードを有効化） |
 | `sheet` | str \| None | None | シート名（特定シートのみ取得） |
 | `cell_range` | str \| None | None | セル範囲（例: "A1:D10"） |
-| `include_formatting` | bool | False | 書式情報を含めるか |
+| `include_formatting` | bool | False | 指定しても返却内容は変わらない（結合セル情報は常に含まれる） |
 | `include_header` | bool | True | ヘッダー行を自動検出して分離するか（`freeze_panes`を使用） |
 | `metadata_only` | bool | False | データ行を除外してメタデータのみ返す（応答サイズを削減） |
 
@@ -400,7 +400,10 @@ result = sharepoint_excel(
 }
 ```
 
-#### 書式情報を含む形式（include_formatting=true）
+#### 書式情報（include_formatting の挙動）
+
+現在の実装では `include_formatting=true` を指定しても返却内容は変わりません。  
+結合セル情報（`merged` / `merged_ranges`）は `include_formatting` の有無に関係なく返ります。
 
 ```json
 {
@@ -414,20 +417,21 @@ result = sharepoint_excel(
           {
             "value": "部門",
             "coordinate": "A1",
-            "data_type": "s",
-            "fill": {
-              "pattern_type": "solid",
-              "fg_color": "#CCCCCC",
-              "bg_color": null
-            },
             "merged": {
               "range": "A1:B1",
               "is_top_left": true
-            },
-            "width": 15.0,
-            "height": 20.0
+            }
           }
         ]
+      ],
+      "merged_ranges": [
+        {
+          "range": "A1:B1",
+          "anchor": {
+            "coordinate": "A1",
+            "value": "部門"
+          }
+        }
       ]
     }
   ]
@@ -440,12 +444,11 @@ result = sharepoint_excel(
 - **value**: セル値（文字列、数値、日付、数式など）
 - **coordinate**: セル位置（例: "A1"、"B2"）
 
-**include_formatting=true の場合**
-- **data_type**: データ型コード（`s`=文字列、`n`=数値、`f`=数式など）
-- **fill**: 塗りつぶし色情報（パターンタイプ、前景色/背景色）
+**結合セルがある場合（include_formattingに関係なく返る）**
 - **merged**: 結合セル情報（範囲、位置）
-- **width**: 列幅
-- **height**: 行高
+- **merged_ranges**: シート内の結合範囲一覧（範囲とアンカー情報）
+
+※ `include_formatting` は指定しても返却内容は変わりません（追加の書式情報は返さない）。
 
 ### 一般的な使用例
 
@@ -463,18 +466,17 @@ search_result = sharepoint_excel(file_path=file_path, query="売上合計")
 data = sharepoint_excel(file_path=file_path, sheet="Sheet1", cell_range="A1:D20")
 ```
 
-**セル書式の分析**
+**結合セルの確認**
 ```python
-# 書式情報を含むExcelデータを取得
-json_data = sharepoint_excel(file_path=file_path, include_formatting=True)
+# Excelデータを取得（include_formattingの有無に関係なく結合情報が含まれる）
+json_data = sharepoint_excel(file_path=file_path)
 data = json.loads(json_data)
 
-# 特定の書式を持つセルを検索
+# 結合セルを列挙
 for sheet in data["sheets"]:
-    for row in sheet["rows"]:
-        for cell in row:
-            if cell.get("fill", {}).get("fg_color"):
-                print(f"色付きセル {cell['coordinate']}: {cell['value']}")
+    for merged in sheet.get("merged_ranges", []):
+        anchor = merged.get("anchor", {})
+        print(f"結合範囲 {merged['range']}: {anchor.get('value')}")
 ```
 
 **特定シートをCSVにエクスポート**
