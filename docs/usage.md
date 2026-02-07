@@ -186,7 +186,7 @@ The `sharepoint_excel` tool allows you to read and search Excel files in SharePo
 | `query` | str \| None | None | Search keyword (enables search mode) |
 | `sheet` | str \| None | None | Sheet name (get specific sheet only) |
 | `cell_range` | str \| None | None | Cell range (e.g., "A1:D10") |
-| `include_formatting` | bool | False | Include formatting information |
+| `include_formatting` | bool | False | Does not change the output currently (merged info is always included when present) |
 | `include_header` | bool | True | Auto-detect and separate header rows using `freeze_panes` |
 | `metadata_only` | bool | False | Exclude data rows to return only metadata (reduce response size) |
 
@@ -400,7 +400,10 @@ result = sharepoint_excel(
 }
 ```
 
-#### With Formatting (include_formatting=true)
+#### Formatting (include_formatting behavior)
+
+In the current implementation, `include_formatting=true` does not change the output.  
+Merged cell info (`merged` / `merged_ranges`) is included regardless of `include_formatting`.
 
 ```json
 {
@@ -414,20 +417,21 @@ result = sharepoint_excel(
           {
             "value": "Department",
             "coordinate": "A1",
-            "data_type": "s",
-            "fill": {
-              "pattern_type": "solid",
-              "fg_color": "#CCCCCC",
-              "bg_color": null
-            },
             "merged": {
               "range": "A1:B1",
               "is_top_left": true
-            },
-            "width": 15.0,
-            "height": 20.0
+            }
           }
         ]
+      ],
+      "merged_ranges": [
+        {
+          "range": "A1:B1",
+          "anchor": {
+            "coordinate": "A1",
+            "value": "Department"
+          }
+        }
       ]
     }
   ]
@@ -440,12 +444,11 @@ result = sharepoint_excel(
 - **value**: Cell value (string, number, date, formula, etc.)
 - **coordinate**: Cell position (e.g., "A1", "B2")
 
-**With include_formatting=true:**
-- **data_type**: Data type code (`s`=string, `n`=number, `f`=formula, etc.)
-- **fill**: Fill color information (pattern type, foreground/background colors)
+**When merged cells exist (included regardless of include_formatting):**
 - **merged**: Merged cell information (range, position)
-- **width**: Column width
-- **height**: Row height
+- **merged_ranges**: Merged ranges list per sheet (range + anchor info)
+
+Note: `include_formatting` currently does not add formatting fields.
 
 ### Common Use Cases
 
@@ -463,18 +466,17 @@ search_result = sharepoint_excel(file_path=file_path, query="Total Revenue")
 data = sharepoint_excel(file_path=file_path, sheet="Sheet1", cell_range="A1:D20")
 ```
 
-**Analyze Cell Formatting**
+**Inspect Merged Cells**
 ```python
-# Get Excel data with formatting
-json_data = sharepoint_excel(file_path=file_path, include_formatting=True)
+# Get Excel data (merged info is included when present)
+json_data = sharepoint_excel(file_path=file_path)
 data = json.loads(json_data)
 
-# Find cells with specific formatting
+# List merged ranges
 for sheet in data["sheets"]:
-    for row in sheet["rows"]:
-        for cell in row:
-            if cell.get("fill", {}).get("fg_color"):
-                print(f"Colored cell at {cell['coordinate']}: {cell['value']}")
+    for merged in sheet.get("merged_ranges", []):
+        anchor = merged.get("anchor", {})
+        print(f"Merged range {merged['range']}: {anchor.get('value')}")
 ```
 
 **Export Specific Sheet to CSV**
