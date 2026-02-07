@@ -195,7 +195,7 @@ class SharePointExcelParser:
         frozen_rows = 0
         frozen_cols = 0
         if include_header:
-            frozen_rows, frozen_cols = self._parse_freeze_panes(sheet.freeze_panes)
+            frozen_rows, frozen_cols = self._get_frozen_panes(sheet)
 
             # frozen_rows検証（DoS対策）
             if frozen_rows > config.excel_max_frozen_rows:
@@ -207,8 +207,10 @@ class SharePointExcelParser:
                 frozen_rows = 0
                 frozen_cols = 0
 
-            if sheet.freeze_panes:
-                sheet_data["freeze_panes"] = sheet.freeze_panes
+            if frozen_rows > 0 or frozen_cols > 0:
+                sheet_data["freeze_panes"] = self._format_freeze_panes(
+                    frozen_rows, frozen_cols
+                )
             sheet_data["frozen_rows"] = frozen_rows
             sheet_data["frozen_cols"] = frozen_cols
 
@@ -533,37 +535,45 @@ class SharePointExcelParser:
             logger.warning(f"Failed to calculate range size '{range_str}': {e}")
             return (0, 0)
 
-    def _parse_freeze_panes(self, freeze_panes: str | None) -> tuple[int, int]:
+    def _get_frozen_panes(self, sheet) -> tuple[int, int]:
         """
-        freeze_panes文字列を解析して固定行数・列数を返す
+        シートのpane情報から固定行数・列数を返す（ySplit/xSplit使用）
+
+        sheet.freeze_panes（= pane.topLeftCell）はスクロール位置に依存するため、
+        正確な固定行数・列数を得るには pane.ySplit / pane.xSplit を直接参照する。
 
         Args:
-            freeze_panes: freeze_panes文字列（例: "B2", "A2", "B1", None）
+            sheet: openpyxl Worksheet
 
         Returns:
             (frozen_rows, frozen_cols)のタプル
-            例: "B2" → (1, 1)（行1と列Aが固定）
-                "A2" → (1, 0)（行1のみ固定）
-                "B1" → (0, 1)（列Aのみ固定）
-                None → (0, 0)（固定なし）
         """
-        if not freeze_panes:
-            return (0, 0)
-
         try:
-            # "B2" → ("B", 2)
-            col_letter, row = coordinate_from_string(freeze_panes)
-            # "B" → 2
-            col_index = column_index_from_string(col_letter)
-
-            # freeze_panes="B2"の場合、行2より前（行1）と列B（2列目）より前（列A）が固定
-            frozen_rows = row - 1
-            frozen_cols = col_index - 1
-
+            pane = sheet.sheet_view.pane
+            if pane is None:
+                return (0, 0)
+            if pane.state not in ("frozen", "frozenSplit"):
+                return (0, 0)
+            frozen_rows = int(pane.ySplit) if pane.ySplit else 0
+            frozen_cols = int(pane.xSplit) if pane.xSplit else 0
             return (frozen_rows, frozen_cols)
         except Exception as e:
-            logger.warning(f"Failed to parse freeze_panes '{freeze_panes}': {e}")
+            logger.warning(f"Failed to get frozen panes info: {e}")
             return (0, 0)
+
+    def _format_freeze_panes(self, frozen_rows: int, frozen_cols: int) -> str:
+        """
+        固定行数・列数からfreeze_panes文字列表現を生成
+
+        Args:
+            frozen_rows: 固定行数
+            frozen_cols: 固定列数
+
+        Returns:
+            freeze_panes文字列表現（例: "B4"）
+        """
+        col_letter = get_column_letter(frozen_cols + 1)
+        return f"{col_letter}{frozen_rows + 1}"
 
     def _expand_range_with_headers(
         self, cell_range: str, frozen_rows: int

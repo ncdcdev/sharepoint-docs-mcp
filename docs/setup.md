@@ -46,6 +46,11 @@ SHAREPOINT_SITE_NAME=yoursite
 SHAREPOINT_DEFAULT_MAX_RESULTS=20
 SHAREPOINT_ALLOWED_FILE_EXTENSIONS=pdf,docx,xlsx,pptx,txt,md
 
+# Excel processing limits (optional)
+# SHAREPOINT_EXCEL_MAX_FROZEN_ROWS=100       # Maximum frozen rows (DoS protection)
+# SHAREPOINT_EXCEL_MAX_DATA_ROWS=10000       # Maximum data rows
+# SHAREPOINT_EXCEL_MAX_DATA_COLS=2000        # Maximum data columns
+
 # Tool description customization (optional)
 # SHAREPOINT_SEARCH_TOOL_DESCRIPTION=Search internal documents
 # SHAREPOINT_DOWNLOAD_TOOL_DESCRIPTION=Download files from search results
