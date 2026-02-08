@@ -166,6 +166,28 @@ SHAREPOINT_ONEDRIVE_PATHS=sales1@company.com:/Documents/Customers,sales2@company
 SHAREPOINT_SITE_NAME=@onedrive,sales-team,customer-portal
 ```
 
+### `sharepoint_docs_search` Parameters
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `query` | str | Required | Search keyword |
+| `max_results` | int | 20 | Max results (capped at 100) |
+| `file_extensions` | list[str] \| None | None | File extensions filter (unsupported values are ignored) |
+| `response_format` | str | `detailed` | `detailed` or `compact` |
+
+- `max_results` is capped at 100.
+- `file_extensions` is filtered by `SHAREPOINT_ALLOWED_FILE_EXTENSIONS`; unsupported values are ignored.
+- `response_format="compact"` returns only `title` / `path` / `extension` to reduce tokens.
+
+**Compact response example**
+```python
+results = sharepoint_docs_search(
+    query="budget 2024",
+    response_format="compact",
+    max_results=10,
+)
+```
+
 ## Excel Operations Usage Examples
 
 The `sharepoint_excel` tool allows you to read and search Excel files in SharePoint. It supports two modes:
@@ -187,8 +209,6 @@ The `sharepoint_excel` tool allows you to read and search Excel files in SharePo
 | `sheet` | str \| None | None | Sheet name (get specific sheet only) |
 | `cell_range` | str \| None | None | Cell range (e.g., "A1:D10") |
 | `include_formatting` | bool | False | Does not change the output currently (merged info is always included when present) |
-| `include_header` | bool | True | Auto-detect and separate header rows using `freeze_panes` |
-| `metadata_only` | bool | False | Exclude data rows to return only metadata (reduce response size) |
 
 ### Basic Workflow
 
@@ -256,9 +276,9 @@ result = sharepoint_excel(
 )
 ```
 
-#### 5. Read with Formatting Information
+#### 5. include_formatting flag (no output changes yet)
 ```python
-# Get data with formatting (colors, merged cells, etc.)
+# include_formatting flag (currently does not change output)
 result = sharepoint_excel(
     file_path="/sites/finance/Shared Documents/report.xlsx",
     sheet="Sheet1",
@@ -266,92 +286,8 @@ result = sharepoint_excel(
 )
 ```
 
-#### 6. Automatic Header Detection
-```python
-# Auto-detect and separate header and data rows using freeze_panes
-result = sharepoint_excel(
-    file_path="/sites/finance/Shared Documents/report.xlsx",
-    sheet="Sheet1",
-    include_header=True
-)
-```
-
-**Header Detection Response:**
-```json
-{
-  "file_path": "/sites/finance/Shared Documents/report.xlsx",
-  "sheets": [{
-    "name": "Sheet1",
-    "freeze_panes": "B2",
-    "frozen_rows": 1,
-    "frozen_cols": 1,
-    "header_rows": [
-      [
-        {"value": "Product", "coordinate": "A1"},
-        {"value": "Price", "coordinate": "B1"},
-        {"value": "Stock", "coordinate": "C1"}
-      ]
-    ],
-    "data_rows": [
-      [
-        {"value": "Product A", "coordinate": "A2"},
-        {"value": 1000, "coordinate": "B2"},
-        {"value": 50, "coordinate": "C2"}
-      ],
-      ...
-    ]
-  }]
-}
-```
-
-**Features:**
-- Auto-detects Excel freeze panes (frozen rows/columns)
-- Separates header rows and data rows in response (default behavior)
-- When `cell_range` is specified, automatically includes frozen range
-- Set `include_header=False` to return legacy `rows` format
-```
-
-#### 7. Metadata-Only Mode (File Structure Inspection)
-```python
-# Get only file structure without data rows
-result = sharepoint_excel(
-    file_path="/sites/finance/Shared Documents/large-report.xlsx",
-    metadata_only=True
-)
-```
-
-**Metadata-Only Response:**
-```json
-{
-  "file_path": "/sites/finance/Shared Documents/large-report.xlsx",
-  "sheets": [{
-    "name": "Sheet1",
-    "freeze_panes": "B2",
-    "frozen_rows": 1,
-    "frozen_cols": 1,
-    "dimensions": "A1:E1000",
-    "header_rows": [
-      [
-        {"value": "Product", "coordinate": "A1"},
-        {"value": "Price", "coordinate": "B1"},
-        {"value": "Stock", "coordinate": "C1"}
-      ]
-    ],
-    "data_rows": []
-  }]
-}
-```
-
-**Use Cases:**
-- Inspect large file structure before fetching data
-- Understand what headers exist in each sheet
-- Determine the necessary `cell_range` before retrieving full data
-- Significantly reduce response size (save tokens)
-
-**Recommended Workflow:**
-1. Use `metadata_only=True` to inspect file structure
-2. Identify the required range
-3. Fetch actual data with specific `cell_range`
+Note: `include_formatting=true` currently does not return colors/width/height/types.  
+Merged cell info (`merged` / `merged_ranges`) is always included when present.
 
 ### JSON Output Format
 
@@ -449,6 +385,30 @@ Merged cell info (`merged` / `merged_ranges`) is included regardless of `include
 - **merged_ranges**: Merged ranges list per sheet (range + anchor info)
 
 Note: `include_formatting` currently does not add formatting fields.
+
+### Additional Metadata
+
+Depending on the request, the response can include metadata such as `response_kind`, `data_included`, `requested_sheet`, `requested_range`, `freeze_panes`, `frozen_rows`, `frozen_cols`, `effective_range`, `sheet_resolution`, and `available_sheets`.
+
+### Sheet Resolution and Fallbacks
+
+- `sheet` is resolved by exact match or a unique `trim + casefold` match.
+- If not resolved, `sheet_resolution` and `available_sheets` are returned with a `warning`.
+- If `cell_range` is provided and `sheet` is not found, the parser falls back to all sheets.
+- If `sheet` is not found and no `cell_range` is provided, `sheets` is empty and `candidates` are returned.
+
+### Cell Range Normalization and Expansion
+
+`cell_range` is normalized/expanded internally, and the result is returned as `effective_range`.
+
+- Column-only ranges (e.g., `J` / `J:J`) expand to `J1:J<max_row>`.
+- Single cell ranges (e.g., `C5`) expand to `C1:C5`.
+- Single-row ranges (e.g., `D5:H5`) expand to `A5:H5`.
+
+### Large Range Limits
+
+If rows/cols exceed limits, a `ValueError` is raised.  
+Use `cell_range` to narrow the selection.
 
 ### Common Use Cases
 

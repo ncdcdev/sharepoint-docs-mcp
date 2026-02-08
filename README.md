@@ -35,8 +35,7 @@ Two authentication methods are supported:
   - Read or search Excel files in SharePoint
   - Search mode: find cells containing specific text with `query` parameter
   - Read mode: get data from specific sheets/ranges with `sheet` and `cell_range` parameters
-  - Auto-include headers: with `include_header` parameter, automatically includes frozen rows (detected via `freeze_panes`) as headers even when they're outside the specified cell range
-  - Metadata-only mode: exclude data rows and retrieve only headers and file structure with `metadata_only` parameter
+  - Response always includes structure info (`freeze_panes`, `merged_ranges`) and data in `rows`
   - Default: value + coordinate (merged info is included when present)
   - Optional: include_formatting currently does not change the output; merged info is included when present
   - No Excel Services dependency - uses direct file download + openpyxl parsing

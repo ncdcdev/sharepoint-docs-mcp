@@ -129,9 +129,9 @@ class TestSharePointExcelParser:
         excel_bytes = self._create_test_excel()
         self.mock_download_client.download_file.return_value = excel_bytes
 
-        # 解析（include_header=Falseで従来形式）
+        # 解析
         parser = SharePointExcelParser(self.mock_download_client)
-        result_json = parser.parse_to_json("/test/file.xlsx", include_header=False)
+        result_json = parser.parse_to_json("/test/file.xlsx")
 
         # 検証
         result = json.loads(result_json)
@@ -158,7 +158,7 @@ class TestSharePointExcelParser:
         self.mock_download_client.download_file.return_value = excel_bytes
 
         parser = SharePointExcelParser(self.mock_download_client)
-        result_json = parser.parse_to_json("/test/formatted.xlsx", include_formatting=True, include_header=False)
+        result_json = parser.parse_to_json("/test/formatted.xlsx", include_formatting=True)
 
         result = json.loads(result_json)
         assert result["sheets"][0]["name"] == "FormattedSheet"
@@ -178,7 +178,7 @@ class TestSharePointExcelParser:
         self.mock_download_client.download_file.return_value = excel_bytes
 
         parser = SharePointExcelParser(self.mock_download_client)
-        result_json = parser.parse_to_json("/test/multi.xlsx", include_header=False)
+        result_json = parser.parse_to_json("/test/multi.xlsx")
 
         result = json.loads(result_json)
         assert len(result["sheets"]) == 2
@@ -193,7 +193,7 @@ class TestSharePointExcelParser:
         self.mock_download_client.download_file.return_value = excel_bytes
 
         parser = SharePointExcelParser(self.mock_download_client)
-        result_json = parser.parse_to_json("/test/merged.xlsx", include_formatting=True, include_header=False)
+        result_json = parser.parse_to_json("/test/merged.xlsx", include_formatting=True)
 
         result = json.loads(result_json)
         assert result["sheets"][0]["name"] == "MergedSheet"
@@ -240,7 +240,7 @@ class TestSharePointExcelParser:
         self.mock_download_client.download_file.return_value = excel_bytes.getvalue()
 
         parser = SharePointExcelParser(self.mock_download_client)
-        result_json = parser.parse_to_json("/test/empty.xlsx", include_header=False)
+        result_json = parser.parse_to_json("/test/empty.xlsx")
 
         result = json.loads(result_json)
         assert result["sheets"][0]["name"] == "EmptySheet"
@@ -280,7 +280,7 @@ class TestSharePointExcelParser:
         self.mock_download_client.download_file.return_value = excel_bytes.getvalue()
 
         parser = SharePointExcelParser(self.mock_download_client)
-        result_json = parser.parse_to_json("/test/formula.xlsx", include_header=False)
+        result_json = parser.parse_to_json("/test/formula.xlsx")
 
         result = json.loads(result_json)
         # 数式セルの値を確認（data_only=Falseなので数式文字列が入る）
@@ -293,7 +293,7 @@ class TestSharePointExcelParser:
         self.mock_download_client.download_file.return_value = excel_bytes
 
         parser = SharePointExcelParser(self.mock_download_client)
-        result_json = parser.parse_to_json("/test/formatted.xlsx", include_header=False)
+        result_json = parser.parse_to_json("/test/formatted.xlsx")
 
         result = json.loads(result_json)
         cell = result["sheets"][0]["rows"][0][0]
@@ -315,7 +315,7 @@ class TestSharePointExcelParser:
         self.mock_download_client.download_file.return_value = excel_bytes
 
         parser = SharePointExcelParser(self.mock_download_client)
-        result_json = parser.parse_to_json("/test/formatted.xlsx", include_formatting=True, include_header=False)
+        result_json = parser.parse_to_json("/test/formatted.xlsx", include_formatting=True)
 
         result = json.loads(result_json)
         cell = result["sheets"][0]["rows"][0][0]
@@ -348,7 +348,7 @@ class TestSharePointExcelParser:
         self.mock_download_client.download_file.return_value = excel_bytes.getvalue()
 
         parser = SharePointExcelParser(self.mock_download_client)
-        result_json = parser.parse_to_json("/test/datetime.xlsx", include_header=False)
+        result_json = parser.parse_to_json("/test/datetime.xlsx")
 
         # JSONパースが成功することを確認（datetime型が適切にシリアライズされている）
         result = json.loads(result_json)
@@ -441,7 +441,7 @@ class TestSharePointExcelParser:
         self.mock_download_client.download_file.return_value = excel_bytes
 
         parser = SharePointExcelParser(self.mock_download_client)
-        result_json = parser.parse_to_json("/test/file.xlsx", sheet_name="Sheet2", include_header=False)
+        result_json = parser.parse_to_json("/test/file.xlsx", sheet_name="Sheet2")
 
         result = json.loads(result_json)
         assert len(result["sheets"]) == 1
@@ -478,7 +478,7 @@ class TestSharePointExcelParser:
 
         parser = SharePointExcelParser(self.mock_download_client)
         result_json = parser.parse_to_json(
-            "/test/file.xlsx", sheet_name="Sheet1", cell_range="B2:D4", include_header=False
+            "/test/file.xlsx", sheet_name="Sheet1", cell_range="B2:D4"
         )
 
         result = json.loads(result_json)
@@ -500,7 +500,7 @@ class TestSharePointExcelParser:
 
         parser = SharePointExcelParser(self.mock_download_client)
         result_json = parser.parse_to_json(
-            "/test/file.xlsx", sheet_name="Sheet1", cell_range="A1", include_header=False
+            "/test/file.xlsx", sheet_name="Sheet1", cell_range="A1"
         )
 
         result = json.loads(result_json)
@@ -516,7 +516,7 @@ class TestSharePointExcelParser:
 
         parser = SharePointExcelParser(self.mock_download_client)
         result_json = parser.parse_to_json(
-            "/test/file.xlsx", sheet_name="Sheet1", cell_range="A1", include_header=False
+            "/test/file.xlsx", sheet_name="Sheet1", cell_range="A1"
         )
 
         result = json.loads(result_json)
@@ -530,7 +530,7 @@ class TestSharePointExcelParser:
         self.mock_download_client.download_file.return_value = excel_bytes
 
         parser = SharePointExcelParser(self.mock_download_client)
-        result_json = parser.parse_to_json("/test/frozen.xlsx", include_header=True)
+        result_json = parser.parse_to_json("/test/frozen.xlsx")
 
         result = json.loads(result_json)
         sheet = result["sheets"][0]
@@ -540,15 +540,12 @@ class TestSharePointExcelParser:
         assert sheet["frozen_rows"] == 1
         assert sheet["frozen_cols"] == 1
 
-        # ヘッダー行を確認
-        assert len(sheet["header_rows"]) == 1
-        assert sheet["header_rows"][0][0]["value"] == "Header1"
-        assert sheet["header_rows"][0][1]["value"] == "Header2"
-
-        # データ行を確認
-        assert len(sheet["data_rows"]) == 9
-        assert sheet["data_rows"][0][0]["value"] == "Data1_1"
-        assert sheet["data_rows"][0][1]["value"] == "Data1_2"
+        rows = sheet["rows"]
+        assert len(rows) == 10
+        assert rows[0][0]["value"] == "Header1"
+        assert rows[0][1]["value"] == "Header2"
+        assert rows[1][0]["value"] == "Data1_1"
+        assert rows[1][1]["value"] == "Data1_2"
 
     def test_parse_with_freeze_panes_rows_only(self):
         """freeze_panes="A2"（行のみ固定）のテスト"""
@@ -556,7 +553,7 @@ class TestSharePointExcelParser:
         self.mock_download_client.download_file.return_value = excel_bytes
 
         parser = SharePointExcelParser(self.mock_download_client)
-        result_json = parser.parse_to_json("/test/frozen.xlsx", include_header=True)
+        result_json = parser.parse_to_json("/test/frozen.xlsx")
 
         result = json.loads(result_json)
         sheet = result["sheets"][0]
@@ -566,13 +563,10 @@ class TestSharePointExcelParser:
         assert sheet["frozen_rows"] == 1
         assert sheet["frozen_cols"] == 0
 
-        # ヘッダー行を確認
-        assert len(sheet["header_rows"]) == 1
-        assert sheet["header_rows"][0][0]["value"] == "Header1"
-
-        # データ行を確認
-        assert len(sheet["data_rows"]) == 9
-        assert sheet["data_rows"][0][0]["value"] == "Data1_1"
+        rows = sheet["rows"]
+        assert len(rows) == 10
+        assert rows[0][0]["value"] == "Header1"
+        assert rows[1][0]["value"] == "Data1_1"
 
     def test_parse_with_no_freeze_panes(self):
         """freeze_panes=Noneのテスト"""
@@ -580,7 +574,7 @@ class TestSharePointExcelParser:
         self.mock_download_client.download_file.return_value = excel_bytes
 
         parser = SharePointExcelParser(self.mock_download_client)
-        result_json = parser.parse_to_json("/test/file.xlsx", include_header=True)
+        result_json = parser.parse_to_json("/test/file.xlsx")
 
         result = json.loads(result_json)
         sheet = result["sheets"][0]
@@ -590,10 +584,9 @@ class TestSharePointExcelParser:
         assert sheet["frozen_rows"] == 0
         assert sheet["frozen_cols"] == 0
 
-        # ヘッダーなし、すべてデータ行
-        assert len(sheet["header_rows"]) == 0
-        assert len(sheet["data_rows"]) == 2
-        assert sheet["data_rows"][0][0]["value"] == "Name"
+        rows = sheet["rows"]
+        assert len(rows) == 2
+        assert rows[0][0]["value"] == "Name"
 
     def test_parse_range_with_overlapping_headers(self):
         """cell_range内にヘッダーが含まれる場合のテスト"""
@@ -602,29 +595,26 @@ class TestSharePointExcelParser:
 
         parser = SharePointExcelParser(self.mock_download_client)
         result_json = parser.parse_to_json(
-            "/test/frozen.xlsx", include_header=True, cell_range="A1:D5"
+            "/test/frozen.xlsx", cell_range="A1:D5"
         )
 
         result = json.loads(result_json)
         sheet = result["sheets"][0]
 
-        # ヘッダー行を確認（行1）
-        assert len(sheet["header_rows"]) == 1
-        assert sheet["header_rows"][0][0]["value"] == "Header1"
-
-        # データ行を確認（行2-5）
-        assert len(sheet["data_rows"]) == 4
-        assert sheet["data_rows"][0][0]["value"] == "Data1_1"
-        assert sheet["data_rows"][3][0]["value"] == "Data4_1"
+        rows = sheet["rows"]
+        assert len(rows) == 5
+        assert rows[0][0]["value"] == "Header1"
+        assert rows[1][0]["value"] == "Data1_1"
+        assert rows[4][0]["value"] == "Data4_1"
 
     def test_parse_range_with_non_overlapping_headers(self):
-        """ヘッダーがcell_range外にある場合のテスト（拡張して取得）"""
+        """ヘッダーがcell_range外にある場合のテスト"""
         excel_bytes = self._create_frozen_panes_excel("B2")
         self.mock_download_client.download_file.return_value = excel_bytes
 
         parser = SharePointExcelParser(self.mock_download_client)
         result_json = parser.parse_to_json(
-            "/test/frozen.xlsx", include_header=True, cell_range="A5:D10"
+            "/test/frozen.xlsx", cell_range="A5:D10"
         )
 
         result = json.loads(result_json)
@@ -633,104 +623,10 @@ class TestSharePointExcelParser:
         # requested_rangeは元のまま
         assert sheet["requested_range"] == "A5:D10"
 
-        # ヘッダー行が自動的に追加される（行1）
-        assert len(sheet["header_rows"]) == 1
-        assert sheet["header_rows"][0][0]["value"] == "Header1"
-        assert sheet["header_rows"][0][0]["coordinate"] == "A1"
-
-        # データ行は指定範囲のまま（行5-10）
-        assert len(sheet["data_rows"]) == 6
-        assert sheet["data_rows"][0][0]["value"] == "Data4_1"
-        assert sheet["data_rows"][0][0]["coordinate"] == "A5"
-
-    def test_parse_backward_compatibility(self):
-        """include_header=Falseで既存動作を確認（後方互換性）"""
-        excel_bytes = self._create_frozen_panes_excel("B2")
-        self.mock_download_client.download_file.return_value = excel_bytes
-
-        parser = SharePointExcelParser(self.mock_download_client)
-        result_json = parser.parse_to_json("/test/frozen.xlsx", include_header=False)
-
-        result = json.loads(result_json)
-        sheet = result["sheets"][0]
-
-        # freeze_panes情報は含まれない
-        assert "freeze_panes" not in sheet
-        assert "frozen_rows" not in sheet
-        assert "frozen_cols" not in sheet
-        assert "header_rows" not in sheet
-        assert "data_rows" not in sheet
-
-        # 既存のrows形式
-        assert "rows" in sheet
-        assert len(sheet["rows"]) == 10
-        assert sheet["rows"][0][0]["value"] == "Header1"
-        assert sheet["rows"][1][0]["value"] == "Data1_1"
-
-    def test_parse_with_metadata_only_and_header(self):
-        """metadata_only=Trueかつinclude_header=Trueの場合のテスト"""
-        excel_bytes = self._create_frozen_panes_excel("B2")
-        self.mock_download_client.download_file.return_value = excel_bytes
-
-        parser = SharePointExcelParser(self.mock_download_client)
-        result_json = parser.parse_to_json("/test/frozen.xlsx", include_header=True, metadata_only=True)
-
-        result = json.loads(result_json)
-        sheet = result["sheets"][0]
-
-        # メタデータは含まれる
-        assert sheet["name"] == "FrozenSheet"
-        assert sheet["freeze_panes"] == "B2"
-        assert sheet["frozen_rows"] == 1
-        assert sheet["frozen_cols"] == 1
-
-        # ヘッダー行は含まれる
-        assert len(sheet["header_rows"]) == 1
-        assert sheet["header_rows"][0][0]["value"] == "Header1"
-
-        # データ行は空リスト
-        assert sheet["data_rows"] == []
-
-    def test_parse_with_metadata_only_without_header(self):
-        """metadata_only=Trueかつinclude_header=Falseの場合のテスト"""
-        excel_bytes = self._create_test_excel()
-        self.mock_download_client.download_file.return_value = excel_bytes
-
-        parser = SharePointExcelParser(self.mock_download_client)
-        result_json = parser.parse_to_json("/test/file.xlsx", include_header=False, metadata_only=True)
-
-        result = json.loads(result_json)
-        sheet = result["sheets"][0]
-
-        # メタデータは含まれる
-        assert sheet["name"] == "Sheet1"
-        assert sheet["dimensions"] is not None
-
-        # rowsは空リスト
-        assert sheet["rows"] == []
-
-    def test_parse_with_metadata_only_and_cell_range(self):
-        """metadata_only=Trueとcell_rangeを組み合わせた場合のテスト"""
-        excel_bytes = self._create_frozen_panes_excel("B2")
-        self.mock_download_client.download_file.return_value = excel_bytes
-
-        parser = SharePointExcelParser(self.mock_download_client)
-        result_json = parser.parse_to_json(
-            "/test/frozen.xlsx", include_header=True, metadata_only=True, cell_range="A5:D10"
-        )
-
-        result = json.loads(result_json)
-        sheet = result["sheets"][0]
-
-        # requested_rangeは記録される
-        assert sheet["requested_range"] == "A5:D10"
-
-        # ヘッダー行は含まれる（範囲外でも自動拡張）
-        assert len(sheet["header_rows"]) == 1
-        assert sheet["header_rows"][0][0]["value"] == "Header1"
-
-        # データ行は空リスト（metadata_onlyのため）
-        assert sheet["data_rows"] == []
+        rows = sheet["rows"]
+        assert len(rows) == 6
+        assert rows[0][0]["value"] == "Data4_1"
+        assert rows[0][0]["coordinate"] == "A5"
 
     def test_freeze_panes_scrolled_position_does_not_affect_frozen_rows(self):
         """スクロール後に保存されたファイルでfrozen_rowsが正しく取得されるテスト
@@ -762,7 +658,7 @@ class TestSharePointExcelParser:
         self.mock_download_client.download_file.return_value = excel_bytes.getvalue()
 
         parser = SharePointExcelParser(self.mock_download_client)
-        result_json = parser.parse_to_json("/test/scrolled.xlsx", include_header=True)
+        result_json = parser.parse_to_json("/test/scrolled.xlsx")
 
         result = json.loads(result_json)
         sheet = result["sheets"][0]
@@ -772,10 +668,10 @@ class TestSharePointExcelParser:
         assert sheet["frozen_cols"] == 0
         assert sheet["freeze_panes"] == "A4"
 
-        # ヘッダー行は3行
-        assert len(sheet["header_rows"]) == 3
-        assert sheet["header_rows"][0][0]["value"] == "Row1"
-        assert sheet["header_rows"][2][0]["value"] == "Row3"
+        rows = sheet["rows"]
+        assert len(rows) == 10
+        assert rows[0][0]["value"] == "Row1"
+        assert rows[2][0]["value"] == "Row3"
 
     def test_split_pane_is_ignored(self):
         """split pane（state="split"）は固定行として認識されないテスト"""
@@ -796,7 +692,7 @@ class TestSharePointExcelParser:
         self.mock_download_client.download_file.return_value = excel_bytes.getvalue()
 
         parser = SharePointExcelParser(self.mock_download_client)
-        result_json = parser.parse_to_json("/test/split.xlsx", include_header=True)
+        result_json = parser.parse_to_json("/test/split.xlsx")
 
         result = json.loads(result_json)
         sheet = result["sheets"][0]

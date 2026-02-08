@@ -194,8 +194,6 @@ class TestSharePointExcel:
                     include_formatting=False,
                     sheet_name=None,
                     cell_range=None,
-                    include_header=True,
-                    metadata_only=False,
                 )
 
     @pytest.mark.unit
@@ -210,7 +208,7 @@ class TestSharePointExcel:
 
                 # 検索メソッドが呼ばれることを確認
                 mock_excel_parser.search_cells.assert_called_once_with(
-                    "/sites/test/Shared Documents/test.xlsx", "売上"
+                    "/sites/test/Shared Documents/test.xlsx", "売上", sheet_name=None
                 )
                 # parse_to_jsonは呼ばれない
                 mock_excel_parser.parse_to_json.assert_not_called()
@@ -230,8 +228,6 @@ class TestSharePointExcel:
                     include_formatting=False,
                     sheet_name="Sheet2",
                     cell_range=None,
-                    include_header=True,
-                    metadata_only=False,
                 )
 
     @pytest.mark.unit
@@ -250,8 +246,6 @@ class TestSharePointExcel:
                     include_formatting=False,
                     sheet_name="Sheet1",
                     cell_range="A1:D10",
-                    include_header=True,
-                    metadata_only=False,
                 )
 
     @pytest.mark.unit
@@ -269,8 +263,6 @@ class TestSharePointExcel:
                     include_formatting=True,
                     sheet_name=None,
                     cell_range=None,
-                    include_header=True,
-                    metadata_only=False,
                 )
 
     @pytest.mark.unit
