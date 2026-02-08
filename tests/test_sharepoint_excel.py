@@ -449,16 +449,21 @@ class TestSharePointExcelParser:
         assert result["sheets"][0]["rows"][0][0]["value"] == "Data2"
 
     def test_parse_nonexistent_sheet(self):
-        """存在しないシート名を指定した場合のエラーテスト"""
+        """存在しないシート名を指定した場合の解決情報テスト"""
         excel_bytes = self._create_test_excel()
         self.mock_download_client.download_file.return_value = excel_bytes
 
         parser = SharePointExcelParser(self.mock_download_client)
-        with pytest.raises(ValueError) as exc_info:
-            parser.parse_to_json("/test/file.xlsx", sheet_name="NonExistent")
+        result_json = parser.parse_to_json("/test/file.xlsx", sheet_name="NonExistent")
 
-        assert "NonExistent" in str(exc_info.value)
-        assert "not found" in str(exc_info.value)
+        result = json.loads(result_json)
+        assert result["requested_sheet"] == "NonExistent"
+        assert result["sheets"] == []
+        assert result["sheet_resolution"]["status"] == "not_found"
+        assert result["sheet_resolution"]["requested"] == "NonExistent"
+        assert result["sheet_resolution"]["resolved"] is None
+        assert result["available_sheets"] == ["Sheet1"]
+        assert result["warning"] == "requested sheet_name was not found or ambiguous"
 
     def test_parse_cell_range(self):
         """セル範囲指定のテスト"""
