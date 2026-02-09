@@ -1,9 +1,15 @@
-import pytest
-from unittest.mock import patch, Mock
 import base64
 import os
+from unittest.mock import Mock, patch
 
-from src.server import sharepoint_docs_search, sharepoint_docs_download, sharepoint_excel, register_tools
+import pytest
+
+from src.server import (
+    register_tools,
+    sharepoint_docs_download,
+    sharepoint_docs_search,
+    sharepoint_excel,
+)
 
 
 class TestSharePointDocsSearch:
@@ -12,7 +18,9 @@ class TestSharePointDocsSearch:
     @pytest.mark.unit
     def test_search_with_default_parameters(self, mock_config, mock_sharepoint_client):
         """デフォルトパラメータでの検索テスト"""
-        with patch("src.server._get_sharepoint_client", return_value=mock_sharepoint_client):
+        with patch(
+            "src.server._get_sharepoint_client", return_value=mock_sharepoint_client
+        ):
             with patch("src.server.config", mock_config):
                 results = sharepoint_docs_search("test query")
 
@@ -28,9 +36,13 @@ class TestSharePointDocsSearch:
     @pytest.mark.unit
     def test_search_with_compact_format(self, mock_config, mock_sharepoint_client):
         """コンパクトフォーマットでの検索テスト"""
-        with patch("src.server._get_sharepoint_client", return_value=mock_sharepoint_client):
+        with patch(
+            "src.server._get_sharepoint_client", return_value=mock_sharepoint_client
+        ):
             with patch("src.server.config", mock_config):
-                results = sharepoint_docs_search("test query", response_format="compact")
+                results = sharepoint_docs_search(
+                    "test query", response_format="compact"
+                )
 
                 assert len(results) == 1
                 assert "title" in results[0]
@@ -42,11 +54,17 @@ class TestSharePointDocsSearch:
                 assert "summary" not in results[0]
 
     @pytest.mark.unit
-    def test_search_with_invalid_response_format(self, mock_config, mock_sharepoint_client):
+    def test_search_with_invalid_response_format(
+        self, mock_config, mock_sharepoint_client
+    ):
         """無効なresponse_formatでの検索テスト（デフォルトにフォールバック）"""
-        with patch("src.server._get_sharepoint_client", return_value=mock_sharepoint_client):
+        with patch(
+            "src.server._get_sharepoint_client", return_value=mock_sharepoint_client
+        ):
             with patch("src.server.config", mock_config):
-                results = sharepoint_docs_search("test query", response_format="invalid")
+                results = sharepoint_docs_search(
+                    "test query", response_format="invalid"
+                )
 
                 # 無効なフォーマットはdetailedにフォールバックするため、全フィールドが含まれる
                 assert len(results) == 1
@@ -57,12 +75,11 @@ class TestSharePointDocsSearch:
     @pytest.mark.unit
     def test_search_with_file_extensions(self, mock_config, mock_sharepoint_client):
         """ファイル拡張子フィルタでの検索テスト"""
-        with patch("src.server._get_sharepoint_client", return_value=mock_sharepoint_client):
+        with patch(
+            "src.server._get_sharepoint_client", return_value=mock_sharepoint_client
+        ):
             with patch("src.server.config", mock_config):
-                results = sharepoint_docs_search(
-                    "test query",
-                    file_extensions=["pdf", "docx"]
-                )
+                sharepoint_docs_search("test query", file_extensions=["pdf", "docx"])
 
                 mock_sharepoint_client.search_documents.assert_called_once_with(
                     query="test query",
@@ -73,7 +90,9 @@ class TestSharePointDocsSearch:
     @pytest.mark.unit
     def test_search_max_results_limit(self, mock_config, mock_sharepoint_client):
         """最大結果数の制限テスト"""
-        with patch("src.server._get_sharepoint_client", return_value=mock_sharepoint_client):
+        with patch(
+            "src.server._get_sharepoint_client", return_value=mock_sharepoint_client
+        ):
             with patch("src.server.config", mock_config):
                 sharepoint_docs_search("test query", max_results=150)
 
@@ -91,11 +110,15 @@ class TestSharePointDocsDownload:
     @pytest.mark.unit
     def test_download_file(self, mock_config, mock_sharepoint_client):
         """ファイルダウンロードのテスト"""
-        with patch("src.server._get_sharepoint_client", return_value=mock_sharepoint_client):
+        with patch(
+            "src.server._get_sharepoint_client", return_value=mock_sharepoint_client
+        ):
             with patch("src.server.config", mock_config):
                 result = sharepoint_docs_download("/sites/test/documents/test.pdf")
 
-                expected_content = base64.b64encode(b"mock file content").decode("utf-8")
+                expected_content = base64.b64encode(b"mock file content").decode(
+                    "utf-8"
+                )
                 assert result == expected_content
                 mock_sharepoint_client.download_file.assert_called_once_with(
                     "/sites/test/documents/test.pdf"
@@ -106,7 +129,9 @@ class TestSharePointDocsDownload:
         """ファイルダウンロードエラーハンドリングのテスト"""
         mock_sharepoint_client.download_file.side_effect = Exception("Download failed")
 
-        with patch("src.server._get_sharepoint_client", return_value=mock_sharepoint_client):
+        with patch(
+            "src.server._get_sharepoint_client", return_value=mock_sharepoint_client
+        ):
             with patch("src.server.config", mock_config):
                 with pytest.raises(Exception) as exc_info:
                     sharepoint_docs_download("/sites/test/documents/test.pdf")
@@ -124,13 +149,13 @@ class TestGetSharePointClient:
         with patch("src.server.config", mock_config):
             with patch("src.server.SharePointCertificateAuth") as mock_auth_class:
                 with patch("src.server.SharePointSearchClient") as mock_client_class:
-                    from src.server import _get_sharepoint_client
-
                     # グローバル変数をリセット
                     import src.server
+                    from src.server import _get_sharepoint_client
+
                     src.server._sharepoint_client = None
 
-                    client = _get_sharepoint_client()
+                    _get_sharepoint_client()
 
                     mock_auth_class.assert_called_once_with(
                         tenant_id=mock_config.tenant_id,
@@ -149,10 +174,10 @@ class TestGetSharePointClient:
         with patch("src.server.config", mock_config):
             with patch("src.server.SharePointCertificateAuth"):
                 with patch("src.server.SharePointSearchClient") as mock_client_class:
-                    from src.server import _get_sharepoint_client
-
                     # グローバル変数をリセット
                     import src.server
+                    from src.server import _get_sharepoint_client
+
                     src.server._sharepoint_client = None
 
                     client1 = _get_sharepoint_client()
@@ -171,15 +196,21 @@ class TestSharePointExcel:
         """Mock Excel parser"""
         with patch("src.server.SharePointExcelParser") as mock_parser_class:
             parser_instance = Mock()
-            parser_instance.parse_to_json.return_value = '{"file_path": "/test.xlsx", "sheets": []}'
+            parser_instance.parse_to_json.return_value = (
+                '{"file_path": "/test.xlsx", "sheets": []}'
+            )
             parser_instance.search_cells.return_value = '{"file_path": "/test.xlsx", "mode": "search", "query": "test", "match_count": 0, "matches": []}'
             mock_parser_class.return_value = parser_instance
             yield parser_instance
 
     @pytest.mark.unit
-    def test_excel_read_default(self, mock_config, mock_sharepoint_client, mock_excel_parser):
+    def test_excel_read_default(
+        self, mock_config, mock_sharepoint_client, mock_excel_parser
+    ):
         """Excelデータ取得の成功テスト（デフォルト）"""
-        with patch("src.server._get_sharepoint_client", return_value=mock_sharepoint_client):
+        with patch(
+            "src.server._get_sharepoint_client", return_value=mock_sharepoint_client
+        ):
             with patch("src.server.config", mock_config):
                 result = sharepoint_excel(
                     file_path="/sites/test/Shared Documents/test.xlsx"
@@ -194,35 +225,39 @@ class TestSharePointExcel:
                     include_formatting=False,
                     sheet_name=None,
                     cell_range=None,
-                    include_header=True,
-                    metadata_only=False,
                 )
 
     @pytest.mark.unit
-    def test_excel_search_mode(self, mock_config, mock_sharepoint_client, mock_excel_parser):
+    def test_excel_search_mode(
+        self, mock_config, mock_sharepoint_client, mock_excel_parser
+    ):
         """Excel検索モードのテスト"""
-        with patch("src.server._get_sharepoint_client", return_value=mock_sharepoint_client):
+        with patch(
+            "src.server._get_sharepoint_client", return_value=mock_sharepoint_client
+        ):
             with patch("src.server.config", mock_config):
                 sharepoint_excel(
-                    file_path="/sites/test/Shared Documents/test.xlsx",
-                    query="売上"
+                    file_path="/sites/test/Shared Documents/test.xlsx", query="売上"
                 )
 
                 # 検索メソッドが呼ばれることを確認
                 mock_excel_parser.search_cells.assert_called_once_with(
-                    "/sites/test/Shared Documents/test.xlsx", "売上"
+                    "/sites/test/Shared Documents/test.xlsx", "売上", sheet_name=None
                 )
                 # parse_to_jsonは呼ばれない
                 mock_excel_parser.parse_to_json.assert_not_called()
 
     @pytest.mark.unit
-    def test_excel_with_sheet_parameter(self, mock_config, mock_sharepoint_client, mock_excel_parser):
+    def test_excel_with_sheet_parameter(
+        self, mock_config, mock_sharepoint_client, mock_excel_parser
+    ):
         """シート指定パラメータのテスト"""
-        with patch("src.server._get_sharepoint_client", return_value=mock_sharepoint_client):
+        with patch(
+            "src.server._get_sharepoint_client", return_value=mock_sharepoint_client
+        ):
             with patch("src.server.config", mock_config):
                 sharepoint_excel(
-                    file_path="/sites/test/Shared Documents/test.xlsx",
-                    sheet="Sheet2"
+                    file_path="/sites/test/Shared Documents/test.xlsx", sheet="Sheet2"
                 )
 
                 mock_excel_parser.parse_to_json.assert_called_once_with(
@@ -230,19 +265,21 @@ class TestSharePointExcel:
                     include_formatting=False,
                     sheet_name="Sheet2",
                     cell_range=None,
-                    include_header=True,
-                    metadata_only=False,
                 )
 
     @pytest.mark.unit
-    def test_excel_with_cell_range_parameter(self, mock_config, mock_sharepoint_client, mock_excel_parser):
+    def test_excel_with_cell_range_parameter(
+        self, mock_config, mock_sharepoint_client, mock_excel_parser
+    ):
         """セル範囲指定パラメータのテスト"""
-        with patch("src.server._get_sharepoint_client", return_value=mock_sharepoint_client):
+        with patch(
+            "src.server._get_sharepoint_client", return_value=mock_sharepoint_client
+        ):
             with patch("src.server.config", mock_config):
                 sharepoint_excel(
                     file_path="/sites/test/Shared Documents/test.xlsx",
                     sheet="Sheet1",
-                    cell_range="A1:D10"
+                    cell_range="A1:D10",
                 )
 
                 mock_excel_parser.parse_to_json.assert_called_once_with(
@@ -250,18 +287,20 @@ class TestSharePointExcel:
                     include_formatting=False,
                     sheet_name="Sheet1",
                     cell_range="A1:D10",
-                    include_header=True,
-                    metadata_only=False,
                 )
 
     @pytest.mark.unit
-    def test_excel_with_formatting(self, mock_config, mock_sharepoint_client, mock_excel_parser):
+    def test_excel_with_formatting(
+        self, mock_config, mock_sharepoint_client, mock_excel_parser
+    ):
         """書式情報ありのテスト"""
-        with patch("src.server._get_sharepoint_client", return_value=mock_sharepoint_client):
+        with patch(
+            "src.server._get_sharepoint_client", return_value=mock_sharepoint_client
+        ):
             with patch("src.server.config", mock_config):
                 sharepoint_excel(
                     file_path="/sites/test/Shared Documents/test.xlsx",
-                    include_formatting=True
+                    include_formatting=True,
                 )
 
                 mock_excel_parser.parse_to_json.assert_called_once_with(
@@ -269,12 +308,12 @@ class TestSharePointExcel:
                     include_formatting=True,
                     sheet_name=None,
                     cell_range=None,
-                    include_header=True,
-                    metadata_only=False,
                 )
 
     @pytest.mark.unit
-    def test_excel_with_real_json(self, mock_config, mock_sharepoint_client, mock_excel_parser):
+    def test_excel_with_real_json(
+        self, mock_config, mock_sharepoint_client, mock_excel_parser
+    ):
         """実際のJSON構造での変換テスト"""
         import json
 
@@ -287,19 +326,21 @@ class TestSharePointExcel:
                     "rows": [
                         [
                             {"value": "Name", "coordinate": "A1"},
-                            {"value": "Age", "coordinate": "B1"}
+                            {"value": "Age", "coordinate": "B1"},
                         ],
                         [
                             {"value": "John", "coordinate": "A2"},
-                            {"value": 25, "coordinate": "B2"}
-                        ]
-                    ]
+                            {"value": 25, "coordinate": "B2"},
+                        ],
+                    ],
                 }
-            ]
+            ],
         }
         mock_excel_parser.parse_to_json.return_value = json.dumps(mock_json_data)
 
-        with patch("src.server._get_sharepoint_client", return_value=mock_sharepoint_client):
+        with patch(
+            "src.server._get_sharepoint_client", return_value=mock_sharepoint_client
+        ):
             with patch("src.server.config", mock_config):
                 result = sharepoint_excel(
                     file_path="/sites/test/Shared Documents/test.xlsx"
@@ -307,12 +348,17 @@ class TestSharePointExcel:
 
                 # JSON文字列をパース
                 parsed_result = json.loads(result)
-                assert parsed_result["file_path"] == "/sites/test/Shared Documents/test.xlsx"
+                assert (
+                    parsed_result["file_path"]
+                    == "/sites/test/Shared Documents/test.xlsx"
+                )
                 assert len(parsed_result["sheets"]) == 1
                 assert parsed_result["sheets"][0]["name"] == "Sheet1"
 
     @pytest.mark.unit
-    def test_excel_search_with_real_json(self, mock_config, mock_sharepoint_client, mock_excel_parser):
+    def test_excel_search_with_real_json(
+        self, mock_config, mock_sharepoint_client, mock_excel_parser
+    ):
         """検索モードの実際のJSON構造テスト"""
         import json
 
@@ -324,15 +370,16 @@ class TestSharePointExcel:
             "matches": [
                 {"sheet": "Sheet1", "coordinate": "A1", "value": "売上実績"},
                 {"sheet": "Sheet1", "coordinate": "B5", "value": "月間売上"},
-            ]
+            ],
         }
         mock_excel_parser.search_cells.return_value = json.dumps(mock_search_result)
 
-        with patch("src.server._get_sharepoint_client", return_value=mock_sharepoint_client):
+        with patch(
+            "src.server._get_sharepoint_client", return_value=mock_sharepoint_client
+        ):
             with patch("src.server.config", mock_config):
                 result = sharepoint_excel(
-                    file_path="/sites/test/Shared Documents/test.xlsx",
-                    query="売上"
+                    file_path="/sites/test/Shared Documents/test.xlsx", query="売上"
                 )
 
                 # JSON文字列をパース
@@ -347,7 +394,9 @@ class TestSharePointExcel:
         """エラーハンドリングテスト"""
         from src.error_messages import SharePointError
 
-        with patch("src.server._get_sharepoint_client", return_value=mock_sharepoint_client):
+        with patch(
+            "src.server._get_sharepoint_client", return_value=mock_sharepoint_client
+        ):
             with patch("src.server.SharePointExcelParser") as mock_parser_class:
                 parser_instance = Mock()
                 parser_instance.parse_to_json.side_effect = Exception("Parse error")
@@ -381,7 +430,9 @@ class TestRegisterTools:
 
                 # Configを再読み込みして環境変数を反映
                 from importlib import reload
+
                 import src.config
+
                 reload(src.config)
 
                 with patch("src.server.config", src.config.config):
@@ -409,7 +460,9 @@ class TestRegisterTools:
 
                 # Configを再読み込みして環境変数を反映
                 from importlib import reload
+
                 import src.config
+
                 reload(src.config)
 
                 with patch("src.server.config", src.config.config):
@@ -437,7 +490,9 @@ class TestRegisterTools:
 
                 # Configを再読み込みして環境変数を反映
                 from importlib import reload
+
                 import src.config
+
                 reload(src.config)
 
                 with patch("src.server.config", src.config.config):
@@ -465,7 +520,9 @@ class TestRegisterTools:
 
                 # Configを再読み込みして環境変数を反映
                 from importlib import reload
+
                 import src.config
+
                 reload(src.config)
 
                 with patch("src.server.config", src.config.config):

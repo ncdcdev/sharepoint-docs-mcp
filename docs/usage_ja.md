@@ -166,6 +166,28 @@ SHAREPOINT_ONEDRIVE_PATHS=sales1@company.com:/Documents/顧客情報,sales2@comp
 SHAREPOINT_SITE_NAME=@onedrive,sales-team,customer-portal
 ```
 
+### `sharepoint_docs_search` パラメータ
+
+| パラメータ | 型 | デフォルト | 説明 |
+|-----------|------|---------|-------------|
+| `query` | str | 必須 | 検索キーワード |
+| `max_results` | int | 20 | 返却上限（最大100） |
+| `file_extensions` | list[str] \| None | None | 検索対象拡張子（許可リスト外は無視） |
+| `response_format` | str | `detailed` | `detailed` または `compact` |
+
+- `max_results` は最大100に制限されます。
+- `file_extensions` は `SHAREPOINT_ALLOWED_FILE_EXTENSIONS` の許可リストでフィルタされ、対象外は無視されます。
+- `response_format="compact"` は `title` / `path` / `extension` のみ返却します（トークン節約）。
+
+**コンパクト形式の例**
+```python
+results = sharepoint_docs_search(
+    query="予算 2024",
+    response_format="compact",
+    max_results=10,
+)
+```
+
 ## Excel操作の使用例
 
 `sharepoint_excel`ツールを使用して、SharePoint上のExcelファイルの読み取りと検索ができます。2つのモードをサポートしています：
@@ -186,9 +208,7 @@ SHAREPOINT_SITE_NAME=@onedrive,sales-team,customer-portal
 | `query` | str \| None | None | 検索キーワード（検索モードを有効化） |
 | `sheet` | str \| None | None | シート名（特定シートのみ取得） |
 | `cell_range` | str \| None | None | セル範囲（例: "A1:D10"） |
-| `include_formatting` | bool | False | 書式情報を含めるか |
-| `include_header` | bool | True | ヘッダー行を自動検出して分離するか（`freeze_panes`を使用） |
-| `metadata_only` | bool | False | データ行を除外してメタデータのみ返す（応答サイズを削減） |
+| `include_formatting` | bool | False | 指定しても返却内容は変わらない（結合セル情報は常に含まれる） |
 
 ### 基本的なワークフロー
 
@@ -256,9 +276,9 @@ result = sharepoint_excel(
 )
 ```
 
-#### 5. 書式情報を含む読み取り
+#### 5. include_formatting の指定（現状は返却内容は変わらない）
 ```python
-# 書式（色、結合セルなど）を含むデータを取得
+# include_formatting を指定（現状は返却内容は変わらない）
 result = sharepoint_excel(
     file_path="/sites/finance/Shared Documents/report.xlsx",
     sheet="Sheet1",
@@ -266,92 +286,8 @@ result = sharepoint_excel(
 )
 ```
 
-#### 6. ヘッダー行の自動検出
-```python
-# freeze_panesを使用してヘッダー行とデータ行を自動分離
-result = sharepoint_excel(
-    file_path="/sites/finance/Shared Documents/report.xlsx",
-    sheet="Sheet1",
-    include_header=True
-)
-```
-
-**ヘッダー検出レスポンス:**
-```json
-{
-  "file_path": "/sites/finance/Shared Documents/report.xlsx",
-  "sheets": [{
-    "name": "Sheet1",
-    "freeze_panes": "B2",
-    "frozen_rows": 1,
-    "frozen_cols": 1,
-    "header_rows": [
-      [
-        {"value": "商品名", "coordinate": "A1"},
-        {"value": "価格", "coordinate": "B1"},
-        {"value": "在庫", "coordinate": "C1"}
-      ]
-    ],
-    "data_rows": [
-      [
-        {"value": "商品A", "coordinate": "A2"},
-        {"value": 1000, "coordinate": "B2"},
-        {"value": 50, "coordinate": "C2"}
-      ],
-      ...
-    ]
-  }]
-}
-```
-
-**特徴:**
-- Excelの固定行・列（freeze_panes）を自動検出
-- ヘッダー行とデータ行を分離して返す（デフォルト動作）
-- `cell_range`指定時、固定行範囲を自動的に含める
-- `include_header=False`を指定すると、従来の`rows`形式で返す
-```
-
-#### 7. メタデータのみ取得（ファイル構造の確認）
-```python
-# データ行を除外してファイル構造のみを取得
-result = sharepoint_excel(
-    file_path="/sites/finance/Shared Documents/large-report.xlsx",
-    metadata_only=True
-)
-```
-
-**メタデータのみのレスポンス:**
-```json
-{
-  "file_path": "/sites/finance/Shared Documents/large-report.xlsx",
-  "sheets": [{
-    "name": "Sheet1",
-    "freeze_panes": "B2",
-    "frozen_rows": 1,
-    "frozen_cols": 1,
-    "dimensions": "A1:E1000",
-    "header_rows": [
-      [
-        {"value": "商品名", "coordinate": "A1"},
-        {"value": "価格", "coordinate": "B1"},
-        {"value": "在庫", "coordinate": "C1"}
-      ]
-    ],
-    "data_rows": []
-  }]
-}
-```
-
-**ユースケース:**
-- 大きなファイルの構造を事前に確認
-- どのシートにどんなヘッダーがあるかを把握
-- 必要な`cell_range`を決定してから本データを取得
-- 応答サイズを大幅に削減（トークン使用量の節約）
-
-**推奨ワークフロー:**
-1. `metadata_only=True`でファイル構造を確認
-2. 必要な範囲を特定
-3. `cell_range`を指定して本データを取得
+※ 現状 `include_formatting=true` を指定しても、色/幅/高さ/型などの書式情報は返しません。  
+結合セル情報（`merged` / `merged_ranges`）は、シート内に結合セルがある場合に含まれます。
 
 ### JSON出力形式
 
@@ -400,7 +336,10 @@ result = sharepoint_excel(
 }
 ```
 
-#### 書式情報を含む形式（include_formatting=true）
+#### 書式情報（include_formatting の挙動）
+
+現在の実装では `include_formatting=true` を指定しても返却内容は変わりません。  
+結合セル情報（`merged` / `merged_ranges`）は `include_formatting` の有無に関係なく返ります。
 
 ```json
 {
@@ -414,20 +353,21 @@ result = sharepoint_excel(
           {
             "value": "部門",
             "coordinate": "A1",
-            "data_type": "s",
-            "fill": {
-              "pattern_type": "solid",
-              "fg_color": "#CCCCCC",
-              "bg_color": null
-            },
             "merged": {
               "range": "A1:B1",
               "is_top_left": true
-            },
-            "width": 15.0,
-            "height": 20.0
+            }
           }
         ]
+      ],
+      "merged_ranges": [
+        {
+          "range": "A1:B1",
+          "anchor": {
+            "coordinate": "A1",
+            "value": "部門"
+          }
+        }
       ]
     }
   ]
@@ -440,12 +380,35 @@ result = sharepoint_excel(
 - **value**: セル値（文字列、数値、日付、数式など）
 - **coordinate**: セル位置（例: "A1"、"B2"）
 
-**include_formatting=true の場合**
-- **data_type**: データ型コード（`s`=文字列、`n`=数値、`f`=数式など）
-- **fill**: 塗りつぶし色情報（パターンタイプ、前景色/背景色）
+**結合セルがある場合（include_formattingに関係なく返る）**
 - **merged**: 結合セル情報（範囲、位置）
-- **width**: 列幅
-- **height**: 行高
+- **merged_ranges**: シート内の結合範囲一覧（範囲とアンカー情報）
+
+※ `include_formatting` は指定しても返却内容は変わりません（追加の書式情報は返さない）。
+
+### 追加で返るメタ情報
+
+レスポンスには必要に応じて `response_kind` / `data_included` / `requested_sheet` / `requested_range` / `freeze_panes` / `frozen_rows` / `frozen_cols` / `effective_range` / `sheet_resolution` / `available_sheets` などのメタ情報が含まれます。
+
+### シート指定の解決とフォールバック
+
+- `sheet` は完全一致、または `trim + casefold` の一意一致で解決されます。
+- 解決できない場合は `sheet_resolution` と `available_sheets` が返り、`warning` が付与されます。
+- `cell_range` を指定していて `sheet` が見つからない場合は、全シートにフォールバックします。
+- `cell_range` なしで `sheet` が見つからない場合は、`sheets` が空になり候補（`candidates`）が返ります。
+
+### セル範囲の正規化・拡張
+
+`cell_range` は内部で正規化・拡張され、結果に `effective_range` が返ります。
+
+- 列のみ指定（例: `J` / `J:J`）は `J1:J<最大行>` に展開されます。
+- 単一セル（例: `C5`）は `C1:C5` に拡張されます。
+- 単一行（例: `D5:H5`）は `A5:H5` に拡張されます。
+
+### 大きな範囲の制限
+
+行数・列数が上限を超える場合は `ValueError` になります。  
+必要に応じて `cell_range` を指定してください。
 
 ### 一般的な使用例
 
@@ -463,18 +426,17 @@ search_result = sharepoint_excel(file_path=file_path, query="売上合計")
 data = sharepoint_excel(file_path=file_path, sheet="Sheet1", cell_range="A1:D20")
 ```
 
-**セル書式の分析**
+**結合セルの確認**
 ```python
-# 書式情報を含むExcelデータを取得
-json_data = sharepoint_excel(file_path=file_path, include_formatting=True)
+# Excelデータを取得（include_formattingの有無に関係なく結合情報が含まれる）
+json_data = sharepoint_excel(file_path=file_path)
 data = json.loads(json_data)
 
-# 特定の書式を持つセルを検索
+# 結合セルを列挙
 for sheet in data["sheets"]:
-    for row in sheet["rows"]:
-        for cell in row:
-            if cell.get("fill", {}).get("fg_color"):
-                print(f"色付きセル {cell['coordinate']}: {cell['value']}")
+    for merged in sheet.get("merged_ranges", []):
+        anchor = merged.get("anchor", {})
+        print(f"結合範囲 {merged['range']}: {anchor.get('value')}")
 ```
 
 **特定シートをCSVにエクスポート**

@@ -1,6 +1,8 @@
-import pytest
-from unittest.mock import Mock, patch
 import os
+from unittest.mock import Mock, patch
+
+import pytest
+
 from src.config import SharePointConfig
 
 
