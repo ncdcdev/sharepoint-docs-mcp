@@ -1,6 +1,7 @@
-import pytest
-from unittest.mock import patch, mock_open
 import os
+from unittest.mock import patch
+
+import pytest
 
 from src.config import SharePointConfig
 
@@ -25,8 +26,14 @@ class TestSharePointConfig:
             validation_errors = config.validate()
 
             assert len(validation_errors) > 0
-            assert any("SHAREPOINT_TENANT_ID is required" in error for error in validation_errors)
-            assert any("SHAREPOINT_CLIENT_ID is required" in error for error in validation_errors)
+            assert any(
+                "SHAREPOINT_TENANT_ID is required" in error
+                for error in validation_errors
+            )
+            assert any(
+                "SHAREPOINT_CLIENT_ID is required" in error
+                for error in validation_errors
+            )
 
     def test_certificate_text_priority_over_file(self):
         """証明書テキストがファイルパスより優先されることのテスト"""
@@ -82,7 +89,9 @@ class TestSharePointConfig:
 
             assert config.default_max_results == 20
             assert "pdf" in config.allowed_file_extensions
-            assert "Search for documents in SharePoint" in config.search_tool_description
+            assert (
+                "Search for documents in SharePoint" in config.search_tool_description
+            )
             assert "Download a file from SharePoint" in config.download_tool_description
 
     @pytest.mark.unit
@@ -119,16 +128,19 @@ class TestOneDriveConfig:
             targets = config.parse_onedrive_paths()
 
             assert len(targets) == 2
-            
+
             # user1@company.com（フォルダー指定なし）
             assert targets[0]["email"] == "user1@company.com"
             assert targets[0]["folder_path"] == ""
             assert targets[0]["onedrive_path"] == "personal/user1_company_com"
-            
+
             # user2@company.com:/Documents/Projects
             assert targets[1]["email"] == "user2@company.com"
             assert targets[1]["folder_path"] == "/Documents/Projects"
-            assert targets[1]["onedrive_path"] == "personal/user2_company_com/Documents/Projects"
+            assert (
+                targets[1]["onedrive_path"]
+                == "personal/user2_company_com/Documents/Projects"
+            )
 
     def test_parse_onedrive_paths_empty(self):
         """OneDriveパス設定が空の場合のテスト"""
@@ -147,21 +159,23 @@ class TestOneDriveConfig:
     def test_email_to_onedrive_path_conversion(self):
         """メールアドレスからOneDriveパスへの変換テスト"""
         config = SharePointConfig()
-        
+
         # 基本的な変換
         path = config._email_to_onedrive_path("user@company.com")
         assert path == "personal/user_company_com"
-        
+
         # フォルダーパス付き
         path = config._email_to_onedrive_path("user@company.com", "/Documents/Projects")
         assert path == "personal/user_company_com/Documents/Projects"
-        
+
         # 先頭スラッシュの除去
         path = config._email_to_onedrive_path("user@company.com", "Documents/Projects")
         assert path == "personal/user_company_com/Documents/Projects"
-        
+
         # onmicrosoft.com ドメイン
-        path = config._email_to_onedrive_path("admin@company.onmicrosoft.com", "/Documents")
+        path = config._email_to_onedrive_path(
+            "admin@company.onmicrosoft.com", "/Documents"
+        )
         assert path == "personal/admin_company_onmicrosoft_com/Documents"
 
     def test_include_onedrive_property(self):
@@ -359,7 +373,10 @@ class TestDisabledTools:
         with patch.dict(os.environ, env_vars, clear=True):
             config = SharePointConfig()
 
-            assert config.disabled_tools == {"sharepoint_excel", "sharepoint_docs_download"}
+            assert config.disabled_tools == {
+                "sharepoint_excel",
+                "sharepoint_docs_download",
+            }
             assert config.is_tool_enabled("sharepoint_docs_search") is True
             assert config.is_tool_enabled("sharepoint_docs_download") is False
             assert config.is_tool_enabled("sharepoint_excel") is False
@@ -416,6 +433,9 @@ class TestDisabledTools:
         with patch.dict(os.environ, env_vars, clear=True):
             config = SharePointConfig()
 
-            assert config.disabled_tools == {"sharepoint_excel", "sharepoint_docs_download"}
+            assert config.disabled_tools == {
+                "sharepoint_excel",
+                "sharepoint_docs_download",
+            }
             assert config.is_tool_enabled("sharepoint_excel") is False
             assert config.is_tool_enabled("sharepoint_docs_download") is False

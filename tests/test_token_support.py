@@ -1,7 +1,8 @@
 """Tests for direct token support in Authorization header"""
 
-import pytest
 from unittest.mock import Mock, patch
+
+import pytest
 from fastmcp import Context
 from fastmcp.server.auth import AccessToken
 
@@ -47,7 +48,10 @@ class TestGetTokenFromRequest:
         mock_access_token = Mock(spec=AccessToken)
         mock_access_token.token = "test-oauth-token"
 
-        with patch("src.server.get_http_request", side_effect=RuntimeError("Not in HTTP context")):
+        with patch(
+            "src.server.get_http_request",
+            side_effect=RuntimeError("Not in HTTP context"),
+        ):
             with patch("src.server.get_access_token", return_value=mock_access_token):
                 token = _get_token_from_request(mock_ctx)
 

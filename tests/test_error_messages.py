@@ -1,8 +1,8 @@
 import zipfile
+from unittest.mock import Mock
 
 import pytest
 import requests
-from unittest.mock import Mock
 
 from src.error_messages import (
     ErrorCategory,
@@ -57,7 +57,10 @@ class TestHandleSharePointError:
         result = handle_sharepoint_error(http_error, "search")
 
         assert "error" in str(result).lower()
-        assert "configuration" in str(result).lower() or "administrator" in str(result).lower()
+        assert (
+            "configuration" in str(result).lower()
+            or "administrator" in str(result).lower()
+        )
 
     @pytest.mark.unit
     def test_connection_error(self):
@@ -77,7 +80,10 @@ class TestHandleSharePointError:
         result = handle_sharepoint_error(timeout_error, "search")
 
         assert "error" in str(result).lower()
-        assert "configuration" in str(result).lower() or "administrator" in str(result).lower()
+        assert (
+            "configuration" in str(result).lower()
+            or "administrator" in str(result).lower()
+        )
 
     @pytest.mark.unit
     def test_certificate_error(self):
@@ -87,7 +93,10 @@ class TestHandleSharePointError:
         result = handle_sharepoint_error(cert_error, "search")
 
         assert "certificate" in str(result).lower()
-        assert "configured" in str(result).lower() or "configuration" in str(result).lower()
+        assert (
+            "configured" in str(result).lower()
+            or "configuration" in str(result).lower()
+        )
 
     @pytest.mark.unit
     def test_generic_error(self):
@@ -97,7 +106,10 @@ class TestHandleSharePointError:
         result = handle_sharepoint_error(generic_error, "search")
 
         assert "unexpected error" in str(result).lower()
-        assert "configuration" in str(result).lower() or "administrator" in str(result).lower()
+        assert (
+            "configuration" in str(result).lower()
+            or "administrator" in str(result).lower()
+        )
 
     @pytest.mark.unit
     def test_download_context_specific_message(self):
@@ -107,7 +119,10 @@ class TestHandleSharePointError:
         result = handle_sharepoint_error(generic_error, "download")
 
         assert "error" in str(result).lower()
-        assert "configuration" in str(result).lower() or "administrator" in str(result).lower()
+        assert (
+            "configuration" in str(result).lower()
+            or "administrator" in str(result).lower()
+        )
 
     @pytest.mark.unit
     def test_http_error_without_response(self):
@@ -117,7 +132,10 @@ class TestHandleSharePointError:
         result = handle_sharepoint_error(http_error, "search")
 
         assert "error" in str(result).lower()
-        assert "configuration" in str(result).lower() or "administrator" in str(result).lower()
+        assert (
+            "configuration" in str(result).lower()
+            or "administrator" in str(result).lower()
+        )
 
 
 class TestExcelErrorClassification:
@@ -145,7 +163,9 @@ class TestExcelErrorClassification:
     @pytest.mark.unit
     def test_excel_sheet_not_found(self):
         """シートが見つからないエラーの分類テスト"""
-        error = ValueError("Sheet 'NonExistent' not found. Available sheets: ['Sheet1']")
+        error = ValueError(
+            "Sheet 'NonExistent' not found. Available sheets: ['Sheet1']"
+        )
 
         result = handle_sharepoint_error(
             error,

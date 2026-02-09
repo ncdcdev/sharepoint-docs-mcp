@@ -2,10 +2,12 @@ import datetime
 import json
 from io import BytesIO
 from unittest.mock import Mock
+from zipfile import BadZipFile
 
 import pytest
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font, PatternFill
+from openpyxl.utils.exceptions import InvalidFileException
 from openpyxl.worksheet.views import Pane
 
 from src.sharepoint_excel import SharePointExcelParser
@@ -113,7 +115,7 @@ class TestSharePointExcelParser:
         # データ行を作成
         for row in range(2, 11):
             for col in range(1, 5):
-                ws.cell(row=row, column=col, value=f"Data{row-1}_{col}")
+                ws.cell(row=row, column=col, value=f"Data{row - 1}_{col}")
 
         # freeze_panesを設定
         ws.freeze_panes = freeze_panes
@@ -158,7 +160,9 @@ class TestSharePointExcelParser:
         self.mock_download_client.download_file.return_value = excel_bytes
 
         parser = SharePointExcelParser(self.mock_download_client)
-        result_json = parser.parse_to_json("/test/formatted.xlsx", include_formatting=True)
+        result_json = parser.parse_to_json(
+            "/test/formatted.xlsx", include_formatting=True
+        )
 
         result = json.loads(result_json)
         assert result["sheets"][0]["name"] == "FormattedSheet"
@@ -223,7 +227,7 @@ class TestSharePointExcelParser:
         self.mock_download_client.download_file.return_value = b"invalid excel data"
 
         parser = SharePointExcelParser(self.mock_download_client)
-        with pytest.raises(Exception):
+        with pytest.raises((BadZipFile, InvalidFileException)):
             parser.parse_to_json("/test/invalid.xlsx")
 
     def test_empty_excel_file(self):
@@ -315,7 +319,9 @@ class TestSharePointExcelParser:
         self.mock_download_client.download_file.return_value = excel_bytes
 
         parser = SharePointExcelParser(self.mock_download_client)
-        result_json = parser.parse_to_json("/test/formatted.xlsx", include_formatting=True)
+        result_json = parser.parse_to_json(
+            "/test/formatted.xlsx", include_formatting=True
+        )
 
         result = json.loads(result_json)
         cell = result["sheets"][0]["rows"][0][0]
@@ -469,7 +475,7 @@ class TestSharePointExcelParser:
         """_resolve_sheet_name: 完全一致のテスト"""
         parser = SharePointExcelParser(self.mock_download_client)
         sheetnames = ["Sheet1", "Sheet2", "Data"]
-        
+
         resolved, candidates = parser._resolve_sheet_name(sheetnames, "Sheet1")
         assert resolved == "Sheet1"
         assert candidates == []
@@ -478,12 +484,12 @@ class TestSharePointExcelParser:
         """_resolve_sheet_name: 大小文字の違いで解決されるテスト"""
         parser = SharePointExcelParser(self.mock_download_client)
         sheetnames = ["MySheet", "OtherSheet"]
-        
+
         # 小文字で検索 -> 大文字のシートに解決
         resolved, candidates = parser._resolve_sheet_name(sheetnames, "mysheet")
         assert resolved == "MySheet"
         assert candidates == []
-        
+
         # 大文字で検索 -> 小文字混在のシートに解決
         resolved, candidates = parser._resolve_sheet_name(sheetnames, "MYSHEET")
         assert resolved == "MySheet"
@@ -493,12 +499,12 @@ class TestSharePointExcelParser:
         """_resolve_sheet_name: 前後の空白で解決されるテスト"""
         parser = SharePointExcelParser(self.mock_download_client)
         sheetnames = ["Data", "Summary"]
-        
+
         # 前後に空白があっても解決
         resolved, candidates = parser._resolve_sheet_name(sheetnames, "  Data  ")
         assert resolved == "Data"
         assert candidates == []
-        
+
         # 空白と大小文字の組み合わせ
         resolved, candidates = parser._resolve_sheet_name(sheetnames, "  summary  ")
         assert resolved == "Summary"
@@ -509,7 +515,7 @@ class TestSharePointExcelParser:
         parser = SharePointExcelParser(self.mock_download_client)
         # 正規化すると同じになる複数のシート名
         sheetnames = ["MySheet", "mysheet", "MYSHEET"]
-        
+
         # 完全一致がない場合、複数候補が返る
         # strip() + casefold() で正規化（スペース除去はしない）
         resolved, candidates = parser._resolve_sheet_name(sheetnames, " mysheet ")
@@ -520,7 +526,7 @@ class TestSharePointExcelParser:
         """_resolve_sheet_name: 類似名候補を返すテスト"""
         parser = SharePointExcelParser(self.mock_download_client)
         sheetnames = ["DataSheet", "DataTable", "Summary"]
-        
+
         # 類似名候補を取得
         resolved, suggestions = parser._resolve_sheet_name(sheetnames, "DataSheat")
         assert resolved is None
@@ -531,8 +537,10 @@ class TestSharePointExcelParser:
         """_resolve_sheet_name: 見つからない場合のテスト"""
         parser = SharePointExcelParser(self.mock_download_client)
         sheetnames = ["Sheet1", "Sheet2"]
-        
-        resolved, suggestions = parser._resolve_sheet_name(sheetnames, "CompletelyDifferent")
+
+        resolved, suggestions = parser._resolve_sheet_name(
+            sheetnames, "CompletelyDifferent"
+        )
         assert resolved is None
         # 類似度が低すぎる場合は候補なし
         assert len(suggestions) == 0
@@ -671,9 +679,7 @@ class TestSharePointExcelParser:
         self.mock_download_client.download_file.return_value = excel_bytes
 
         parser = SharePointExcelParser(self.mock_download_client)
-        result_json = parser.parse_to_json(
-            "/test/frozen.xlsx", cell_range="A1:D5"
-        )
+        result_json = parser.parse_to_json("/test/frozen.xlsx", cell_range="A1:D5")
 
         result = json.loads(result_json)
         sheet = result["sheets"][0]
@@ -690,9 +696,7 @@ class TestSharePointExcelParser:
         self.mock_download_client.download_file.return_value = excel_bytes
 
         parser = SharePointExcelParser(self.mock_download_client)
-        result_json = parser.parse_to_json(
-            "/test/frozen.xlsx", cell_range="A5:D10"
-        )
+        result_json = parser.parse_to_json("/test/frozen.xlsx", cell_range="A5:D10")
 
         result = json.loads(result_json)
         sheet = result["sheets"][0]
@@ -784,21 +788,21 @@ class TestSharePointExcelParser:
         wb = Workbook()
         ws = wb.active
         ws.title = "TestSheet"
-        
+
         # max_row を設定するためにデータを追加
         for i in range(1, 101):
             ws[f"A{i}"] = f"Data{i}"
-        
+
         parser = SharePointExcelParser(self.mock_download_client)
-        
+
         # "J" -> "J1:J100"
         normalized = parser._normalize_column_range("J", ws)
         assert normalized == "J1:J100"
-        
+
         # "$J" も同様
         normalized = parser._normalize_column_range("$J", ws)
         assert normalized == "J1:J100"
-        
+
         # 小文字も大文字に変換
         normalized = parser._normalize_column_range("j", ws)
         assert normalized == "J1:J100"
@@ -808,21 +812,21 @@ class TestSharePointExcelParser:
         wb = Workbook()
         ws = wb.active
         ws.title = "TestSheet"
-        
+
         # max_row を設定
         for i in range(1, 51):
             ws[f"A{i}"] = f"Data{i}"
-        
+
         parser = SharePointExcelParser(self.mock_download_client)
-        
+
         # "J:K" -> "J1:K50"
         normalized = parser._normalize_column_range("J:K", ws)
         assert normalized == "J1:K50"
-        
+
         # "$J:$K" も同様
         normalized = parser._normalize_column_range("$J:$K", ws)
         assert normalized == "J1:K50"
-        
+
         # 小文字も大文字に変換
         normalized = parser._normalize_column_range("j:k", ws)
         assert normalized == "J1:K50"
@@ -832,13 +836,13 @@ class TestSharePointExcelParser:
         wb = Workbook()
         ws = wb.active
         ws.title = "EmptySheet"
-        
+
         parser = SharePointExcelParser(self.mock_download_client)
-        
+
         # 空シートの場合、max_rowは1になる
         normalized = parser._normalize_column_range("A", ws)
         assert normalized == "A1:A1"
-        
+
         normalized = parser._normalize_column_range("A:C", ws)
         assert normalized == "A1:C1"
 
@@ -848,13 +852,13 @@ class TestSharePointExcelParser:
         ws = wb.active
         ws.title = "TestSheet"
         ws["A1"] = "Data"
-        
+
         parser = SharePointExcelParser(self.mock_download_client)
-        
+
         # 逆順序はValueErrorを発生させる
         with pytest.raises(ValueError) as exc_info:
             parser._normalize_column_range("K:J", ws)
-        
+
         assert "無効なセル範囲" in str(exc_info.value)
         assert "K:J" in str(exc_info.value)
 
@@ -863,21 +867,21 @@ class TestSharePointExcelParser:
         wb = Workbook()
         ws = wb.active
         ws.title = "TestSheet"
-        
+
         parser = SharePointExcelParser(self.mock_download_client)
-        
+
         # すでに行番号付きの範囲はそのまま
         normalized = parser._normalize_column_range("A1:B10", ws)
         assert normalized == "A1:B10"
-        
+
         # 単一セル
         normalized = parser._normalize_column_range("C5", ws)
         assert normalized == "C5"
-        
+
         # 空文字列
         normalized = parser._normalize_column_range("", ws)
         assert normalized == ""
-        
+
         # 空白のみ
         normalized = parser._normalize_column_range("  ", ws)
         assert normalized == "  "
