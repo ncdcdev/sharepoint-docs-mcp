@@ -356,8 +356,8 @@ class SharePointExcelParser:
             effective_range_for_merge = effective_range
 
         # マージセル情報をキャッシュ（パフォーマンス最適化）
-        # 結合セルの場合はmerged_rangesを渡す
-        # 計算済みのeffective_rangeを渡すことで重複計算を回避
+        # 計算済みのeffective_range(effective_range_for_merge)を渡してキャッシュを構築し、
+        # 戻り値としてmerged_ranges(結合セル範囲の一覧)を取得することで重複計算を回避
         merged_cell_map, merged_anchor_value_map, merged_ranges = (
             self._build_merged_cell_cache(sheet, effective_range_for_merge)
         )
