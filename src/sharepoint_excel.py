@@ -122,8 +122,7 @@ class SharePointExcelParser:
             - 条件付き構造情報: freeze_panes（存在する場合）、merged_ranges（結合セルが存在する場合）
         """
         logger.info(
-            f"Parsing Excel file: {file_path} "
-            f"(sheet={sheet_name}, range={cell_range})"
+            f"Parsing Excel file: {file_path} (sheet={sheet_name}, range={cell_range})"
         )
 
         try:
