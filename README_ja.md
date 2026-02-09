@@ -35,9 +35,8 @@ stdioとHTTPの両方のトランスポートに対応しています。
   - SharePoint上のExcelファイルの読み取りと検索
   - 検索モード: `query`パラメータで特定テキストを含むセルを検索
   - 読み取りモード: `sheet`と`cell_range`パラメータで特定シート/範囲を取得
-  - 構造情報（`freeze_panes`）とデータを `rows` で常に返却し、結合セルがある場合は `merged_ranges` も含めて返却
-  - デフォルト: 値と座標のみ（結合セルがある場合は merged / merged_ranges を追加）
-  - オプション: include_formatting を指定しても返却内容（値・座標・結合セル情報など）は変わらない（結合セル情報は結合セルが存在する場合にのみ付与）
+  - レスポンスには`rows`内のセルデータ（値と座標）と構造情報（利用可能な場合）を含む
+  - 構造情報: シート名、dimensions、freeze_panes（存在する場合）、merged_ranges（結合セルが存在する場合）
   - Excel Services不要 - 直接ファイルダウンロード+openpyxl解析方式
 
 ### OneDrive対応
