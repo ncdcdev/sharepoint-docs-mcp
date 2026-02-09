@@ -287,7 +287,7 @@ result = sharepoint_excel(
 ```
 
 ※ 現状 `include_formatting=true` を指定しても、色/幅/高さ/型などの書式情報は返しません。  
-結合セル情報（`merged` / `merged_ranges`）は常に含まれます。
+結合セル情報（`merged` / `merged_ranges`）は、シート内に結合セルがある場合に含まれます。
 
 ### JSON出力形式
 

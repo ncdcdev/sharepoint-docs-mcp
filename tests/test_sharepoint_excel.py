@@ -465,6 +465,77 @@ class TestSharePointExcelParser:
         assert result["available_sheets"] == ["Sheet1"]
         assert result["warning"] == "requested sheet_name was not found or ambiguous"
 
+    def test_resolve_sheet_name_exact_match(self):
+        """_resolve_sheet_name: 完全一致のテスト"""
+        parser = SharePointExcelParser(self.mock_download_client)
+        sheetnames = ["Sheet1", "Sheet2", "Data"]
+        
+        resolved, candidates = parser._resolve_sheet_name(sheetnames, "Sheet1")
+        assert resolved == "Sheet1"
+        assert candidates == []
+
+    def test_resolve_sheet_name_case_insensitive(self):
+        """_resolve_sheet_name: 大小文字の違いで解決されるテスト"""
+        parser = SharePointExcelParser(self.mock_download_client)
+        sheetnames = ["MySheet", "OtherSheet"]
+        
+        # 小文字で検索 -> 大文字のシートに解決
+        resolved, candidates = parser._resolve_sheet_name(sheetnames, "mysheet")
+        assert resolved == "MySheet"
+        assert candidates == []
+        
+        # 大文字で検索 -> 小文字混在のシートに解決
+        resolved, candidates = parser._resolve_sheet_name(sheetnames, "MYSHEET")
+        assert resolved == "MySheet"
+        assert candidates == []
+
+    def test_resolve_sheet_name_with_whitespace(self):
+        """_resolve_sheet_name: 前後の空白で解決されるテスト"""
+        parser = SharePointExcelParser(self.mock_download_client)
+        sheetnames = ["Data", "Summary"]
+        
+        # 前後に空白があっても解決
+        resolved, candidates = parser._resolve_sheet_name(sheetnames, "  Data  ")
+        assert resolved == "Data"
+        assert candidates == []
+        
+        # 空白と大小文字の組み合わせ
+        resolved, candidates = parser._resolve_sheet_name(sheetnames, "  summary  ")
+        assert resolved == "Summary"
+        assert candidates == []
+
+    def test_resolve_sheet_name_ambiguous_normalization(self):
+        """_resolve_sheet_name: 正規化が衝突して曖昧になるケースのテスト"""
+        parser = SharePointExcelParser(self.mock_download_client)
+        # 正規化すると同じになる複数のシート名
+        sheetnames = ["MySheet", "mysheet", "MYSHEET"]
+        
+        # 完全一致がない場合、複数候補が返る
+        resolved, candidates = parser._resolve_sheet_name(sheetnames, "My Sheet")
+        assert resolved is None
+        assert set(candidates) == {"MySheet", "mysheet", "MYSHEET"}
+
+    def test_resolve_sheet_name_fuzzy_suggestions(self):
+        """_resolve_sheet_name: 類似名候補を返すテスト"""
+        parser = SharePointExcelParser(self.mock_download_client)
+        sheetnames = ["DataSheet", "DataTable", "Summary"]
+        
+        # 類似名候補を取得
+        resolved, suggestions = parser._resolve_sheet_name(sheetnames, "DataSheat")
+        assert resolved is None
+        assert "DataSheet" in suggestions
+        assert len(suggestions) > 0
+
+    def test_resolve_sheet_name_not_found(self):
+        """_resolve_sheet_name: 見つからない場合のテスト"""
+        parser = SharePointExcelParser(self.mock_download_client)
+        sheetnames = ["Sheet1", "Sheet2"]
+        
+        resolved, suggestions = parser._resolve_sheet_name(sheetnames, "CompletelyDifferent")
+        assert resolved is None
+        # 類似度が低すぎる場合は候補なし
+        assert len(suggestions) == 0
+
     def test_parse_cell_range(self):
         """セル範囲指定のテスト"""
         wb = Workbook()
@@ -706,3 +777,106 @@ class TestSharePointExcelParser:
         assert sheet["frozen_rows"] == 0
         assert sheet["frozen_cols"] == 0
         assert "freeze_panes" not in sheet
+
+    def test_normalize_column_range_single_column(self):
+        """単一列指定（"J"）の正規化テスト"""
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "TestSheet"
+        
+        # max_row を設定するためにデータを追加
+        for i in range(1, 101):
+            ws[f"A{i}"] = f"Data{i}"
+        
+        parser = SharePointExcelParser(self.mock_download_client)
+        
+        # "J" -> "J1:J100"
+        normalized = parser._normalize_column_range("J", ws)
+        assert normalized == "J1:J100"
+        
+        # "$J" も同様
+        normalized = parser._normalize_column_range("$J", ws)
+        assert normalized == "J1:J100"
+        
+        # 小文字も大文字に変換
+        normalized = parser._normalize_column_range("j", ws)
+        assert normalized == "J1:J100"
+
+    def test_normalize_column_range_column_range(self):
+        """列範囲指定（"J:K"）の正規化テスト"""
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "TestSheet"
+        
+        # max_row を設定
+        for i in range(1, 51):
+            ws[f"A{i}"] = f"Data{i}"
+        
+        parser = SharePointExcelParser(self.mock_download_client)
+        
+        # "J:K" -> "J1:K50"
+        normalized = parser._normalize_column_range("J:K", ws)
+        assert normalized == "J1:K50"
+        
+        # "$J:$K" も同様
+        normalized = parser._normalize_column_range("$J:$K", ws)
+        assert normalized == "J1:K50"
+        
+        # 小文字も大文字に変換
+        normalized = parser._normalize_column_range("j:k", ws)
+        assert normalized == "J1:K50"
+
+    def test_normalize_column_range_empty_sheet(self):
+        """空シートでの列範囲正規化テスト（max_row=1になる）"""
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "EmptySheet"
+        
+        parser = SharePointExcelParser(self.mock_download_client)
+        
+        # 空シートの場合、max_rowは1になる
+        normalized = parser._normalize_column_range("A", ws)
+        assert normalized == "A1:A1"
+        
+        normalized = parser._normalize_column_range("A:C", ws)
+        assert normalized == "A1:C1"
+
+    def test_normalize_column_range_reverse_order(self):
+        """逆順列範囲の例外テスト（"K:J" など）"""
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "TestSheet"
+        ws["A1"] = "Data"
+        
+        parser = SharePointExcelParser(self.mock_download_client)
+        
+        # 逆順序はValueErrorを発生させる
+        with pytest.raises(ValueError) as exc_info:
+            parser._normalize_column_range("K:J", ws)
+        
+        assert "無効なセル範囲" in str(exc_info.value)
+        assert "K:J" in str(exc_info.value)
+
+    def test_normalize_column_range_already_normalized(self):
+        """すでに正規化済みの範囲はそのまま返すテスト"""
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "TestSheet"
+        
+        parser = SharePointExcelParser(self.mock_download_client)
+        
+        # すでに行番号付きの範囲はそのまま
+        normalized = parser._normalize_column_range("A1:B10", ws)
+        assert normalized == "A1:B10"
+        
+        # 単一セル
+        normalized = parser._normalize_column_range("C5", ws)
+        assert normalized == "C5"
+        
+        # 空文字列
+        normalized = parser._normalize_column_range("", ws)
+        assert normalized == ""
+        
+        # 空白のみ
+        normalized = parser._normalize_column_range("  ", ws)
+        assert normalized == "  "

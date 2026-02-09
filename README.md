@@ -35,9 +35,9 @@ Two authentication methods are supported:
   - Read or search Excel files in SharePoint
   - Search mode: find cells containing specific text with `query` parameter
   - Read mode: get data from specific sheets/ranges with `sheet` and `cell_range` parameters
-  - Response always includes structure info (`freeze_panes`, `merged_ranges`) and data in `rows`
-  - Default: value + coordinate (merged info is included when present)
-  - Optional: include_formatting currently does not change the output; merged info is included when present
+  - Response includes data in `rows` and structure info (`freeze_panes`, `merged_ranges`) when available
+  - Default: value + coordinate (structural info such as merged ranges is included when present)
+  - Optional: include_formatting currently does not change the output; structural info is still included only when present
   - No Excel Services dependency - uses direct file download + openpyxl parsing
 
 ### OneDrive Support

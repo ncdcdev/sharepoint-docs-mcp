@@ -257,18 +257,34 @@ class SharePointExcelParser:
         """
         # 空シートを避ける意図
         if sheet.dimensions:
-            # 実在セルのみを走査
-            for cell in sheet._cells.values():
-                if cell.value is not None:
-                    cell_value_str = str(cell.value)
-                    if query in cell_value_str:
-                        matches.append(
-                            {
-                                "sheet": sheet_name_for_result,
-                                "coordinate": cell.coordinate,
-                                "value": self._serialize_value(cell.value),
-                            }
-                        )
+            # パフォーマンスのため_cellsを優先し、無い場合は公開APIにフォールバック
+            if hasattr(sheet, "_cells"):
+                # 実在セルのみを走査（高速）
+                for cell in sheet._cells.values():
+                    if cell.value is not None:
+                        cell_value_str = str(cell.value)
+                        if query in cell_value_str:
+                            matches.append(
+                                {
+                                    "sheet": sheet_name_for_result,
+                                    "coordinate": cell.coordinate,
+                                    "value": self._serialize_value(cell.value),
+                                }
+                            )
+            else:
+                # openpyxl公開APIを使用（互換性確保）
+                for row in sheet.iter_rows(values_only=False):
+                    for cell in row:
+                        if cell.value is not None:
+                            cell_value_str = str(cell.value)
+                            if query in cell_value_str:
+                                matches.append(
+                                    {
+                                        "sheet": sheet_name_for_result,
+                                        "coordinate": cell.coordinate,
+                                        "value": self._serialize_value(cell.value),
+                                    }
+                                )
 
     def _parse_sheet(
         self,
@@ -309,7 +325,7 @@ class SharePointExcelParser:
                 sheet.title,
             )
             frozen_rows = 0
-            # frozen_cols は情報として保持する
+            frozen_cols = 0  # freeze_panes全体を無視
 
         if frozen_rows > 0 or frozen_cols > 0:
             sheet_data["freeze_panes"] = self._format_freeze_panes(

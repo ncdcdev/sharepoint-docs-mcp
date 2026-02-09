@@ -535,7 +535,7 @@ def register_tools():
                 "Read or search Excel file in SharePoint. "
                 "Use 'query' parameter to search for specific content and find cell locations. "
                 "Use 'sheet' and 'cell_range' parameters to read specific sections. "
-                "The response always includes structure info (sheet name, dimensions, freeze_panes, merged_ranges) and data in 'rows'. "
+                "The response includes structure info (sheet name, dimensions, and, when present, freeze_panes and merged_ranges) and data in 'rows'. "
                 "Merged cell info is included when present. "
                 "'include_formatting' currently does not change the output. "
                 "Workflow: 1) Search with query to find relevant cells, "
