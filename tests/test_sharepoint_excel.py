@@ -841,3 +841,176 @@ class TestSharePointExcelParser:
         # 空白のみ
         normalized = parser._normalize_column_range("  ", ws)
         assert normalized == "  "
+
+    def test_no_duplicate_range_normalization(self):
+        """
+        セル範囲の正規化・拡張が重複して実行されないことを確認
+
+        課題3-2の対応：_parse_sheetと_build_merged_cell_cacheで
+        重複していた計算が1回のみになったことを検証
+        """
+        from unittest.mock import patch
+
+        # テスト用Excelを作成（結合セルあり）
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "TestSheet"
+        ws["A1"] = "Header1"
+        ws["B1"] = "Header2"
+        ws["A2"] = "Data1"
+        ws["B2"] = "Data2"
+        ws["A3"] = "Data3"
+        ws["B3"] = "Data4"
+
+        # A1:B1を結合
+        ws.merge_cells("A1:B1")
+
+        excel_bytes = BytesIO()
+        wb.save(excel_bytes)
+        excel_bytes.seek(0)
+
+        # モックの設定
+        self.mock_download_client.download_file.return_value = excel_bytes.getvalue()
+
+        parser = SharePointExcelParser(self.mock_download_client)
+
+        # _normalize_column_rangeと_expand_axis_rangeの呼び出し回数をカウント
+        with patch.object(
+            parser, "_normalize_column_range", wraps=parser._normalize_column_range
+        ) as mock_normalize, patch.object(
+            parser, "_expand_axis_range", wraps=parser._expand_axis_range
+        ) as mock_expand:
+            # 列範囲指定で解析
+            result = parser.parse_to_json("/test/file.xlsx", cell_range="A:B")
+            result_data = json.loads(result)
+
+            # 結果が正しいことを確認
+            assert "sheets" in result_data
+            assert len(result_data["sheets"]) == 1
+            assert result_data["sheets"][0]["name"] == "TestSheet"
+
+            # _normalize_column_rangeは1回だけ呼ばれる（重複なし）
+            assert (
+                mock_normalize.call_count == 1
+            ), f"Expected 1 call, got {mock_normalize.call_count}"
+
+            # _expand_axis_rangeは1回だけ呼ばれる（重複なし）
+            assert (
+                mock_expand.call_count == 1
+            ), f"Expected 1 call, got {mock_expand.call_count}"
+
+    def test_build_merged_cell_cache_with_effective_range(self):
+        """
+        _build_merged_cell_cacheにeffective_cell_rangeを渡した場合の動作確認
+
+        計算済みの範囲を渡すことで、内部での重複計算が回避されることを検証
+        """
+        # テスト用Excelを作成（結合セルあり）
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "TestSheet"
+        ws["A1"] = "Merged"
+        ws["A2"] = "Data1"
+        ws["B2"] = "Data2"
+
+        # A1:B1を結合
+        ws.merge_cells("A1:B1")
+
+        parser = SharePointExcelParser(self.mock_download_client)
+
+        # effective_cell_rangeを渡して呼び出し
+        merged_cell_map, merged_anchor_value_map, merged_ranges = (
+            parser._build_merged_cell_cache(ws, effective_cell_range="A1:B2")
+        )
+
+        # 結合セル情報が正しく取得されることを確認
+        assert merged_cell_map is not None
+        assert merged_ranges is not None
+        assert len(merged_ranges) == 1
+        assert merged_ranges[0]["range"] == "A1:B1"
+
+    def test_build_merged_cell_cache_without_effective_range(self):
+        """
+        _build_merged_cell_cacheにNoneを渡した場合の動作確認
+
+        effective_cell_rangeがNoneの場合、sheet.dimensionsが使用されることを検証
+        """
+        # テスト用Excelを作成（結合セルあり）
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "TestSheet"
+        ws["A1"] = "Merged"
+        ws["B1"] = "Header"
+        ws["A2"] = "Data1"
+        ws["B2"] = "Data2"
+
+        # A1:B1を結合
+        ws.merge_cells("A1:B1")
+
+        parser = SharePointExcelParser(self.mock_download_client)
+
+        # effective_cell_rangeにNoneを渡して呼び出し
+        # sheet.dimensionsが使用される
+        merged_cell_map, merged_anchor_value_map, merged_ranges = (
+            parser._build_merged_cell_cache(ws, effective_cell_range=None)
+        )
+
+        # 結合セル情報が正しく取得されることを確認
+        assert merged_cell_map is not None
+        assert merged_ranges is not None
+        assert len(merged_ranges) == 1
+        assert merged_ranges[0]["range"] == "A1:B1"
+
+    def test_range_normalization_integration(self):
+        """
+        セル範囲の正規化・拡張と結合セル処理の統合テスト
+
+        列範囲指定（"A:B"）が正しく正規化・拡張され、
+        結合セル情報も正しく取得されることを検証
+        """
+        # テスト用Excelを作成（結合セルあり）
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "TestSheet"
+        ws["A1"] = "Merged Header"
+        ws["A2"] = "Data1"
+        ws["B2"] = "Data2"
+        ws["A3"] = "Data3"
+        ws["B3"] = "Data4"
+
+        # A1:B1を結合
+        ws.merge_cells("A1:B1")
+
+        excel_bytes = BytesIO()
+        wb.save(excel_bytes)
+        excel_bytes.seek(0)
+
+        # モックの設定
+        self.mock_download_client.download_file.return_value = excel_bytes.getvalue()
+
+        parser = SharePointExcelParser(self.mock_download_client)
+
+        # 列範囲指定で解析
+        result = parser.parse_to_json("/test/file.xlsx", cell_range="A:B")
+        result_data = json.loads(result)
+
+        # 結果検証
+        assert "sheets" in result_data
+        assert len(result_data["sheets"]) == 1
+
+        sheet_data = result_data["sheets"][0]
+        assert sheet_data["name"] == "TestSheet"
+
+        # requested_rangeとeffective_rangeが設定されている
+        assert sheet_data["requested_range"] == "A:B"
+        assert "effective_range" in sheet_data
+        assert sheet_data["effective_range"].startswith("A1:B")
+
+        # 結合セル情報が取得されている
+        assert "merged_ranges" in sheet_data
+        assert len(sheet_data["merged_ranges"]) == 1
+        assert sheet_data["merged_ranges"][0]["range"] == "A1:B1"
+
+        # データも正しく取得されている
+        assert "rows" in sheet_data
+        assert len(sheet_data["rows"]) > 0
