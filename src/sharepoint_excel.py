@@ -194,7 +194,9 @@ class SharePointExcelParser:
                 result["sheet_resolution"] = sheet_resolution
                 result["available_sheets"] = workbook.sheetnames
                 if sheet_resolution.get("status") != "resolved":
-                    result["warning"] = "requested sheet_name was not found or ambiguous"
+                    result["warning"] = (
+                        "requested sheet_name was not found or ambiguous"
+                    )
 
             for name in sheets_to_parse:
                 sheet = workbook[name]
