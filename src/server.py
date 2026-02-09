@@ -463,6 +463,10 @@ def sharepoint_excel(
         query: 検索キーワード（指定すると検索モード）
         sheet: シート名（特定シートのみ取得）
         cell_range: セル範囲（例: "A1:D10"）
+            - 推奨形式: "A1:D10"（開始セル:終了セル）
+            - 列のみ: "A:D" も可（自動的に行範囲が追加されます）
+            - ⚠️ 単一列/行の部分範囲は軸全体に自動拡張されます
+              例: "J50:J100" → "J1:J100" (J列全体)
         ctx: FastMCP context (injected automatically)
 
     Returns:

@@ -67,6 +67,32 @@ def some_function():
     return something()
 ```
 
+## Design Principles
+
+### MCP Server Design Philosophy
+
+**Simplicity over Complexity**
+- Prefer simple, explicit APIs over "smart" automatic conversions
+- Trust LLM's ability to learn from clear error messages
+- Avoid over-engineering: features are easy to add but hard to remove
+
+**YAGNI (You Aren't Gonna Need It)**
+- Only implement features when they are clearly needed
+- Before adding a feature, ask: "Can LLM handle this on its own?"
+- Consider long-term maintenance cost vs. short-term convenience
+
+**Feature Addition Checklist**
+- [ ] Is this feature truly necessary? (Can't LLM adapt?)
+- [ ] Is there a simpler alternative?
+- [ ] Can this be removed in the future without breaking compatibility?
+- [ ] Is the maintenance cost acceptable?
+- [ ] Does this add significant value to justify the complexity?
+
+**Context Efficiency**
+- Keep tool descriptions concise (they're included in every LLM call)
+- Prioritize essential information over exhaustive documentation
+- Use external docs (README) for detailed explanations
+
 ### Project-Specific Guidelines
 
 #### MCP Development
