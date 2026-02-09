@@ -525,14 +525,13 @@ def register_tools():
     if config.is_tool_enabled("sharepoint_excel"):
         mcp.tool(
             description=(
-                "Read or search Excel file in SharePoint. "
-                "Use 'query' parameter to search for specific content and find cell locations. "
-                "Use 'sheet' and 'cell_range' parameters to read specific sections. "
-                "The response includes structure info (sheet name, dimensions, and, when present, freeze_panes and merged_ranges) and data in 'rows'. "
-                "Merged cell info is included when present. "
-                "'include_formatting' currently does not change the output. "
-                "Workflow: 1) Search with query to find relevant cells, "
-                "2) Read specific cell_range based on search results."
+                "Read or search Excel files in SharePoint. "
+                "Search mode: use 'query' parameter to find cells containing specific text (returns cell locations). "
+                "Read mode: use 'sheet' and 'cell_range' parameters to retrieve data from specific sections. "
+                "Response includes cell data in 'rows' (value and coordinate) and structural information "
+                "(sheet name, dimensions, freeze_panes when present, merged_ranges when merged cells exist). "
+                "Recommended workflow: 1) Search with query to locate relevant content, "
+                "2) Read specific range based on search results."
             )
         )(sharepoint_excel)
         logging.info("Registered tool: sharepoint_excel")
