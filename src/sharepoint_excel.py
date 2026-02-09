@@ -320,54 +320,13 @@ class SharePointExcelParser:
 
         # マージセル情報をキャッシュ（パフォーマンス最適化）
         # 結合セルの場合はmerged_rangesを渡す
-        merged_cell_map: dict[str, str] | None = None
-        merged_anchor_value_map: dict[str, Any] | None = None
-        merged_ranges: list[dict[str, Any]] = []
+        merged_cell_map, merged_anchor_value_map, merged_ranges = (
+            self._build_merged_cell_cache(sheet, cell_range)
+        )
 
-        if sheet.merged_cells.ranges:
-            merged_cell_map = {}
-            merged_anchor_value_map = {}
-
-            for merged_range in sheet.merged_cells.ranges:
-                merged_range_str = str(merged_range)
-                range_start = merged_range_str.split(":")[0]
-
-                # アンカー値を決定（左上が空なら結合範囲内を走査）
-                anchor_coord = range_start
-                anchor_value = self._serialize_value(sheet[range_start].value)
-
-                # セル座標 -> 結合範囲 のマップ
-                # ここは「面積」を全部展開するが、通常のExcelの結合範囲は現実的なサイズ。
-                # もし極端な結合が来たら、別途 input 制限（sheet.dimensions の上限）で守る。
-                for cell_coord in merged_range.cells:
-                    row_idx, col_idx = cell_coord
-                    col_letter = get_column_letter(col_idx)
-                    coord_str = f"{col_letter}{row_idx}"
-                    merged_cell_map[coord_str] = merged_range_str
-
-                    # 左上が空の場合は結合範囲内で最初の非空セルを探す
-                    if anchor_value is None:
-                        cell_value = self._serialize_value(
-                            sheet.cell(row=row_idx, column=col_idx).value
-                        )
-                        if cell_value is not None:
-                            anchor_value = cell_value
-                            anchor_coord = coord_str
-
-                # アンカー値を保存（結合セルの値埋め用）
-                merged_anchor_value_map[merged_range_str] = anchor_value
-
-                # 結合範囲そのものを返す（結合セルがある時だけ返す）
-                merged_ranges.append(
-                    {
-                        "range": merged_range_str,
-                        "anchor": {"coordinate": anchor_coord, "value": anchor_value},
-                    }
-                )
-
-            # ここは「結合セルがある時だけ」返す
-            if merged_ranges:
-                sheet_data["merged_ranges"] = merged_ranges
+        # ここは「結合セルがある時だけ」返す
+        if merged_ranges:
+            sheet_data["merged_ranges"] = merged_ranges
 
         # セル範囲の拡張とデータサイズ検証
         all_rows = []
@@ -450,6 +409,123 @@ class SharePointExcelParser:
 
         sheet_data["rows"] = all_rows
         return sheet_data
+
+    def _build_merged_cell_cache(
+        self,
+        sheet,
+        cell_range: str | None,
+    ) -> tuple[
+        dict[str, str] | None,
+        dict[str, Any] | None,
+        list[dict[str, Any]],
+    ]:
+        """
+        マージセル情報をキャッシュして返す（パフォーマンス最適化）
+        - 「今回返す予定の範囲」を先に確定し、その範囲と交差する結合だけを部分展開する
+        - アンカー値は左上→無ければ結合範囲内の実在セルのみから最小(row,col)を選ぶ
+        """
+        merged_cell_map: dict[str, str] | None = None
+        merged_anchor_value_map: dict[str, Any] | None = None
+        merged_ranges: list[dict[str, Any]] = []
+
+        # 今回返す予定の範囲（結合情報の部分展開に使用）
+        planned_range_for_merge: str | None = None
+        if cell_range:
+            planned_range_for_merge = self._normalize_column_range(cell_range, sheet)
+            planned_range_for_merge = self._expand_axis_range(planned_range_for_merge)
+        elif sheet.dimensions:
+            planned_range_for_merge = str(sheet.dimensions)
+
+        if not sheet.merged_cells.ranges or not planned_range_for_merge:
+            return (None, None, [])
+
+        # planned_range_for_merge から対象範囲の境界を計算
+        if ":" in planned_range_for_merge:
+            start_cell, end_cell = planned_range_for_merge.split(":", 1)
+        else:
+            start_cell = planned_range_for_merge
+            end_cell = planned_range_for_merge
+
+        start_cell = start_cell.replace("$", "")
+        end_cell = end_cell.replace("$", "")
+
+        start_col, start_row = coordinate_from_string(start_cell)
+        end_col, end_row = coordinate_from_string(end_cell)
+
+        start_col_idx = column_index_from_string(start_col)
+        end_col_idx = column_index_from_string(end_col)
+
+        target_min_row = min(start_row, end_row)
+        target_max_row = max(start_row, end_row)
+        target_min_col = min(start_col_idx, end_col_idx)
+        target_max_col = max(start_col_idx, end_col_idx)
+
+        merged_cell_map = {}
+        merged_anchor_value_map = {}
+
+        for merged_range in sheet.merged_cells.ranges:
+            merged_range_str = str(merged_range)
+            range_start = merged_range_str.split(":")[0]
+
+            merged_min_row = merged_range.min_row
+            merged_max_row = merged_range.max_row
+            merged_min_col = merged_range.min_col
+            merged_max_col = merged_range.max_col
+
+            # 返す予定の範囲と交差しない結合は無視（部分展開）
+            inter_min_row = max(merged_min_row, target_min_row)
+            inter_max_row = min(merged_max_row, target_max_row)
+            inter_min_col = max(merged_min_col, target_min_col)
+            inter_max_col = min(merged_max_col, target_max_col)
+            if inter_min_row > inter_max_row or inter_min_col > inter_max_col:
+                continue
+
+            # アンカー値を決定（左上が空なら結合範囲内の実在セルだけ走査）
+            anchor_coord = range_start
+            anchor_value = self._serialize_value(sheet[range_start].value)
+
+            if anchor_value is None:
+                best_rc: tuple[int, int] | None = None
+                best_val: Any | None = None
+
+                # 実在セル（sheet._cells）だけから、結合範囲内の最小(row,col)の値を選ぶ
+                for (r, c), cell_obj in sheet._cells.items():
+                    if (
+                        merged_min_row <= r <= merged_max_row
+                        and merged_min_col <= c <= merged_max_col
+                    ):
+                        cell_value = self._serialize_value(cell_obj.value)
+                        if cell_value is not None:
+                            if best_rc is None or (r, c) < best_rc:
+                                best_rc = (r, c)
+                                best_val = cell_value
+
+                if best_rc is not None:
+                    r, c = best_rc
+                    anchor_value = best_val
+                    anchor_coord = f"{get_column_letter(c)}{r}"
+
+            # セル座標 -> 結合範囲 のマップ（返す予定の範囲と交差する部分だけ展開）
+            for row_idx in range(inter_min_row, inter_max_row + 1):
+                for col_idx in range(inter_min_col, inter_max_col + 1):
+                    coord_str = f"{get_column_letter(col_idx)}{row_idx}"
+                    merged_cell_map[coord_str] = merged_range_str
+
+            # アンカー値を保存（結合セルの値埋め用）
+            merged_anchor_value_map[merged_range_str] = anchor_value
+
+            # 結合範囲そのものを返す（結合セルがある時だけ返す）
+            merged_ranges.append(
+                {
+                    "range": merged_range_str,
+                    "anchor": {"coordinate": anchor_coord, "value": anchor_value},
+                }
+            )
+
+        if not merged_ranges:
+            return (None, None, [])
+
+        return (merged_cell_map, merged_anchor_value_map, merged_ranges)
 
     def _expand_axis_range(self, range_str: str) -> str:
         """
