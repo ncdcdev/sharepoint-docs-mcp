@@ -511,7 +511,8 @@ class TestSharePointExcelParser:
         sheetnames = ["MySheet", "mysheet", "MYSHEET"]
         
         # 完全一致がない場合、複数候補が返る
-        resolved, candidates = parser._resolve_sheet_name(sheetnames, "My Sheet")
+        # strip() + casefold() で正規化（スペース除去はしない）
+        resolved, candidates = parser._resolve_sheet_name(sheetnames, " mysheet ")
         assert resolved is None
         assert set(candidates) == {"MySheet", "mysheet", "MYSHEET"}
 
