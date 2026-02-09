@@ -439,6 +439,14 @@ class SharePointExcelParser:
         マージセル情報をキャッシュして返す（パフォーマンス最適化）
         - 「今回返す予定の範囲」を先に確定し、その範囲と交差する結合だけを部分展開する
         - アンカー値は左上→無ければ結合範囲内の実在セルのみから最小(row,col)を選ぶ
+
+        Args:
+            sheet: openpyxl Worksheet
+            effective_cell_range: 正規化・拡張済みのセル範囲（例: "A1:D10"）
+                Noneの場合はsheet.dimensionsを使用
+
+        Returns:
+            (merged_cell_map, merged_anchor_value_map, merged_ranges)のタプル
         """
         merged_cell_map: dict[str, str] | None = None
         merged_anchor_value_map: dict[str, Any] | None = None

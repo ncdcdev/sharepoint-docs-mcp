@@ -1,7 +1,7 @@
 import datetime
 import json
 from io import BytesIO
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 from zipfile import BadZipFile
 
 import pytest
@@ -849,8 +849,6 @@ class TestSharePointExcelParser:
         課題3-2の対応：_parse_sheetと_build_merged_cell_cacheで
         重複していた計算が1回のみになったことを検証
         """
-        from unittest.mock import patch
-
         # テスト用Excelを作成（結合セルあり）
         wb = Workbook()
         ws = wb.active
