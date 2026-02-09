@@ -505,16 +505,30 @@ class SharePointExcelParser:
                 best_val: Any | None = None
 
                 # 実在セル（sheet._cells）だけから、結合範囲内の最小(row,col)の値を選ぶ
-                for (r, c), cell_obj in sheet._cells.items():
-                    if (
-                        merged_min_row <= r <= merged_max_row
-                        and merged_min_col <= c <= merged_max_col
-                    ):
-                        cell_value = self._serialize_value(cell_obj.value)
-                        if cell_value is not None:
-                            if best_rc is None or (r, c) < best_rc:
-                                best_rc = (r, c)
-                                best_val = cell_value
+                # 互換性のため_cellsの有無をチェックしてフォールバック
+                if hasattr(sheet, "_cells"):
+                    # プライベート属性を使った高速版
+                    for (r, c), cell_obj in sheet._cells.items():
+                        if (
+                            merged_min_row <= r <= merged_max_row
+                            and merged_min_col <= c <= merged_max_col
+                        ):
+                            cell_value = self._serialize_value(cell_obj.value)
+                            if cell_value is not None:
+                                if best_rc is None or (r, c) < best_rc:
+                                    best_rc = (r, c)
+                                    best_val = cell_value
+                else:
+                    # 公開APIを使ったフォールバック版
+                    for row_idx in range(merged_min_row, merged_max_row + 1):
+                        for col_idx in range(merged_min_col, merged_max_col + 1):
+                            coord = f"{get_column_letter(col_idx)}{row_idx}"
+                            cell = sheet[coord]
+                            cell_value = self._serialize_value(cell.value)
+                            if cell_value is not None:
+                                if best_rc is None or (row_idx, col_idx) < best_rc:
+                                    best_rc = (row_idx, col_idx)
+                                    best_val = cell_value
 
                 if best_rc is not None:
                     r, c = best_rc
