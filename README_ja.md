@@ -37,6 +37,9 @@ stdioとHTTPの両方のトランスポートに対応しています。
   - 読み取りモード: `sheet`と`cell_range`パラメータで特定シート/範囲を取得
   - **ヘッダー自動追加**: `cell_range`指定時、デフォルトで固定行（ヘッダー）を自動的に含める
     - `include_frozen_rows=False`を指定すると、指定範囲のみを取得
+  - **セルスタイル情報**（オプション）: `include_cell_styles=True`を指定すると、背景色・列幅・行高さを取得
+    - デフォルトは`False`でトークン消費を最小化
+    - 強調表示されたセル、色付きヘッダー、視覚的に強調されたコンテンツの識別に便利
   - レスポンスには`rows`内のセルデータ（値と座標）と構造情報（利用可能な場合）を含む
   - 構造情報: シート名、dimensions、frozen_rows、frozen_cols、freeze_panes（存在する場合）、merged_ranges（結合セルが存在する場合）
   - Excel Services不要 - 直接ファイルダウンロード+openpyxl解析方式

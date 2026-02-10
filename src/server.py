@@ -454,6 +454,7 @@ def sharepoint_excel(
     sheet: str | None = None,
     cell_range: str | None = None,
     include_frozen_rows: bool = True,
+    include_cell_styles: bool = False,
     ctx: Context | None = None,
 ) -> str:
     """
@@ -471,6 +472,10 @@ def sharepoint_excel(
         include_frozen_rows: cell_range指定時に固定行を自動追加（デフォルト: True）
             True: frozen_rowsで指定された行（通常はヘッダー）を自動的に取得
             False: 指定されたcell_rangeのみを取得
+        include_cell_styles: セルの色・サイズ情報（default: false）
+            色分けされたデータを抽出する場合のみTrueを指定
+            背景色（fill）、列幅（width）、行高さ（height）を取得
+            ※トークン消費が約20%増加
         ctx: FastMCP context (injected automatically)
 
     Returns:
@@ -498,6 +503,7 @@ def sharepoint_excel(
             sheet_name=sheet,
             cell_range=cell_range,
             include_frozen_rows=include_frozen_rows,
+            include_cell_styles=include_cell_styles,
         )
 
     except Exception as e:
@@ -542,6 +548,7 @@ def register_tools():
                 "frozen at the top of the sheet (typically column headers). "
                 "Response includes cell data in 'rows' (value and coordinate) and structural information "
                 "(sheet name, dimensions, frozen_rows, frozen_cols, freeze_panes when present, merged_ranges when merged cells exist). "
+                "Cell styles (include_cell_styles, default: false): background colors and sizes. Use only for color-coded data extraction. "
                 "Header detection: Cannot be auto-detected from frozen_rows. "
                 "ALWAYS read exactly 5 rows for header check: 'A1:Z5' (NOT 'A1:Z50' or more). "
                 "Prefer 'query' search when possible to locate data first. "
