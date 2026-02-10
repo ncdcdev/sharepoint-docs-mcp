@@ -423,7 +423,7 @@ class SharePointExcelParser:
             logger.warning(
                 "固定行数が上限(%d)を超えたため、freeze_panes情報を無視します。"
                 "ファイルの解析は続行されますが、ヘッダー自動追加機能は利用できません。"
-                "(frozen_rows=%d, sheet=%s)",
+                " (frozen_rows=%d, sheet=%s)",
                 config.excel_max_frozen_rows,
                 frozen_rows,
                 sheet.title,
