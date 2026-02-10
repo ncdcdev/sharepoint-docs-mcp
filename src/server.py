@@ -453,9 +453,9 @@ def sharepoint_excel(
     query: str | None = None,
     sheet: str | None = None,
     cell_range: str | None = None,
-    include_formatting: bool = False,
-    include_header: bool = True,
-    metadata_only: bool = False,
+    include_frozen_rows: bool = True,
+    include_cell_styles: bool = False,
+    expand_axis_range: bool = False,
     ctx: Context | None = None,
 ) -> str:
     """
@@ -466,15 +466,18 @@ def sharepoint_excel(
         query: 検索キーワード（指定すると検索モード）
         sheet: シート名（特定シートのみ取得）
         cell_range: セル範囲（例: "A1:D10"）
-        include_formatting: 書式情報を含めるか
-        include_header: ヘッダー情報を自動追加して返すか
-            True (デフォルト): freeze_panesで固定された行をヘッダーとして認識し、
-                 cell_range指定時にヘッダーが範囲外でも自動的に追加してheader_rowsとdata_rowsに分けて返す
-            False: すべてのデータをrowsに含める（ヘッダー自動追加なし）
-        metadata_only: メタデータのみを返すか（data_rowsを除外）
-            True: ファイル情報、シート名、dimensions、freeze_panes、header_rowsのみ返す
-            False (デフォルト): すべてのデータを含める
-            注: 検索モードでは無視される
+            - 推奨形式: "A1:D10"（開始セル:終了セル）
+            - 列のみ: "A:D" も可（自動的に行範囲が追加されます）
+        include_frozen_rows: cell_range指定時に固定行を自動追加（デフォルト: True）
+            True: frozen_rowsで指定された行（通常はヘッダー）を自動的に取得
+            False: 指定されたcell_rangeのみを取得
+        include_cell_styles: セルの色・サイズ情報（default: false）
+            色分けされたデータを抽出する場合のみTrueを指定
+            背景色（fill）、列幅（width）、行高さ（height）を取得
+            ※トークン消費が約20%増加
+        expand_axis_range: 単一列/行の部分範囲を開始側に自動拡張（default: false）
+            True: 例 "J50:J100" → "J1:J100"（行1に拡張）
+            frozen_rows=0でヘッダー文脈が不明な場合に使用
         ctx: FastMCP context (injected automatically)
 
     Returns:
@@ -482,9 +485,7 @@ def sharepoint_excel(
     """
     logging.info(
         f"SharePoint Excel operation: {file_path} "
-        f"(query={query}, sheet={sheet}, cell_range={cell_range}, "
-        f"include_formatting={include_formatting}, include_header={include_header}, "
-        f"metadata_only={metadata_only})"
+        f"(query={query}, sheet={sheet}, cell_range={cell_range})"
     )
 
     try:
@@ -494,18 +495,18 @@ def sharepoint_excel(
         # Excel解析クライアントを作成
         parser = SharePointExcelParser(client)
 
-        # 検索モード（include_header、metadata_onlyは無視）
+        # 検索モード
         if query:
-            return parser.search_cells(file_path, query)
+            return parser.search_cells(file_path, query, sheet_name=sheet)
 
         # 読み取りモード
         return parser.parse_to_json(
             file_path,
-            include_formatting=include_formatting,
             sheet_name=sheet,
             cell_range=cell_range,
-            include_header=include_header,
-            metadata_only=metadata_only,
+            include_frozen_rows=include_frozen_rows,
+            include_cell_styles=include_cell_styles,
+            expand_axis_range=expand_axis_range,
         )
 
     except Exception as e:
@@ -542,16 +543,23 @@ def register_tools():
     if config.is_tool_enabled("sharepoint_excel"):
         mcp.tool(
             description=(
-                "Read or search Excel file in SharePoint. "
-                "Use 'query' parameter to search for specific content and find cell locations. "
-                "Use 'sheet' and 'cell_range' parameters to read specific sections. "
-                "Use 'include_header=True' (default) to automatically include header rows (detected via freeze_panes) "
-                "even when they're outside the specified cell_range - headers will be in 'header_rows', data in 'data_rows'. "
-                "Use 'metadata_only=True' to get only file structure and headers without data rows (useful for understanding file layout). "
-                "Use 'include_formatting=True' to include cell formatting details. "
-                "Note: 'metadata_only' and 'include_header' are ignored in search mode (when using 'query'). "
-                "Workflow: 1) Search with query to find relevant cells, "
-                "2) Read specific cell_range based on search results."
+                "Read or search Excel files in SharePoint. "
+                "Search mode: use 'query' parameter to find cells containing specific text (returns cell locations). "
+                "Read mode: use 'sheet' and 'cell_range' parameters to retrieve data from specific sections. "
+                "When cell_range is specified with include_frozen_rows=True (default), frozen rows are automatically "
+                "included even if they are outside the specified range. frozen_rows indicates the number of header rows "
+                "frozen at the top of the sheet (typically column headers). "
+                "Response includes cell data in 'rows' (value and coordinate) and structural information "
+                "(sheet name, dimensions, frozen_rows, frozen_cols, freeze_panes when present, merged_ranges when merged cells exist). "
+                "Cell styles (include_cell_styles, default: false): background colors and sizes. Use only for color-coded data extraction. "
+                "Header detection: For sheets with frozen_rows > 0, headers are automatically included with include_frozen_rows=True (default). "
+                "For sheets with frozen_rows=0, headers are not automatically included and context may be unclear. "
+                "ALWAYS read exactly 5 rows for header check: 'A1:Z5' (NOT 'A1:Z50' or more). "
+                "Prefer 'query' search when possible to locate data first. "
+                "Workflow: 1) Search OR read 'A1:Z5' for header check, "
+                "2) Read specific range (include_frozen_rows adds frozen headers automatically), "
+                "3) If frozen_rows=0 and header context is unclear, retry with expand_axis_range=True "
+                "to auto-include row 1 (for columns) or column A (for rows)."
             )
         )(sharepoint_excel)
         logging.info("Registered tool: sharepoint_excel")

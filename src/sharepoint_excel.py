@@ -2,6 +2,7 @@
 SharePoint Excel解析モジュール（ダウンロード+openpyxl方式）
 """
 
+import difflib
 import json
 import logging
 from io import BytesIO
@@ -28,18 +29,26 @@ class SharePointExcelParser:
         """
         self.download_client = download_client
 
-    def search_cells(self, file_path: str, query: str) -> str:
+    def search_cells(
+        self,
+        file_path: str,
+        query: str,
+        sheet_name: str | None = None,
+    ) -> str:
         """
         セル内容を検索して該当位置を返す
 
         Args:
             file_path: Excelファイルのパス
             query: 検索キーワード
+            sheet_name: 検索対象シート名（指定時はまずそのシートを検索し、マッチ0件なら全シート検索にフォールバック）
 
         Returns:
             JSON文字列（マッチしたセルの位置情報）
         """
-        logger.info(f"Searching cells in Excel file: {file_path} (query={query})")
+        logger.info(
+            f"Searching cells in Excel file: {file_path} (query={query}, sheet={sheet_name})"
+        )
 
         try:
             # ファイルをダウンロード
@@ -53,21 +62,26 @@ class SharePointExcelParser:
             workbook = load_workbook(file_stream, data_only=False, rich_text=True)
 
             matches = []
-            for sheet_name in workbook.sheetnames:
-                sheet = workbook[sheet_name]
-                if sheet.dimensions:
-                    for row in sheet.iter_rows():
-                        for cell in row:
-                            if cell.value is not None:
-                                cell_value_str = str(cell.value)
-                                if query in cell_value_str:
-                                    matches.append(
-                                        {
-                                            "sheet": sheet_name,
-                                            "coordinate": cell.coordinate,
-                                            "value": self._serialize_value(cell.value),
-                                        }
-                                    )
+
+            # sheet_name 指定がある場合はそのシートを優先して検索
+            if sheet_name:
+                if sheet_name in workbook.sheetnames:
+                    self._scan_sheet(workbook[sheet_name], sheet_name, query, matches)
+
+                    # マッチが無ければ全シート走査にフォールバック
+                    if len(matches) == 0:
+                        for sn in workbook.sheetnames:
+                            if sn == sheet_name:
+                                continue
+                            self._scan_sheet(workbook[sn], sn, query, matches)
+                else:
+                    # sheet_name が存在しない場合は「指定なし」と同じ扱いで全シート検索
+                    for sn in workbook.sheetnames:
+                        self._scan_sheet(workbook[sn], sn, query, matches)
+            else:
+                # 全シート検索
+                for sn in workbook.sheetnames:
+                    self._scan_sheet(workbook[sn], sn, query, matches)
 
             logger.info(f"Found {len(matches)} matches for query '{query}'")
 
@@ -90,38 +104,38 @@ class SharePointExcelParser:
     def parse_to_json(
         self,
         file_path: str,
-        include_formatting: bool = False,
         sheet_name: str | None = None,
         cell_range: str | None = None,
-        include_header: bool = True,
-        metadata_only: bool = False,
+        include_frozen_rows: bool = True,
+        include_cell_styles: bool = False,
+        expand_axis_range: bool = False,
     ) -> str:
         """
         Excelファイルを解析してJSON形式で返す
 
         Args:
             file_path: Excelファイルのパス
-            include_formatting: 書式情報を含めるかどうか
-                False (デフォルト): value, coordinate のみ
-                True: value, coordinate, data_type, fill, merged, width, height を含む
             sheet_name: 特定シートのみ取得（Noneで全シート）
             cell_range: セル範囲指定（例: "A1:D10"）
-            include_header: ヘッダー情報を自動追加して返すかどうか
-                True (デフォルト): freeze_panesで固定された行をヘッダーとして認識し、
-                     cell_range指定時にヘッダーが範囲外でも自動的に追加して
-                     header_rows と data_rows に分けて返す
-                False: rows にすべてのデータを含む（ヘッダー自動追加なし）
-            metadata_only: メタデータのみを返すかどうか
-                True: data_rows を空リストにする（header_rows とメタデータのみ返す）
-                False (デフォルト): すべてのデータを含める
+            include_frozen_rows: cell_range指定時に固定行（ヘッダー）を自動追加
+                True（デフォルト）: frozen_rowsで指定された行を自動的に取得
+                False: 指定されたcell_rangeのみを取得
+            include_cell_styles: セルの色・サイズ情報（default: false）
+                色分けデータ抽出時のみ使用。トークン消費+約20%
+            expand_axis_range: 単一列/行指定時に開始側を自動拡張（default: false）
+                True: 例 "J50:J100" → "J1:J100"（行1に拡張）
+                False: 指定範囲をそのまま使用
 
         Returns:
-            JSON文字列（全シート・全セルのデータ）
+            JSON文字列
+            - 各セルのデータ: value（値）、coordinate（座標）
+            - 構造情報: シート名、dimensions（シート全体のセル範囲、例: "A1:D10"）
+            - 構造情報: frozen_rows（固定行数）、frozen_cols（固定列数）
+            - 条件付き構造情報: freeze_panes（存在する場合）、merged_ranges（結合セルが存在する場合）
+            - スタイル情報（include_cell_styles=Trueの場合）: fill（背景色）、width（列幅）、height（行高さ）
         """
         logger.info(
-            f"Parsing Excel file: {file_path} "
-            f"(include_formatting={include_formatting}, sheet={sheet_name}, range={cell_range}, "
-            f"include_header={include_header}, metadata_only={metadata_only})"
+            f"Parsing Excel file: {file_path} (sheet={sheet_name}, range={cell_range})"
         )
 
         try:
@@ -136,23 +150,73 @@ class SharePointExcelParser:
             workbook = load_workbook(file_stream, data_only=False, rich_text=True)
 
             # シートリストを取得
+            sheet_resolution: dict[str, Any] | None = None
+
             if sheet_name:
-                if sheet_name not in workbook.sheetnames:
-                    raise ValueError(
-                        f"Sheet '{sheet_name}' not found. "
-                        f"Available sheets: {workbook.sheetnames}"
-                    )
-                sheets_to_parse = [sheet_name]
+                resolved, candidates = self._resolve_sheet_name(
+                    workbook.sheetnames, sheet_name
+                )
+
+                if resolved:
+                    sheets_to_parse = [resolved]
+                    if resolved != sheet_name:
+                        sheet_resolution = {
+                            "status": "resolved",
+                            "requested": sheet_name,
+                            "resolved": resolved,
+                        }
+                else:
+                    # sheet_name が解決できない場合
+                    # cell_range が指定されていれば、範囲が限定されるので全シートにフォールバック（やりすぎを避けつつ取りこぼし防止）
+                    if cell_range:
+                        sheets_to_parse = workbook.sheetnames
+                        sheet_resolution = {
+                            "status": "fallback_all_sheets",
+                            "requested": sheet_name,
+                            "resolved": None,
+                            "candidates": candidates,
+                            "reason": "sheet not found; fallback to all sheets because cell_range is specified",
+                        }
+                    else:
+                        # ここで例外にせず、空の sheets を返して候補を出す（LLMが次の手を打てる）
+                        sheets_to_parse = []
+                        sheet_resolution = {
+                            "status": "not_found",
+                            "requested": sheet_name,
+                            "resolved": None,
+                            "candidates": candidates,
+                        }
             else:
                 sheets_to_parse = workbook.sheetnames
 
             # シートを解析
-            result = {"file_path": file_path, "sheets": []}
+            result = {
+                "file_path": file_path,
+                "sheets": [],
+            }
+
+            # nullでない場合のみ追加
+            if sheet_name is not None:
+                result["requested_sheet"] = sheet_name
+            if cell_range is not None:
+                result["requested_range"] = cell_range
+
+            if sheet_resolution:
+                result["sheet_resolution"] = sheet_resolution
+                result["available_sheets"] = workbook.sheetnames
+                if sheet_resolution.get("status") != "resolved":
+                    result["warning"] = (
+                        "requested sheet_name was not found or ambiguous"
+                    )
 
             for name in sheets_to_parse:
                 sheet = workbook[name]
                 sheet_data = self._parse_sheet(
-                    sheet, include_formatting, cell_range, include_header, metadata_only
+                    sheet,
+                    cell_range,
+                    include_frozen_rows,
+                    include_cell_styles,
+                    expand_axis_range,
                 )
                 result["sheets"].append(sheet_data)
 
@@ -163,70 +227,292 @@ class SharePointExcelParser:
             logger.error(f"Failed to parse Excel file: {str(e)}")
             raise
 
+    def _resolve_sheet_name(
+        self,
+        sheetnames: list[str],
+        requested: str,
+    ) -> tuple[str | None, list[str]]:
+        """
+        sheet_name を解決する
+        - 完全一致 → そのまま
+        - trim + casefold 一致が 1件 → そのシート名に解決
+        - それ以外 → None と候補（曖昧一致 or 類似名）を返す
+        """
+        if requested in sheetnames:
+            return (requested, [])
+
+        req_norm = requested.strip().casefold()
+
+        norm_map: dict[str, list[str]] = {}
+        for sn in sheetnames:
+            key = sn.strip().casefold()
+            norm_map.setdefault(key, []).append(sn)
+
+        # 正規化一致
+        if req_norm in norm_map:
+            candidates = norm_map[req_norm]
+            if len(candidates) == 1:
+                return (candidates[0], [])
+            # 同一正規化で複数（曖昧）
+            return (None, candidates)
+
+        # 類似名候補（表示用）
+        suggestions = difflib.get_close_matches(requested, sheetnames, n=3, cutoff=0.6)
+        return (None, suggestions)
+
+    def _scan_sheet(
+        self,
+        sheet,
+        sheet_name_for_result: str,
+        query: str,
+        matches: list[dict[str, Any]],
+    ) -> None:
+        """
+        シート内のセルを走査してqueryに一致するセルをmatchesに追加する
+        """
+        # 空シートを避ける意図
+        if sheet.dimensions:
+            # パフォーマンスのため_cellsを優先し、無い場合は公開APIにフォールバック
+            if hasattr(sheet, "_cells"):
+                # 実在セルのみを走査（高速）
+                for cell in sheet._cells.values():
+                    if cell.value is not None:
+                        cell_value_str = str(cell.value)
+                        if query in cell_value_str:
+                            matches.append(
+                                {
+                                    "sheet": sheet_name_for_result,
+                                    "coordinate": cell.coordinate,
+                                    "value": self._serialize_value(cell.value),
+                                }
+                            )
+            else:
+                # openpyxl公開APIを使用（互換性確保）
+                for row in sheet.iter_rows(values_only=False):
+                    for cell in row:
+                        if cell.value is not None:
+                            cell_value_str = str(cell.value)
+                            if query in cell_value_str:
+                                matches.append(
+                                    {
+                                        "sheet": sheet_name_for_result,
+                                        "coordinate": cell.coordinate,
+                                        "value": self._serialize_value(cell.value),
+                                    }
+                                )
+
+    def _calculate_header_range(self, cell_range: str, frozen_rows: int) -> str | None:
+        """
+        セル範囲に対してfrozen_rowsに基づくヘッダー範囲を計算
+
+        Args:
+            cell_range: セル範囲（例: "A5:D10"）
+                       拡張後のeffective_rangeを渡すこと（軸拡張済み）
+            frozen_rows: 固定行数
+
+        Returns:
+            ヘッダー範囲（例: "A1:D2"）またはNone
+
+        早期リターン条件:
+        - frozen_rows=0: ヘッダーなし
+        - start_row == 1: 既に1行目から開始（ヘッダー全体を含む）
+
+        部分的な重なり処理:
+        - frozen_rows=2, cell_range="A2:B6" の場合
+          → 不足分 "A1:B1" を返して、最終的に "A1:B6" になる
+        """
+        # frozen_rowsが0の場合はヘッダーなし
+        if frozen_rows == 0:
+            return None
+
+        # セル範囲を解析
+        # "A5:D10" -> start="A5", end="D10"
+        if ":" in cell_range:
+            start, end = cell_range.split(":")
+        else:
+            # 単一セル（例: "B5"）
+            start = end = cell_range
+
+        # 開始セルの座標を解析
+        start_col_letter, start_row = coordinate_from_string(start)
+        end_col_letter, _ = coordinate_from_string(end)
+
+        # 既に1行目から開始している場合は追加不要（ヘッダー全体を含む）
+        if start_row == 1:
+            return None
+
+        # 部分的な重なりがある場合は、不足している上部のヘッダー行を追加
+        if start_row <= frozen_rows:
+            # 1行目から(start_row-1)行目までを追加
+            header_range = f"{start_col_letter}1:{end_col_letter}{start_row - 1}"
+            return header_range
+
+        # ヘッダー範囲を計算: {start_col}1:{end_col}{frozen_rows}
+        header_range = f"{start_col_letter}1:{end_col_letter}{frozen_rows}"
+        return header_range
+
+    def _merge_ranges(self, range1: str, range2: str) -> str:
+        """
+        2つのセル範囲を結合して、最小の包含範囲を返す
+
+        Args:
+            range1: 範囲1（例: "A1:B2"）
+            range2: 範囲2（例: "A4:B6"）
+
+        Returns:
+            結合された範囲（例: "A1:B6"）
+        """
+        # 範囲1を解析
+        if ":" in range1:
+            start1, end1 = range1.split(":")
+        else:
+            start1 = end1 = range1
+
+        # 範囲2を解析
+        if ":" in range2:
+            start2, end2 = range2.split(":")
+        else:
+            start2 = end2 = range2
+
+        # 座標を取得
+        col1_start, row1_start = coordinate_from_string(start1)
+        col1_end, row1_end = coordinate_from_string(end1)
+        col2_start, row2_start = coordinate_from_string(start2)
+        col2_end, row2_end = coordinate_from_string(end2)
+
+        # 最小/最大の列を決定
+        col_start_idx = min(
+            column_index_from_string(col1_start), column_index_from_string(col2_start)
+        )
+        col_end_idx = max(
+            column_index_from_string(col1_end), column_index_from_string(col2_end)
+        )
+
+        # 最小/最大の行を決定
+        row_start = min(row1_start, row2_start)
+        row_end = max(row1_end, row2_end)
+
+        # 列インデックスを文字に変換
+        col_start = get_column_letter(col_start_idx)
+        col_end = get_column_letter(col_end_idx)
+
+        return f"{col_start}{row_start}:{col_end}{row_end}"
+
     def _parse_sheet(
         self,
         sheet,
-        include_formatting: bool,
         cell_range: str | None = None,
-        include_header: bool = True,
-        metadata_only: bool = False,
+        include_frozen_rows: bool = True,
+        include_cell_styles: bool = False,
+        expand_axis_range: bool = False,
     ) -> dict[str, Any]:
         """
         シートを解析してdict形式で返す
 
         Args:
             sheet: openpyxl Worksheet
-            include_formatting: 書式情報を含めるかどうか
             cell_range: セル範囲指定（例: "A1:D10"）
-            include_header: ヘッダー情報を分離して返すかどうか
-            metadata_only: メタデータのみを返すかどうか
+            include_frozen_rows: cell_range指定時に固定行（ヘッダー）を自動追加
+            include_cell_styles: セルのスタイル情報を含めるか
+            expand_axis_range: 単一列/行指定時に開始側を自動拡張
 
         Returns:
             シートデータのdict
         """
         sheet_data = {
             "name": sheet.title,
-            "dimensions": str(sheet.dimensions) if sheet.dimensions else None,
         }
+
+        # dimensionsがNoneでない場合のみ追加
+        if sheet.dimensions:
+            sheet_data["dimensions"] = str(sheet.dimensions)
 
         # freeze_panes情報の取得と検証
         frozen_rows = 0
         frozen_cols = 0
-        if include_header:
-            frozen_rows, frozen_cols = self._get_frozen_panes(sheet)
+        frozen_rows, frozen_cols = self._get_frozen_panes(sheet)
 
-            # frozen_rows検証（DoS対策）
-            if frozen_rows > config.excel_max_frozen_rows:
-                raise ValueError(
-                    f"ヘッダー行数({frozen_rows})が上限({config.excel_max_frozen_rows})を超えています。"
-                    f"悪意のあるファイルまたは処理には大きすぎるファイルです。"
-                )
+        # frozen_rows検証（DoS対策）
+        # frozen_rowsは補助的なメタ情報なので、上限超過時はリセットして処理を続行
+        if frozen_rows > config.excel_max_frozen_rows:
+            logger.warning(
+                "固定行数が上限(%d)を超えたため、freeze_panes情報を無視します。"
+                "ファイルの解析は続行されますが、ヘッダー自動追加機能は利用できません。"
+                " (frozen_rows=%d, sheet=%s)",
+                config.excel_max_frozen_rows,
+                frozen_rows,
+                sheet.title,
+            )
+            frozen_rows = 0
+            frozen_cols = 0  # freeze_panes全体を無視
 
-            if frozen_rows > 0 or frozen_cols > 0:
-                sheet_data["freeze_panes"] = self._format_freeze_panes(
-                    frozen_rows, frozen_cols
-                )
-            sheet_data["frozen_rows"] = frozen_rows
-            sheet_data["frozen_cols"] = frozen_cols
+        if frozen_rows > 0 or frozen_cols > 0:
+            sheet_data["freeze_panes"] = self._format_freeze_panes(
+                frozen_rows, frozen_cols
+            )
+        sheet_data["frozen_rows"] = frozen_rows
+        sheet_data["frozen_cols"] = frozen_cols
 
-        # マージセル情報をキャッシュ（パフォーマンス最適化）
-        merged_cell_map: dict[str, str] | None = None
-        if include_formatting and sheet.merged_cells.ranges:
-            merged_cell_map = {}
-            for merged_range in sheet.merged_cells.ranges:
-                for cell_coord in merged_range.cells:
-                    # cell_coord is (row, col) tuple
-                    col_letter = get_column_letter(cell_coord[1])
-                    coord_str = f"{col_letter}{cell_coord[0]}"
-                    merged_cell_map[coord_str] = str(merged_range)
+        # frozen_rows=0 かつ cell_range指定時、expand_axis_range=Falseの場合のみ警告
+        # expand_axis_range=Trueの場合は1行目/A列が含まれるため警告不要
+        if frozen_rows == 0 and cell_range and not expand_axis_range:
+            sheet_data["header_detection"] = {
+                "status": "no_frozen_rows",
+                "frozen_rows": 0,
+                "note": "This sheet has no frozen rows. Headers are not automatically included.",
+                "suggestions": [
+                    "If headers are needed, read 'A1:Z5' to check header structure",
+                    "Or retry with expand_axis_range=True to include row 1 (for columns) or column A (for rows)",
+                ],
+            }
 
-        # セル範囲の拡張とデータサイズ検証
-        all_rows = []
+        # セル範囲の正規化・拡張（cell_rangeがある場合）
+        # マージセル情報のキャッシュに使用するため、先に計算する
+        effective_range_for_merge = None
+        header_range = None  # ヘッダー範囲（再利用のため事前に初期化）
         if cell_range:
             sheet_data["requested_range"] = cell_range
+            effective_range = self._normalize_column_range(cell_range, sheet)
+            if expand_axis_range:
+                expanded_range = self._expand_axis_range(effective_range)
+                if expanded_range != effective_range:
+                    logger.info(
+                        "Expanded axis range '%s' -> '%s' (sheet=%s)",
+                        effective_range,
+                        expanded_range,
+                        sheet.title,
+                    )
+                    effective_range = expanded_range
 
+            if effective_range != cell_range:
+                logger.info(
+                    "Normalized column range '%s' -> '%s' (sheet=%s)",
+                    cell_range,
+                    effective_range,
+                    sheet.title,
+                )
+            sheet_data["effective_range"] = effective_range
+            effective_range_for_merge = effective_range
+
+            # ヘッダー自動追加の場合、マージセルキャッシュにもヘッダー範囲を含める
+            if include_frozen_rows and frozen_rows > 0:
+                header_range = self._calculate_header_range(
+                    effective_range, frozen_rows
+                )
+                if header_range:
+                    # ヘッダー範囲とデータ範囲を結合した範囲を計算
+                    effective_range_for_merge = self._merge_ranges(
+                        header_range, effective_range
+                    )
+
+        # データサイズ検証（DoS対策）
+        # マージセルキャッシュ構築前に検証することで、巨大な範囲によるメモリ枯渇を防ぐ
+        all_rows = []
+
+        if cell_range:
+            # effective_rangeは既に計算済み
             # データサイズ検証（DoS対策）
-            range_rows, range_cols = self._calculate_range_size(cell_range)
+            range_rows, range_cols = self._calculate_range_size(effective_range)
             if (
                 range_rows > config.excel_max_data_rows
                 or range_cols > config.excel_max_data_cols
@@ -238,41 +524,6 @@ class SharePointExcelParser:
                     f"例: cell_range='A1:Z1000'"
                 )
 
-            # セル範囲を拡張してヘッダーを含める
-            if include_header and frozen_rows > 0:
-                header_range, data_range = self._expand_range_with_headers(
-                    cell_range, frozen_rows
-                )
-
-                # ヘッダー範囲がある場合は取得
-                if header_range:
-                    header_data = sheet[header_range]
-                    header_rows_data = self._normalize_range_data(header_data)
-                    all_rows.extend(
-                        self._parse_rows(
-                            header_rows_data, include_formatting, merged_cell_map
-                        )
-                    )
-
-                # データ範囲を取得（metadata_onlyの場合はスキップ）
-                if not metadata_only:
-                    range_data = sheet[data_range]
-                    data_rows_data = self._normalize_range_data(range_data)
-                    all_rows.extend(
-                        self._parse_rows(
-                            data_rows_data, include_formatting, merged_cell_map
-                        )
-                    )
-            else:
-                # 通常のセル範囲取得（metadata_onlyの場合もヘッダーなしなので取得）
-                if not metadata_only:
-                    range_data = sheet[cell_range]
-                    rows_to_process = self._normalize_range_data(range_data)
-                    all_rows.extend(
-                        self._parse_rows(
-                            rows_to_process, include_formatting, merged_cell_map
-                        )
-                    )
         elif sheet.dimensions:
             # シート全体を取得
             # データサイズ検証（DoS対策）
@@ -288,47 +539,277 @@ class SharePointExcelParser:
                     f"例: cell_range='A1:Z1000'"
                 )
 
-            # metadata_onlyの場合はヘッダーのみ取得
-            rows_to_process = None
-            if metadata_only and include_header and frozen_rows > 0:
-                # ヘッダー行のみ取得
-                rows_to_process = tuple(sheet.iter_rows(max_row=frozen_rows))
-            elif not metadata_only:
-                # 全データを取得
-                rows_to_process = tuple(sheet.iter_rows())
+        # データサイズ検証後にマージセル情報をキャッシュ（パフォーマンス最適化 + DoS対策）
+        # 計算済みのeffective_range(effective_range_for_merge)を渡してキャッシュを構築し、
+        # 戻り値としてmerged_ranges(結合セル範囲の一覧)を取得することで重複計算を回避
+        merged_cell_map, merged_anchor_value_map, merged_ranges = (
+            self._build_merged_cell_cache(sheet, effective_range_for_merge)
+        )
+
+        # ここは「結合セルがある時だけ」返す
+        if merged_ranges:
+            sheet_data["merged_ranges"] = merged_ranges
+
+        # セルサイズのキャッシュを構築（パフォーマンス最適化）
+        col_widths: dict[str, float] | None = None
+        row_heights: dict[int, float] | None = None
+        if include_cell_styles:
+            col_widths = {}
+            row_heights = {}
+            for col_letter, dim in sheet.column_dimensions.items():
+                if dim.width:
+                    col_widths[col_letter] = dim.width
+            for row_num, dim in sheet.row_dimensions.items():
+                if dim.height:
+                    row_heights[row_num] = dim.height
+
+        # データ取得
+        if cell_range:
+            # ヘッダー自動追加（include_frozen_rows=Trueの場合）
+            # header_rangeは既に計算済みなので再利用
+            if header_range:
+                # ヘッダー範囲を取得
+                header_data = sheet[header_range]
+                header_rows = self._normalize_range_data(header_data)
+                all_rows.extend(
+                    self._parse_rows(
+                        header_rows,
+                        include_cell_styles,
+                        merged_cell_map,
+                        merged_anchor_value_map,
+                        col_widths,
+                        row_heights,
+                    )
+                )
+
+            # 通常のセル範囲取得（データ範囲）
+            range_data = sheet[effective_range]
+            rows_to_process = self._normalize_range_data(range_data)
+            all_rows.extend(
+                self._parse_rows(
+                    rows_to_process,
+                    include_cell_styles,
+                    merged_cell_map,
+                    merged_anchor_value_map,
+                    col_widths,
+                    row_heights,
+                )
+            )
+
+        elif sheet.dimensions:
+            # 全データを取得
+            rows_to_process = tuple(sheet.iter_rows())
 
             if rows_to_process:
                 all_rows.extend(
                     self._parse_rows(
-                        rows_to_process, include_formatting, merged_cell_map
+                        rows_to_process,
+                        include_cell_styles,
+                        merged_cell_map,
+                        merged_anchor_value_map,
+                        col_widths,
+                        row_heights,
                     )
                 )
 
-        # レスポンス形式の分岐
-        if include_header:
-            header_rows, data_rows = self._split_rows_by_header(all_rows, frozen_rows)
-            sheet_data["header_rows"] = header_rows
-            # metadata_onlyの場合はdata_rowsを空リストにする
-            sheet_data["data_rows"] = [] if metadata_only else data_rows
-        else:
-            # metadata_onlyの場合はrowsを空リストにする
-            sheet_data["rows"] = [] if metadata_only else all_rows
-
+        sheet_data["rows"] = all_rows
         return sheet_data
+
+    def _build_merged_cell_cache(
+        self,
+        sheet,
+        effective_cell_range: str | None,
+    ) -> tuple[
+        dict[str, str] | None,
+        dict[str, Any] | None,
+        list[dict[str, Any]],
+    ]:
+        """
+        マージセル情報をキャッシュして返す（パフォーマンス最適化）
+        - 「今回返す予定の範囲」を先に確定し、その範囲と交差する結合だけを部分展開する
+        - アンカー値は左上→無ければ結合範囲内の実在セルのみから最小(row,col)を選ぶ
+
+        Args:
+            sheet: openpyxl Worksheet
+            effective_cell_range: 正規化・拡張済みのセル範囲（例: "A1:D10"）
+                Noneの場合はsheet.dimensionsを使用
+
+        Returns:
+            (merged_cell_map, merged_anchor_value_map, merged_ranges)のタプル
+        """
+        merged_cell_map: dict[str, str] | None = None
+        merged_anchor_value_map: dict[str, Any] | None = None
+        merged_ranges: list[dict[str, Any]] = []
+
+        # 今回返す予定の範囲（結合情報の部分展開に使用）
+        # effective_cell_rangeがあればそれを使用、なければsheet.dimensionsを使用
+        planned_range_for_merge = effective_cell_range or (
+            str(sheet.dimensions) if sheet.dimensions else None
+        )
+
+        if not sheet.merged_cells.ranges or not planned_range_for_merge:
+            return (None, None, [])
+
+        # planned_range_for_merge から対象範囲の境界を計算
+        if ":" in planned_range_for_merge:
+            start_cell, end_cell = planned_range_for_merge.split(":", 1)
+        else:
+            start_cell = planned_range_for_merge
+            end_cell = planned_range_for_merge
+
+        start_cell = start_cell.replace("$", "")
+        end_cell = end_cell.replace("$", "")
+
+        start_col, start_row = coordinate_from_string(start_cell)
+        end_col, end_row = coordinate_from_string(end_cell)
+
+        start_col_idx = column_index_from_string(start_col)
+        end_col_idx = column_index_from_string(end_col)
+
+        target_min_row = min(start_row, end_row)
+        target_max_row = max(start_row, end_row)
+        target_min_col = min(start_col_idx, end_col_idx)
+        target_max_col = max(start_col_idx, end_col_idx)
+
+        merged_cell_map = {}
+        merged_anchor_value_map = {}
+
+        for merged_range in sheet.merged_cells.ranges:
+            merged_range_str = str(merged_range)
+            range_start = merged_range_str.split(":")[0]
+
+            merged_min_row = merged_range.min_row
+            merged_max_row = merged_range.max_row
+            merged_min_col = merged_range.min_col
+            merged_max_col = merged_range.max_col
+
+            # 返す予定の範囲と交差しない結合は無視（部分展開）
+            inter_min_row = max(merged_min_row, target_min_row)
+            inter_max_row = min(merged_max_row, target_max_row)
+            inter_min_col = max(merged_min_col, target_min_col)
+            inter_max_col = min(merged_max_col, target_max_col)
+            if inter_min_row > inter_max_row or inter_min_col > inter_max_col:
+                continue
+
+            # アンカー値を決定（左上が空なら結合範囲内の実在セルだけ走査）
+            anchor_coord = range_start
+            anchor_value = self._serialize_value(sheet[range_start].value)
+
+            if anchor_value is None:
+                best_rc: tuple[int, int] | None = None
+                best_val: Any | None = None
+
+                # 実在セル（sheet._cells）だけから、結合範囲内の最小(row,col)の値を選ぶ
+                # 互換性のため_cellsの有無をチェックしてフォールバック
+                if hasattr(sheet, "_cells"):
+                    # プライベート属性を使った高速版
+                    for (r, c), cell_obj in sheet._cells.items():
+                        if (
+                            merged_min_row <= r <= merged_max_row
+                            and merged_min_col <= c <= merged_max_col
+                        ):
+                            cell_value = self._serialize_value(cell_obj.value)
+                            if cell_value is not None:
+                                if best_rc is None or (r, c) < best_rc:
+                                    best_rc = (r, c)
+                                    best_val = cell_value
+                else:
+                    # 公開APIを使ったフォールバック版
+                    for row_idx in range(merged_min_row, merged_max_row + 1):
+                        for col_idx in range(merged_min_col, merged_max_col + 1):
+                            coord = f"{get_column_letter(col_idx)}{row_idx}"
+                            cell = sheet[coord]
+                            cell_value = self._serialize_value(cell.value)
+                            if cell_value is not None:
+                                if best_rc is None or (row_idx, col_idx) < best_rc:
+                                    best_rc = (row_idx, col_idx)
+                                    best_val = cell_value
+
+                if best_rc is not None:
+                    r, c = best_rc
+                    anchor_value = best_val
+                    anchor_coord = f"{get_column_letter(c)}{r}"
+
+            # セル座標 -> 結合範囲 のマップ（返す予定の範囲と交差する部分だけ展開）
+            for row_idx in range(inter_min_row, inter_max_row + 1):
+                for col_idx in range(inter_min_col, inter_max_col + 1):
+                    coord_str = f"{get_column_letter(col_idx)}{row_idx}"
+                    merged_cell_map[coord_str] = merged_range_str
+
+            # アンカー値を保存（結合セルの値埋め用）
+            merged_anchor_value_map[merged_range_str] = anchor_value
+
+            # 結合範囲そのものを返す（結合セルがある時だけ返す）
+            merged_ranges.append(
+                {
+                    "range": merged_range_str,
+                    "anchor": {"coordinate": anchor_coord, "value": anchor_value},
+                }
+            )
+
+        if not merged_ranges:
+            return (None, None, [])
+
+        return (merged_cell_map, merged_anchor_value_map, merged_ranges)
+
+    def _expand_axis_range(self, range_str: str) -> str:
+        """
+        指定されたセル範囲を「枠分離」ではなく「方向に拡張」する。
+        - 単一列 (例: Z100:Z200) -> Z1:Z200
+        - 単一行 (例: D200:Z200) -> A200:Z200
+        - それ以外（矩形など）はそのまま
+        """
+        if not range_str:
+            return range_str
+
+        raw = range_str.strip()
+        if ":" not in raw:
+            try:
+                col, row = coordinate_from_string(raw.replace("$", ""))
+                return f"{col}1:{col}{row}"
+            except Exception:
+                return range_str
+
+        start_cell, end_cell = raw.split(":", 1)
+        start_cell = start_cell.replace("$", "")
+        end_cell = end_cell.replace("$", "")
+
+        start_col, start_row = coordinate_from_string(start_cell)
+        end_col, end_row = coordinate_from_string(end_cell)
+
+        # 列指定（同一列）: 逆順はそのまま（既存のrange検証で弾く）
+        if start_col == end_col:
+            if end_row < start_row:
+                return range_str
+            return f"{start_col}1:{end_col}{end_row}"
+
+        # 行指定（同一行）: 逆順はそのまま（既存のrange検証で弾く）
+        if start_row == end_row:
+            if column_index_from_string(end_col) < column_index_from_string(start_col):
+                return range_str
+            return f"A{start_row}:{end_col}{end_row}"
+
+        return range_str
 
     def _parse_cell(
         self,
         cell,
-        include_formatting: bool,
+        include_cell_styles: bool = False,
         merged_cell_map: dict[str, str] | None = None,
+        merged_anchor_value_map: dict[str, Any] | None = None,
+        col_widths: dict[str, float] | None = None,
+        row_heights: dict[int, float] | None = None,
     ) -> dict[str, Any]:
         """
         セルを解析してdict形式で返す
 
         Args:
             cell: openpyxl Cell
-            include_formatting: 書式情報を含めるかどうか
+            include_cell_styles: セルのスタイル情報を含めるか（デフォルト: False）
             merged_cell_map: マージセル座標からマージ範囲へのマップ（パフォーマンス最適化用）
+            merged_anchor_value_map: マージ範囲 -> アンカー値 のマップ（結合セルの値埋め用）
+            col_widths: 列幅のキャッシュ（パフォーマンス最適化用）
+            row_heights: 行高さのキャッシュ（パフォーマンス最適化用）
 
         Returns:
             セルデータのdict
@@ -339,56 +820,68 @@ class SharePointExcelParser:
             "coordinate": cell.coordinate,
         }
 
-        # 書式情報（オプション）
-        if include_formatting:
-            cell_data["data_type"] = cell.data_type
+        # セル結合情報（構造理解に必要）
+        if merged_cell_map and cell.coordinate in merged_cell_map:
+            merged_range_str = merged_cell_map[cell.coordinate]
+            range_start = merged_range_str.split(":")[0]
+            cell_data["merged"] = {
+                "range": merged_range_str,
+                "is_top_left": cell.coordinate == range_start,
+            }
 
-            # 塗りつぶし色情報
-            if cell.fill:
-                cell_data["fill"] = {
+            # 結合セル内の空セルにも value を埋める（propagate）
+            if cell_data["value"] is None and merged_anchor_value_map:
+                anchor_value = merged_anchor_value_map.get(merged_range_str)
+                if anchor_value is not None:
+                    cell_data["value"] = anchor_value
+
+        # スタイル情報（include_cell_styles=Trueの場合のみ）
+        if include_cell_styles:
+            # 背景色情報
+            if cell.fill and cell.fill.patternType:
+                fill_info = {
                     "pattern_type": cell.fill.patternType,
-                    "fg_color": self._color_to_hex(cell.fill.fgColor),
-                    "bg_color": self._color_to_hex(cell.fill.bgColor),
                 }
+                fg_color = self._color_to_hex(cell.fill.fgColor)
+                if fg_color:
+                    fill_info["fg_color"] = fg_color
+                bg_color = self._color_to_hex(cell.fill.bgColor)
+                if bg_color:
+                    fill_info["bg_color"] = bg_color
+                cell_data["fill"] = fill_info
 
-            # セル結合情報（キャッシュを使用してO(1)で検索）
-            if merged_cell_map and cell.coordinate in merged_cell_map:
-                merged_range_str = merged_cell_map[cell.coordinate]
-                # 左上セルかどうかを判定（マージ範囲の最初の座標と比較）
-                range_start = merged_range_str.split(":")[0]
-                cell_data["merged"] = {
-                    "range": merged_range_str,
-                    "is_top_left": cell.coordinate == range_start,
-                }
-
-            # セルサイズ情報（MergedCellはcolumn_letterを持たない可能性がある）
+            # セルサイズ（列幅・行高さ）
+            # MergedCellの場合は属性が存在しないため、hasattrでチェック
             if hasattr(cell, "column_letter") and hasattr(cell, "row"):
                 if cell.column_letter and cell.row:
-                    sheet = cell.parent
-                    # 列幅
-                    if cell.column_letter in sheet.column_dimensions:
-                        col_dim = sheet.column_dimensions[cell.column_letter]
-                        cell_data["width"] = col_dim.width
-                    # 行高
-                    if cell.row in sheet.row_dimensions:
-                        row_dim = sheet.row_dimensions[cell.row]
-                        cell_data["height"] = row_dim.height
+                    # キャッシュから列幅を取得（パフォーマンス最適化）
+                    if col_widths and cell.column_letter in col_widths:
+                        cell_data["width"] = col_widths[cell.column_letter]
+                    # キャッシュから行高さを取得（パフォーマンス最適化）
+                    if row_heights and cell.row in row_heights:
+                        cell_data["height"] = row_heights[cell.row]
 
         return cell_data
 
     def _parse_rows(
         self,
         rows: tuple[tuple[Cell, ...], ...],
-        include_formatting: bool,
+        include_cell_styles: bool = False,
         merged_cell_map: dict[str, str] | None = None,
+        merged_anchor_value_map: dict[str, Any] | None = None,
+        col_widths: dict[str, float] | None = None,
+        row_heights: dict[int, float] | None = None,
     ) -> list[list[dict[str, Any]]]:
         """
         行データを解析してリスト形式で返す（コード重複削減用ヘルパー）
 
         Args:
             rows: 行データのタプル
-            include_formatting: 書式情報を含めるか
+            include_cell_styles: セルのスタイル情報を含めるか
             merged_cell_map: マージセル情報
+            merged_anchor_value_map: マージ範囲 -> アンカー値
+            col_widths: 列幅のキャッシュ（パフォーマンス最適化用）
+            row_heights: 行高さのキャッシュ（パフォーマンス最適化用）
 
         Returns:
             解析された行データのリスト
@@ -396,7 +889,14 @@ class SharePointExcelParser:
         parsed_rows = []
         for row in rows:
             row_data = [
-                self._parse_cell(cell, include_formatting, merged_cell_map)
+                self._parse_cell(
+                    cell,
+                    include_cell_styles,
+                    merged_cell_map,
+                    merged_anchor_value_map,
+                    col_widths,
+                    row_heights,
+                )
                 for cell in row
             ]
             parsed_rows.append(row_data)
@@ -525,75 +1025,6 @@ class SharePointExcelParser:
         col_letter = get_column_letter(frozen_cols + 1)
         return f"{col_letter}{frozen_rows + 1}"
 
-    def _expand_range_with_headers(
-        self, cell_range: str, frozen_rows: int
-    ) -> tuple[str | None, str]:
-        """
-        cell_rangeを固定範囲を含むように拡張
-
-        Args:
-            cell_range: セル範囲（例: "A5:D10"）
-            frozen_rows: 固定行数
-
-        Returns:
-            (header_range, data_range)のタプル
-            header_range: ヘッダー範囲（固定行がない場合はNone）
-            data_range: データ範囲（元のcell_range）
-        """
-        if frozen_rows == 0:
-            return (None, cell_range)
-
-        try:
-            # セル範囲を解析
-            if ":" in cell_range:
-                start_cell, end_cell = cell_range.split(":")
-            else:
-                # 単一セルの場合
-                start_cell = cell_range
-                end_cell = cell_range
-
-            start_col, start_row = coordinate_from_string(start_cell)
-            end_col, _ = coordinate_from_string(end_cell)
-
-            # 開始行が固定範囲内の場合は拡張不要
-            if start_row <= frozen_rows:
-                return (None, cell_range)
-
-            # ヘッダー範囲を計算（行1からfrozen_rowsまで、列は元の範囲と同じ）
-            header_range = f"{start_col}1:{end_col}{frozen_rows}"
-
-            return (header_range, cell_range)
-        except Exception as e:
-            logger.warning(
-                f"Failed to expand range '{cell_range}' with frozen_rows={frozen_rows}: {e}"
-            )
-            return (None, cell_range)
-
-    def _split_rows_by_header(
-        self, rows: list[list[dict[str, Any]]], frozen_rows: int
-    ) -> tuple[list[list[dict[str, Any]]], list[list[dict[str, Any]]]]:
-        """
-        取得した行データをヘッダー行とデータ行に分割
-
-        Args:
-            rows: 行データのリスト
-            frozen_rows: 固定行数
-
-        Returns:
-            (header_rows, data_rows)のタプル
-        """
-        if frozen_rows == 0:
-            return ([], rows)
-
-        if len(rows) <= frozen_rows:
-            # すべてヘッダー
-            return (rows, [])
-
-        header_rows = rows[:frozen_rows]
-        data_rows = rows[frozen_rows:]
-
-        return (header_rows, data_rows)
-
     def _normalize_range_data(self, range_data: Any) -> tuple[tuple[Cell, ...], ...]:
         """
         openpyxlの範囲データを統一的なタプルのタプル形式に変換
@@ -616,3 +1047,46 @@ class SharePointExcelParser:
         else:
             # 通常の範囲の場合
             return range_data
+
+    def _normalize_column_range(self, cell_range: str, sheet) -> str:
+        """
+        列のみ指定された範囲（例: "J:J" / "J"）を行番号付きに正規化する
+
+        Args:
+            cell_range: セル範囲
+            sheet: openpyxl Worksheet
+
+        Returns:
+            正規化されたセル範囲
+        """
+        raw = cell_range.strip()
+        if not raw:
+            return cell_range
+
+        # "J:J" のような列のみ指定
+        if ":" in raw:
+            start, end = raw.split(":", 1)
+            start_col = start.replace("$", "")
+            end_col = end.replace("$", "")
+            if start_col.isalpha() and end_col.isalpha():
+                start_col = start_col.upper()
+                end_col = end_col.upper()
+                # 逆順序の列を検出
+                if column_index_from_string(end_col) < column_index_from_string(
+                    start_col
+                ):
+                    raise ValueError(
+                        f"無効なセル範囲: '{cell_range}'。"
+                        f"範囲は正しい順序で指定してください（例: 'A1:Z100'）"
+                    )
+                max_row = sheet.max_row or 1
+                return f"{start_col}1:{end_col}{max_row}"
+
+        # "J" のような単一列指定
+        col_only = raw.replace("$", "")
+        if col_only.isalpha():
+            col_only = col_only.upper()
+            max_row = sheet.max_row or 1
+            return f"{col_only}1:{col_only}{max_row}"
+
+        return cell_range
