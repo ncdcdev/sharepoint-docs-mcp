@@ -1501,3 +1501,89 @@ class TestSharePointExcelParser:
         assert "fill" not in cell
         assert "width" not in cell
         assert "height" not in cell
+
+    def test_omit_fixed_value_fields(self):
+        """固定値フィールドが省略されること"""
+        excel_bytes = self._create_test_excel()
+        self.mock_download_client.download_file.return_value = excel_bytes
+
+        parser = SharePointExcelParser(self.mock_download_client)
+        result_json = parser.parse_to_json("/test/file.xlsx")
+
+        result = json.loads(result_json)
+
+        # トップレベルの固定値フィールドは省略
+        assert "response_kind" not in result
+        assert "data_included" not in result
+
+        # シートレベルの固定値フィールドは省略
+        sheet = result["sheets"][0]
+        assert "purpose" not in sheet
+        assert "data_included" not in sheet
+
+    def test_omit_null_fields(self):
+        """nullフィールドが省略されること"""
+        excel_bytes = self._create_test_excel()
+        self.mock_download_client.download_file.return_value = excel_bytes
+
+        parser = SharePointExcelParser(self.mock_download_client)
+        # sheet_name/cell_rangeを指定しない
+        result_json = parser.parse_to_json("/test/file.xlsx")
+
+        result = json.loads(result_json)
+
+        # nullフィールドは省略
+        assert "requested_sheet" not in result
+        assert "requested_range" not in result
+
+    def test_include_non_null_fields(self):
+        """null以外のフィールドが含まれること"""
+        excel_bytes = self._create_multi_sheet_excel()
+        self.mock_download_client.download_file.return_value = excel_bytes
+
+        parser = SharePointExcelParser(self.mock_download_client)
+        # sheet_name/cell_rangeを指定
+        result_json = parser.parse_to_json(
+            "/test/file.xlsx", sheet_name="Sheet1", cell_range="A1:B2"
+        )
+
+        result = json.loads(result_json)
+
+        # 値があるフィールドは含まれる
+        assert result["requested_sheet"] == "Sheet1"
+        assert result["requested_range"] == "A1:B2"
+
+    def test_omit_null_dimensions(self):
+        """dimensions=nullが省略されること"""
+        # 通常のExcelを作成
+        excel_bytes = self._create_test_excel()
+        self.mock_download_client.download_file.return_value = excel_bytes
+
+        parser = SharePointExcelParser(self.mock_download_client)
+
+        # モックを使用してsheet.dimensionsをNoneに設定
+        with patch("src.sharepoint_excel.load_workbook") as mock_load:
+            mock_wb = Mock()
+            mock_sheet = Mock()
+            mock_sheet.title = "EmptySheet"
+            mock_sheet.dimensions = None  # dimensionsをNoneに設定
+            mock_sheet.freeze_panes = None  # freeze_panesもNone
+            # merged_cellsはranges属性を持つオブジェクト
+            mock_merged_cells = Mock()
+            mock_merged_cells.ranges = []
+            mock_sheet.merged_cells = mock_merged_cells
+            mock_sheet.iter_rows = Mock(return_value=[])  # 行なし
+            mock_sheet.max_row = 0
+            mock_sheet.max_column = 0
+            mock_wb.sheetnames = ["EmptySheet"]
+            mock_wb.__getitem__ = Mock(return_value=mock_sheet)
+            mock_wb.close = Mock()
+            mock_load.return_value = mock_wb
+
+            result_json = parser.parse_to_json("/test/empty.xlsx")
+
+        result = json.loads(result_json)
+        sheet = result["sheets"][0]
+
+        # dimensionsがNoneの場合は省略
+        assert "dimensions" not in sheet

@@ -188,12 +188,14 @@ class SharePointExcelParser:
             # シートを解析
             result = {
                 "file_path": file_path,
-                "response_kind": "data",
-                "data_included": True,
-                "requested_sheet": sheet_name,
-                "requested_range": cell_range,
                 "sheets": [],
             }
+
+            # nullでない場合のみ追加
+            if sheet_name is not None:
+                result["requested_sheet"] = sheet_name
+            if cell_range is not None:
+                result["requested_range"] = cell_range
 
             if sheet_resolution:
                 result["sheet_resolution"] = sheet_resolution
@@ -412,10 +414,11 @@ class SharePointExcelParser:
         """
         sheet_data = {
             "name": sheet.title,
-            "dimensions": str(sheet.dimensions) if sheet.dimensions else None,
         }
-        sheet_data["purpose"] = "data"
-        sheet_data["data_included"] = True
+
+        # dimensionsがNoneでない場合のみ追加
+        if sheet.dimensions:
+            sheet_data["dimensions"] = str(sheet.dimensions)
 
         # freeze_panes情報の取得と検証
         frozen_rows = 0
