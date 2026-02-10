@@ -35,8 +35,10 @@ Two authentication methods are supported:
   - Read or search Excel files in SharePoint
   - Search mode: find cells containing specific text with `query` parameter
   - Read mode: get data from specific sheets/ranges with `sheet` and `cell_range` parameters
+  - **Automatic header inclusion**: when `cell_range` is specified, frozen rows (headers) are automatically included by default
+    - Set `include_frozen_rows=False` to get only the specified range
   - Response includes cell data in `rows` (value and coordinate) and structural information when available
-  - Structural info: sheet name, dimensions, freeze_panes (when present), merged_ranges (when merged cells exist)
+  - Structural info: sheet name, dimensions, frozen_rows, frozen_cols, freeze_panes (when present), merged_ranges (when merged cells exist)
   - No Excel Services dependency - uses direct file download + openpyxl parsing
 
 ### OneDrive Support

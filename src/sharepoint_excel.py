@@ -292,10 +292,11 @@ class SharePointExcelParser:
         self, cell_range: str, frozen_rows: int
     ) -> str | None:
         """
-        cell_rangeに対してfrozen_rowsに基づくヘッダー範囲を計算
+        セル範囲に対してfrozen_rowsに基づくヘッダー範囲を計算
 
         Args:
             cell_range: セル範囲（例: "A5:D10"）
+                       拡張後のeffective_rangeを渡すこと（軸拡張済み）
             frozen_rows: 固定行数
 
         Returns:
