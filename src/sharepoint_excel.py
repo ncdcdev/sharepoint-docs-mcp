@@ -461,18 +461,8 @@ class SharePointExcelParser:
                         header_range, effective_range
                     )
 
-        # マージセル情報をキャッシュ（パフォーマンス最適化）
-        # 計算済みのeffective_range(effective_range_for_merge)を渡してキャッシュを構築し、
-        # 戻り値としてmerged_ranges(結合セル範囲の一覧)を取得することで重複計算を回避
-        merged_cell_map, merged_anchor_value_map, merged_ranges = (
-            self._build_merged_cell_cache(sheet, effective_range_for_merge)
-        )
-
-        # ここは「結合セルがある時だけ」返す
-        if merged_ranges:
-            sheet_data["merged_ranges"] = merged_ranges
-
-        # セル範囲のデータサイズ検証とデータ取得
+        # データサイズ検証（DoS対策）
+        # マージセルキャッシュ構築前に検証することで、巨大な範囲によるメモリ枯渇を防ぐ
         all_rows = []
 
         if cell_range:
@@ -490,32 +480,6 @@ class SharePointExcelParser:
                     f"例: cell_range='A1:Z1000'"
                 )
 
-            else:
-                # ヘッダー自動追加（include_frozen_rows=Trueの場合）
-                # header_rangeは既に計算済み（L456付近）なので再利用
-                if header_range:
-                    # ヘッダー範囲を取得
-                    header_data = sheet[header_range]
-                    header_rows = self._normalize_range_data(header_data)
-                    all_rows.extend(
-                        self._parse_rows(
-                            header_rows,
-                            merged_cell_map,
-                            merged_anchor_value_map,
-                        )
-                    )
-
-                # 通常のセル範囲取得（データ範囲）
-                range_data = sheet[effective_range]
-                rows_to_process = self._normalize_range_data(range_data)
-                all_rows.extend(
-                    self._parse_rows(
-                        rows_to_process,
-                        merged_cell_map,
-                        merged_anchor_value_map,
-                    )
-                )
-
         elif sheet.dimensions:
             # シート全体を取得
             # データサイズ検証（DoS対策）
@@ -531,6 +495,45 @@ class SharePointExcelParser:
                     f"例: cell_range='A1:Z1000'"
                 )
 
+        # データサイズ検証後にマージセル情報をキャッシュ（パフォーマンス最適化 + DoS対策）
+        # 計算済みのeffective_range(effective_range_for_merge)を渡してキャッシュを構築し、
+        # 戻り値としてmerged_ranges(結合セル範囲の一覧)を取得することで重複計算を回避
+        merged_cell_map, merged_anchor_value_map, merged_ranges = (
+            self._build_merged_cell_cache(sheet, effective_range_for_merge)
+        )
+
+        # ここは「結合セルがある時だけ」返す
+        if merged_ranges:
+            sheet_data["merged_ranges"] = merged_ranges
+
+        # データ取得
+        if cell_range:
+            # ヘッダー自動追加（include_frozen_rows=Trueの場合）
+            # header_rangeは既に計算済みなので再利用
+            if header_range:
+                # ヘッダー範囲を取得
+                header_data = sheet[header_range]
+                header_rows = self._normalize_range_data(header_data)
+                all_rows.extend(
+                    self._parse_rows(
+                        header_rows,
+                        merged_cell_map,
+                        merged_anchor_value_map,
+                    )
+                )
+
+            # 通常のセル範囲取得（データ範囲）
+            range_data = sheet[effective_range]
+            rows_to_process = self._normalize_range_data(range_data)
+            all_rows.extend(
+                self._parse_rows(
+                    rows_to_process,
+                    merged_cell_map,
+                    merged_anchor_value_map,
+                )
+            )
+
+        elif sheet.dimensions:
             # 全データを取得
             rows_to_process = tuple(sheet.iter_rows())
 
