@@ -8,7 +8,7 @@ import pytest
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font, PatternFill
 from openpyxl.utils.exceptions import InvalidFileException
-from openpyxl.worksheet.views import Pane
+from openpyxl.worksheet.views import Pane, SheetView
 
 from src.sharepoint_excel import SharePointExcelParser
 
@@ -1311,8 +1311,6 @@ class TestSharePointExcelParser:
         ws["A2"] = "Data"
 
         # 異常に大きなfrozen_rowsを設定（openpyxl内部でpane.ySplitに直接設定）
-        from openpyxl.worksheet.views import Pane, SheetView
-
         pane = Pane()
         pane.ySplit = 200  # デフォルト上限(100)を超える値
         pane.xSplit = 0
@@ -1368,8 +1366,6 @@ class TestSharePointExcelParser:
         ws["A1"] = "Header"
 
         # frozen_rows=120を設定（カスタム上限150以内）
-        from openpyxl.worksheet.views import Pane, SheetView
-
         pane = Pane()
         pane.ySplit = 120
         pane.xSplit = 0
