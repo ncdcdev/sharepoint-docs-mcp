@@ -34,7 +34,7 @@ Two authentication methods are supported:
 - **sharepoint_excel**
   - Read or search Excel files in SharePoint
   - **Search mode**: find cells containing specific text with `query` parameter
-    - **Multiple keyword OR search**: use comma-separated keywords (e.g., `"budget,forecast"`)
+    - **Multiple keyword AND search**: use space-separated keywords (e.g., `"budget forecast"` finds cells containing both)
     - **Row context**: set `include_surrounding_cells=True` to get entire row data (reduces API calls from N+1 to 1)
   - **Read mode**: get data from specific sheets/ranges with `sheet` and `cell_range` parameters
   - **Automatic header inclusion**: when `cell_range` is specified, frozen rows (headers) are automatically included by default

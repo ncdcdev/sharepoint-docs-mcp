@@ -205,7 +205,7 @@ The `sharepoint_excel` tool allows you to read and search Excel files in SharePo
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `file_path` | str | Required | Excel file path |
-| `query` | str \| None | None | Search keyword (comma-separated for OR search) |
+| `query` | str \| None | None | Search keyword (space-separated for AND search) |
 | `sheet` | str \| None | None | Sheet name (get specific sheet only) |
 | `cell_range` | str \| None | None | Cell range (e.g., "A1:D10") |
 | `include_surrounding_cells` | bool | False | Get entire row data for each match in search mode |
@@ -278,15 +278,15 @@ result = sharepoint_excel(
 
 ### Advanced Search Features
 
-#### Multiple Keyword Search (OR Logic)
+#### Multiple Keyword Search (AND Logic)
 
-Search for cells containing any of the specified keywords (comma-separated):
+Search for cells containing all of the specified keywords (space-separated):
 
 ```python
-# Find cells with "budget" OR "forecast"
+# Find cells containing both "budget" AND "report"
 result = sharepoint_excel(
     file_path="/sites/finance/Shared Documents/report.xlsx",
-    query="budget,forecast"
+    query="budget report"
 )
 ```
 
@@ -295,17 +295,18 @@ result = sharepoint_excel(
 {
   "file_path": "/sites/finance/Shared Documents/report.xlsx",
   "mode": "search",
-  "query": "budget,forecast",
-  "match_count": 5,
+  "query": "budget report",
+  "match_count": 2,
   "matches": [
-    {"sheet": "Sheet1", "coordinate": "A1", "value": "Budget Report"},
-    {"sheet": "Sheet1", "coordinate": "B5", "value": "Monthly Budget"},
-    {"sheet": "Sheet1", "coordinate": "C10", "value": "Sales Forecast"},
-    {"sheet": "Summary", "coordinate": "C3", "value": "Budget Total"},
-    {"sheet": "Summary", "coordinate": "D8", "value": "Forecast Q2"}
+    {"sheet": "Sheet1", "coordinate": "A1", "value": "Budget Report 2024"},
+    {"sheet": "Summary", "coordinate": "C3", "value": "Annual Budget Report"}
   ]
 }
 ```
+
+**Use cases:**
+- Narrow down search results: `"簾舞 連絡先"` finds cells with both keywords
+- Best practice: Start with single keyword, add more if results are too broad
 
 #### Search with Row Context
 
@@ -350,10 +351,10 @@ result = sharepoint_excel(
 #### Combining Multiple Keywords with Row Context
 
 ```python
-# Search with multiple keywords and get row context
+# Search with multiple keywords (AND) and get row context
 result = sharepoint_excel(
     file_path="/sites/finance/Shared Documents/report.xlsx",
-    query="revenue,income,profit",
+    query="revenue forecast",
     include_surrounding_cells=True
 )
 ```

@@ -205,7 +205,7 @@ results = sharepoint_docs_search(
 | パラメータ | 型 | デフォルト | 説明 |
 |-----------|------|---------|-------------|
 | `file_path` | str | 必須 | Excelファイルのパス |
-| `query` | str \| None | None | 検索キーワード（カンマ区切りでOR検索） |
+| `query` | str \| None | None | 検索キーワード（スペース区切りでAND検索） |
 | `sheet` | str \| None | None | シート名（特定シートのみ取得） |
 | `cell_range` | str \| None | None | セル範囲（例: "A1:D10"） |
 | `include_surrounding_cells` | bool | False | 検索モード時、マッチした行の全セルを取得 |
@@ -278,15 +278,15 @@ result = sharepoint_excel(
 
 ### 高度な検索機能
 
-#### 複数キーワード検索（OR論理）
+#### 複数キーワード検索（AND論理）
 
-カンマ区切りで複数のキーワードを指定して、いずれかに一致するセルを検索：
+スペース区切りで複数のキーワードを指定して、全てに一致するセルを検索：
 
 ```python
-# "予算" OR "見積" を含むセルを検索
+# "予算" AND "報告" の両方を含むセルを検索
 result = sharepoint_excel(
     file_path="/sites/finance/Shared Documents/report.xlsx",
-    query="予算,見積"
+    query="予算 報告"
 )
 ```
 
@@ -295,17 +295,18 @@ result = sharepoint_excel(
 {
   "file_path": "/sites/finance/Shared Documents/report.xlsx",
   "mode": "search",
-  "query": "予算,見積",
-  "match_count": 5,
+  "query": "予算 報告",
+  "match_count": 2,
   "matches": [
-    {"sheet": "Sheet1", "coordinate": "A1", "value": "予算報告"},
-    {"sheet": "Sheet1", "coordinate": "B5", "value": "月次予算"},
-    {"sheet": "Sheet1", "coordinate": "C10", "value": "売上見積"},
-    {"sheet": "Summary", "coordinate": "C3", "value": "予算合計"},
-    {"sheet": "Summary", "coordinate": "D8", "value": "見積Q2"}
+    {"sheet": "Sheet1", "coordinate": "A1", "value": "2024年度 予算 報告書"},
+    {"sheet": "Summary", "coordinate": "C3", "value": "年次予算報告"}
   ]
 }
 ```
+
+**使用例:**
+- 検索結果を絞り込む: `"簾舞 連絡先"`で両方のキーワードを含むセルを検索
+- ベストプラクティス: まず単一キーワードで検索し、結果が多すぎる場合はキーワードを追加
 
 #### 行コンテキスト付き検索
 
@@ -350,10 +351,10 @@ result = sharepoint_excel(
 #### 複数キーワードと行コンテキストの組み合わせ
 
 ```python
-# 複数キーワード検索 + 行コンテキスト取得
+# 複数キーワード検索（AND） + 行コンテキスト取得
 result = sharepoint_excel(
     file_path="/sites/finance/Shared Documents/report.xlsx",
-    query="売上,収益,利益",
+    query="売上 予測",
     include_surrounding_cells=True
 )
 ```
