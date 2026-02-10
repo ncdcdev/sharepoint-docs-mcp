@@ -329,19 +329,9 @@ class SharePointExcelParser:
         sheet_data["frozen_rows"] = frozen_rows
         sheet_data["frozen_cols"] = frozen_cols
 
-        # マージセル情報をキャッシュ（パフォーマンス最適化）
-        # 結合セルの場合はmerged_rangesを渡す
-        merged_cell_map, merged_anchor_value_map, merged_ranges = (
-            self._build_merged_cell_cache(sheet, cell_range)
-        )
-
-        # ここは「結合セルがある時だけ」返す
-        if merged_ranges:
-            sheet_data["merged_ranges"] = merged_ranges
-
-        # セル範囲の拡張とデータサイズ検証
-        all_rows = []
-
+        # セル範囲の正規化・拡張（cell_rangeがある場合）
+        # マージセル情報のキャッシュに使用するため、先に計算する
+        effective_range_for_merge = None
         if cell_range:
             sheet_data["requested_range"] = cell_range
             effective_range = self._normalize_column_range(cell_range, sheet)
@@ -363,7 +353,24 @@ class SharePointExcelParser:
                     sheet.title,
                 )
             sheet_data["effective_range"] = effective_range
+            effective_range_for_merge = effective_range
 
+        # マージセル情報をキャッシュ（パフォーマンス最適化）
+        # 計算済みのeffective_range(effective_range_for_merge)を渡してキャッシュを構築し、
+        # 戻り値としてmerged_ranges(結合セル範囲の一覧)を取得することで重複計算を回避
+        merged_cell_map, merged_anchor_value_map, merged_ranges = (
+            self._build_merged_cell_cache(sheet, effective_range_for_merge)
+        )
+
+        # ここは「結合セルがある時だけ」返す
+        if merged_ranges:
+            sheet_data["merged_ranges"] = merged_ranges
+
+        # セル範囲のデータサイズ検証とデータ取得
+        all_rows = []
+
+        if cell_range:
+            # effective_rangeは既に計算済み
             # データサイズ検証（DoS対策）
             range_rows, range_cols = self._calculate_range_size(effective_range)
             if (
@@ -422,7 +429,7 @@ class SharePointExcelParser:
     def _build_merged_cell_cache(
         self,
         sheet,
-        cell_range: str | None,
+        effective_cell_range: str | None,
     ) -> tuple[
         dict[str, str] | None,
         dict[str, Any] | None,
@@ -432,18 +439,24 @@ class SharePointExcelParser:
         マージセル情報をキャッシュして返す（パフォーマンス最適化）
         - 「今回返す予定の範囲」を先に確定し、その範囲と交差する結合だけを部分展開する
         - アンカー値は左上→無ければ結合範囲内の実在セルのみから最小(row,col)を選ぶ
+
+        Args:
+            sheet: openpyxl Worksheet
+            effective_cell_range: 正規化・拡張済みのセル範囲（例: "A1:D10"）
+                Noneの場合はsheet.dimensionsを使用
+
+        Returns:
+            (merged_cell_map, merged_anchor_value_map, merged_ranges)のタプル
         """
         merged_cell_map: dict[str, str] | None = None
         merged_anchor_value_map: dict[str, Any] | None = None
         merged_ranges: list[dict[str, Any]] = []
 
         # 今回返す予定の範囲（結合情報の部分展開に使用）
-        planned_range_for_merge: str | None = None
-        if cell_range:
-            planned_range_for_merge = self._normalize_column_range(cell_range, sheet)
-            planned_range_for_merge = self._expand_axis_range(planned_range_for_merge)
-        elif sheet.dimensions:
-            planned_range_for_merge = str(sheet.dimensions)
+        # effective_cell_rangeがあればそれを使用、なければsheet.dimensionsを使用
+        planned_range_for_merge = effective_cell_range or (
+            str(sheet.dimensions) if sheet.dimensions else None
+        )
 
         if not sheet.merged_cells.ranges or not planned_range_for_merge:
             return (None, None, [])
