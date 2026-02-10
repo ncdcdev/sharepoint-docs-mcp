@@ -1,6 +1,6 @@
 [project]
 name = "sharepoint-docs-mcp"
-version = "0.4.0"
+version = "0.5.0"
 description = "SharePoint Document Search MCP Server"
 readme = "README.md"
 requires-python = ">=3.12"
