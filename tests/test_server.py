@@ -222,7 +222,6 @@ class TestSharePointExcel:
                 # デフォルトでは全パラメータがデフォルト値で呼ばれる
                 mock_excel_parser.parse_to_json.assert_called_once_with(
                     "/sites/test/Shared Documents/test.xlsx",
-                    include_formatting=False,
                     sheet_name=None,
                     cell_range=None,
                 )
@@ -262,7 +261,6 @@ class TestSharePointExcel:
 
                 mock_excel_parser.parse_to_json.assert_called_once_with(
                     "/sites/test/Shared Documents/test.xlsx",
-                    include_formatting=False,
                     sheet_name="Sheet2",
                     cell_range=None,
                 )
@@ -284,30 +282,8 @@ class TestSharePointExcel:
 
                 mock_excel_parser.parse_to_json.assert_called_once_with(
                     "/sites/test/Shared Documents/test.xlsx",
-                    include_formatting=False,
                     sheet_name="Sheet1",
                     cell_range="A1:D10",
-                )
-
-    @pytest.mark.unit
-    def test_excel_with_formatting(
-        self, mock_config, mock_sharepoint_client, mock_excel_parser
-    ):
-        """書式情報ありのテスト"""
-        with patch(
-            "src.server._get_sharepoint_client", return_value=mock_sharepoint_client
-        ):
-            with patch("src.server.config", mock_config):
-                sharepoint_excel(
-                    file_path="/sites/test/Shared Documents/test.xlsx",
-                    include_formatting=True,
-                )
-
-                mock_excel_parser.parse_to_json.assert_called_once_with(
-                    "/sites/test/Shared Documents/test.xlsx",
-                    include_formatting=True,
-                    sheet_name=None,
-                    cell_range=None,
                 )
 
     @pytest.mark.unit

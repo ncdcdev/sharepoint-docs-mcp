@@ -208,7 +208,6 @@ results = sharepoint_docs_search(
 | `query` | str \| None | None | 検索キーワード（検索モードを有効化） |
 | `sheet` | str \| None | None | シート名（特定シートのみ取得） |
 | `cell_range` | str \| None | None | セル範囲（例: "A1:D10"） |
-| `include_formatting` | bool | False | 指定しても返却内容は変わらない（結合セル情報は常に含まれる） |
 
 ### 基本的なワークフロー
 
@@ -276,19 +275,6 @@ result = sharepoint_excel(
 )
 ```
 
-#### 5. include_formatting の指定（現状は返却内容は変わらない）
-```python
-# include_formatting を指定（現状は返却内容は変わらない）
-result = sharepoint_excel(
-    file_path="/sites/finance/Shared Documents/report.xlsx",
-    sheet="Sheet1",
-    include_formatting=True
-)
-```
-
-※ 現状 `include_formatting=true` を指定しても、色/幅/高さ/型などの書式情報は返しません。  
-結合セル情報（`merged` / `merged_ranges`）は、シート内に結合セルがある場合に含まれます。
-
 ### JSON出力形式
 
 #### 読み取りモード（デフォルト）
@@ -336,10 +322,9 @@ result = sharepoint_excel(
 }
 ```
 
-#### 書式情報（include_formatting の挙動）
+#### 結合セル
 
-現在の実装では `include_formatting=true` を指定しても返却内容は変わりません。  
-結合セル情報（`merged` / `merged_ranges`）は `include_formatting` の有無に関係なく返ります。
+結合セルが存在する場合、レスポンスには結合セル情報が含まれます:
 
 ```json
 {
@@ -380,11 +365,9 @@ result = sharepoint_excel(
 - **value**: セル値（文字列、数値、日付、数式など）
 - **coordinate**: セル位置（例: "A1"、"B2"）
 
-**結合セルがある場合（include_formattingに関係なく返る）**
+**結合セルがある場合**
 - **merged**: 結合セル情報（範囲、位置）
 - **merged_ranges**: シート内の結合範囲一覧（範囲とアンカー情報）
-
-※ `include_formatting` は指定しても返却内容は変わりません（追加の書式情報は返さない）。
 
 ### 追加で返るメタ情報
 
@@ -428,7 +411,7 @@ data = sharepoint_excel(file_path=file_path, sheet="Sheet1", cell_range="A1:D20"
 
 **結合セルの確認**
 ```python
-# Excelデータを取得（include_formattingの有無に関係なく結合情報が含まれる）
+# Excelデータを取得（結合セルがある場合は結合情報が含まれる）
 json_data = sharepoint_excel(file_path=file_path)
 data = json.loads(json_data)
 

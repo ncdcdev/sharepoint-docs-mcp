@@ -208,7 +208,6 @@ The `sharepoint_excel` tool allows you to read and search Excel files in SharePo
 | `query` | str \| None | None | Search keyword (enables search mode) |
 | `sheet` | str \| None | None | Sheet name (get specific sheet only) |
 | `cell_range` | str \| None | None | Cell range (e.g., "A1:D10") |
-| `include_formatting` | bool | False | Does not change the output currently (merged info is always included when present) |
 
 ### Basic Workflow
 
@@ -276,19 +275,6 @@ result = sharepoint_excel(
 )
 ```
 
-#### 5. include_formatting flag (no output changes yet)
-```python
-# include_formatting flag (currently does not change output)
-result = sharepoint_excel(
-    file_path="/sites/finance/Shared Documents/report.xlsx",
-    sheet="Sheet1",
-    include_formatting=True
-)
-```
-
-Note: `include_formatting=true` currently does not return colors/width/height/types.  
-Merged cell info (`merged` / `merged_ranges`) is always included when present.
-
 ### JSON Output Format
 
 #### Read Mode (Default)
@@ -336,10 +322,9 @@ Merged cell info (`merged` / `merged_ranges`) is always included when present.
 }
 ```
 
-#### Formatting (include_formatting behavior)
+#### Merged Cells
 
-In the current implementation, `include_formatting=true` does not change the output.  
-Merged cell info (`merged` / `merged_ranges`) is included regardless of `include_formatting`.
+When merged cells exist, the response includes merged cell information:
 
 ```json
 {
@@ -380,11 +365,9 @@ Merged cell info (`merged` / `merged_ranges`) is included regardless of `include
 - **value**: Cell value (string, number, date, formula, etc.)
 - **coordinate**: Cell position (e.g., "A1", "B2")
 
-**When merged cells exist (included regardless of include_formatting):**
+**When merged cells exist:**
 - **merged**: Merged cell information (range, position)
 - **merged_ranges**: Merged ranges list per sheet (range + anchor info)
-
-Note: `include_formatting` currently does not add formatting fields.
 
 ### Additional Metadata
 

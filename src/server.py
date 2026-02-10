@@ -453,7 +453,6 @@ def sharepoint_excel(
     query: str | None = None,
     sheet: str | None = None,
     cell_range: str | None = None,
-    include_formatting: bool = False,
     ctx: Context | None = None,
 ) -> str:
     """
@@ -464,10 +463,6 @@ def sharepoint_excel(
         query: 検索キーワード（指定すると検索モード）
         sheet: シート名（特定シートのみ取得）
         cell_range: セル範囲（例: "A1:D10"）
-        include_formatting: 書式情報を含めるか
-            現状は指定しても返却内容は変わらない
-            ※結合セル情報（merged / merged_ranges）は常に含まれる
-            ※追加の書式情報（data_type / fill / width / height）は返さない
         ctx: FastMCP context (injected automatically)
 
     Returns:
@@ -475,8 +470,7 @@ def sharepoint_excel(
     """
     logging.info(
         f"SharePoint Excel operation: {file_path} "
-        f"(query={query}, sheet={sheet}, cell_range={cell_range}, "
-        f"include_formatting={include_formatting})"
+        f"(query={query}, sheet={sheet}, cell_range={cell_range})"
     )
 
     try:
@@ -493,7 +487,6 @@ def sharepoint_excel(
         # 読み取りモード
         return parser.parse_to_json(
             file_path,
-            include_formatting=include_formatting,
             sheet_name=sheet,
             cell_range=cell_range,
         )
@@ -532,14 +525,13 @@ def register_tools():
     if config.is_tool_enabled("sharepoint_excel"):
         mcp.tool(
             description=(
-                "Read or search Excel file in SharePoint. "
-                "Use 'query' parameter to search for specific content and find cell locations. "
-                "Use 'sheet' and 'cell_range' parameters to read specific sections. "
-                "The response includes structure info (sheet name, dimensions, and, when present, freeze_panes and merged_ranges) and data in 'rows'. "
-                "Merged cell info is included when present. "
-                "'include_formatting' currently does not change the output. "
-                "Workflow: 1) Search with query to find relevant cells, "
-                "2) Read specific cell_range based on search results."
+                "Read or search Excel files in SharePoint. "
+                "Search mode: use 'query' parameter to find cells containing specific text (returns cell locations). "
+                "Read mode: use 'sheet' and 'cell_range' parameters to retrieve data from specific sections. "
+                "Response includes cell data in 'rows' (value and coordinate) and structural information "
+                "(sheet name, dimensions, freeze_panes when present, merged_ranges when merged cells exist). "
+                "Recommended workflow: 1) Search with query to locate relevant content, "
+                "2) Read specific range based on search results."
             )
         )(sharepoint_excel)
         logging.info("Registered tool: sharepoint_excel")

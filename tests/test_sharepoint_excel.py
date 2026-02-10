@@ -154,28 +154,6 @@ class TestSharePointExcelParser:
         assert cell2["value"] == 25
         assert cell2["coordinate"] == "B2"
 
-    def test_parse_with_formatting(self):
-        """include_formatting=Trueでも出力が変わらないことのテスト"""
-        excel_bytes = self._create_formatted_excel()
-        self.mock_download_client.download_file.return_value = excel_bytes
-
-        parser = SharePointExcelParser(self.mock_download_client)
-        result_json = parser.parse_to_json(
-            "/test/formatted.xlsx", include_formatting=True
-        )
-
-        result = json.loads(result_json)
-        assert result["sheets"][0]["name"] == "FormattedSheet"
-
-        # include_formatting=Trueでも書式情報は追加されない
-        header_cell = result["sheets"][0]["rows"][0][0]
-        assert header_cell["value"] == "Name"
-        assert "data_type" not in header_cell
-        assert "fill" not in header_cell
-        # fontとalignmentは含まれない
-        assert "font" not in header_cell
-        assert "alignment" not in header_cell
-
     def test_parse_multiple_sheets(self):
         """複数シートのExcelファイルの解析テスト"""
         excel_bytes = self._create_multi_sheet_excel()
@@ -197,12 +175,12 @@ class TestSharePointExcelParser:
         self.mock_download_client.download_file.return_value = excel_bytes
 
         parser = SharePointExcelParser(self.mock_download_client)
-        result_json = parser.parse_to_json("/test/merged.xlsx", include_formatting=True)
+        result_json = parser.parse_to_json("/test/merged.xlsx")
 
         result = json.loads(result_json)
         assert result["sheets"][0]["name"] == "MergedSheet"
 
-        # 結合セルの情報を確認（include_formattingに関係なく含まれる）
+        # 結合セルの情報を確認
         merged_cell = result["sheets"][0]["rows"][0][0]
         assert merged_cell["value"] == "Merged Header"
         assert "merged" in merged_cell
@@ -312,28 +290,6 @@ class TestSharePointExcelParser:
         assert "merged" not in cell
         assert "width" not in cell
         assert "height" not in cell
-
-    def test_formatting_included_when_requested(self):
-        """include_formatting=Trueでも追加の書式情報が含まれないことのテスト"""
-        excel_bytes = self._create_formatted_excel()
-        self.mock_download_client.download_file.return_value = excel_bytes
-
-        parser = SharePointExcelParser(self.mock_download_client)
-        result_json = parser.parse_to_json(
-            "/test/formatted.xlsx", include_formatting=True
-        )
-
-        result = json.loads(result_json)
-        cell = result["sheets"][0]["rows"][0][0]
-
-        # include_formatting=True の場合でも追加フィールドはない
-        assert "value" in cell
-        assert "coordinate" in cell
-        assert "data_type" not in cell
-        assert "fill" not in cell
-        # font と alignment は含まれない
-        assert "font" not in cell
-        assert "alignment" not in cell
 
     def test_datetime_serialization(self):
         """datetime型の値が正しくシリアライズされることのテスト"""

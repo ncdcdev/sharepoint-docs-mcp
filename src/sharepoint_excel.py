@@ -104,7 +104,6 @@ class SharePointExcelParser:
     def parse_to_json(
         self,
         file_path: str,
-        include_formatting: bool = False,
         sheet_name: str | None = None,
         cell_range: str | None = None,
     ) -> str:
@@ -113,20 +112,17 @@ class SharePointExcelParser:
 
         Args:
             file_path: Excelファイルのパス
-            include_formatting: 書式情報を含めるかどうか
-                現状は指定しても返却内容は変わらない。
-                - value / coordinate は常に返す
-                - 結合セルがある場合は merged を追加し、merged_ranges を返す
-                ※ data_type / fill / width / height は返さない
             sheet_name: 特定シートのみ取得（Noneで全シート）
             cell_range: セル範囲指定（例: "A1:D10"）
 
         Returns:
-            JSON文字列（全シート・全セルのデータ）
+            JSON文字列
+            - 各セルのデータ: value（値）、coordinate（座標）
+            - 構造情報: シート名、dimensions（範囲）
+            - 条件付き構造情報: freeze_panes（存在する場合）、merged_ranges（結合セルが存在する場合）
         """
         logger.info(
-            f"Parsing Excel file: {file_path} "
-            f"(include_formatting={include_formatting}, sheet={sheet_name}, range={cell_range})"
+            f"Parsing Excel file: {file_path} (sheet={sheet_name}, range={cell_range})"
         )
 
         try:
@@ -202,7 +198,6 @@ class SharePointExcelParser:
                 sheet = workbook[name]
                 sheet_data = self._parse_sheet(
                     sheet,
-                    include_formatting,
                     cell_range,
                 )
                 result["sheets"].append(sheet_data)
@@ -291,7 +286,6 @@ class SharePointExcelParser:
     def _parse_sheet(
         self,
         sheet,
-        include_formatting: bool,
         cell_range: str | None = None,
     ) -> dict[str, Any]:
         """
@@ -299,7 +293,6 @@ class SharePointExcelParser:
 
         Args:
             sheet: openpyxl Worksheet
-            include_formatting: 書式情報を含めるかどうか
             cell_range: セル範囲指定（例: "A1:D10"）
 
         Returns:
@@ -391,7 +384,6 @@ class SharePointExcelParser:
                 all_rows.extend(
                     self._parse_rows(
                         rows_to_process,
-                        include_formatting,
                         merged_cell_map,
                         merged_anchor_value_map,
                     )
@@ -419,7 +411,6 @@ class SharePointExcelParser:
                 all_rows.extend(
                     self._parse_rows(
                         rows_to_process,
-                        include_formatting,
                         merged_cell_map,
                         merged_anchor_value_map,
                     )
@@ -601,7 +592,6 @@ class SharePointExcelParser:
     def _parse_cell(
         self,
         cell,
-        include_formatting: bool,
         merged_cell_map: dict[str, str] | None = None,
         merged_anchor_value_map: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
@@ -610,7 +600,6 @@ class SharePointExcelParser:
 
         Args:
             cell: openpyxl Cell
-            include_formatting: 書式情報を含めるかどうか
             merged_cell_map: マージセル座標からマージ範囲へのマップ（パフォーマンス最適化用）
             merged_anchor_value_map: マージ範囲 -> アンカー値 のマップ（結合セルの値埋め用）
 
@@ -638,15 +627,12 @@ class SharePointExcelParser:
                 if anchor_value is not None:
                     cell_data["value"] = anchor_value
 
-        # 書式情報（オプション）
-        # 現運用では fill/width/height/data_type は返さない。
-        #       include_formatting を指定しても返却内容は変わらない。
+        # 書式情報（fill/width/height/data_type）は現在サポートされていません
         return cell_data
 
     def _parse_rows(
         self,
         rows: tuple[tuple[Cell, ...], ...],
-        include_formatting: bool,
         merged_cell_map: dict[str, str] | None = None,
         merged_anchor_value_map: dict[str, Any] | None = None,
     ) -> list[list[dict[str, Any]]]:
@@ -655,7 +641,6 @@ class SharePointExcelParser:
 
         Args:
             rows: 行データのタプル
-            include_formatting: 書式情報を含めるか
             merged_cell_map: マージセル情報
             merged_anchor_value_map: マージ範囲 -> アンカー値
 
@@ -667,7 +652,6 @@ class SharePointExcelParser:
             row_data = [
                 self._parse_cell(
                     cell,
-                    include_formatting,
                     merged_cell_map,
                     merged_anchor_value_map,
                 )
