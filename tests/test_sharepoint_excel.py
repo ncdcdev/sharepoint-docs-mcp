@@ -8,7 +8,7 @@ import pytest
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font, PatternFill
 from openpyxl.utils.exceptions import InvalidFileException
-from openpyxl.worksheet.views import Pane
+from openpyxl.worksheet.views import Pane, SheetView
 
 from src.sharepoint_excel import SharePointExcelParser
 
@@ -1300,3 +1300,92 @@ class TestSharePointExcelParser:
         assert sheet_data["rows"][0][0]["coordinate"] == "A1"
         assert sheet_data["rows"][0][0]["merged"]["is_top_left"] is True
         assert sheet_data["rows"][0][0]["merged"]["range"] == "A1:B1"
+
+    def test_frozen_rows_dos_mitigation_exceeds_limit(self):
+        """frozen_rowsが上限を超えた場合は0にリセットされて処理が続行されること（DoS対策）"""
+        # 異常に大きなfrozen_rowsを持つExcelファイルを作成
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "TestSheet"
+        ws["A1"] = "Header"
+        ws["A2"] = "Data"
+
+        # 異常に大きなfrozen_rowsを設定（openpyxl内部でpane.ySplitに直接設定）
+        pane = Pane()
+        pane.ySplit = 200  # デフォルト上限(100)を超える値
+        pane.xSplit = 0
+        pane.topLeftCell = "A201"
+        pane.state = "frozen"
+
+        sheet_view = SheetView(pane=pane)
+        ws.views.sheetView[0] = sheet_view
+
+        excel_bytes = BytesIO()
+        wb.save(excel_bytes)
+        excel_bytes.seek(0)
+
+        self.mock_download_client.download_file.return_value = excel_bytes.getvalue()
+
+        parser = SharePointExcelParser(self.mock_download_client)
+
+        # frozen_rowsが上限を超えているが、リセットされて処理が続行される
+        result_json = parser.parse_to_json("test.xlsx")
+        result = json.loads(result_json)
+
+        # frozen_rowsが0にリセットされている
+        sheet_data = result["sheets"][0]
+        assert sheet_data["frozen_rows"] == 0
+        assert sheet_data["frozen_cols"] == 0
+        # freeze_panes情報は含まれない
+        assert "freeze_panes" not in sheet_data
+
+    @patch("src.sharepoint_excel.config.excel_max_frozen_rows", 50)
+    def test_frozen_rows_dos_mitigation_within_limit(self):
+        """frozen_rowsが上限以内の場合は正常に処理されること"""
+        # 上限以内のfrozen_rowsを持つExcelファイルを作成
+        excel_bytes = self._create_frozen_rows_excel("A3")  # frozen_rows=2
+        self.mock_download_client.download_file.return_value = excel_bytes
+
+        parser = SharePointExcelParser(self.mock_download_client)
+
+        # 正常に処理される（エラーが発生しない）
+        result_json = parser.parse_to_json("test.xlsx")
+        result = json.loads(result_json)
+
+        # frozen_rowsが正しく取得されている
+        sheet_data = result["sheets"][0]
+        assert sheet_data["frozen_rows"] == 2
+
+    @patch("src.sharepoint_excel.config.excel_max_frozen_rows", 150)
+    def test_frozen_rows_dos_mitigation_custom_limit(self):
+        """カスタム上限値が正しく適用されること"""
+        # カスタム上限(150)以内のfrozen_rowsを持つExcelファイルを作成
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "TestSheet"
+        ws["A1"] = "Header"
+
+        # frozen_rows=120を設定（カスタム上限150以内）
+        pane = Pane()
+        pane.ySplit = 120
+        pane.xSplit = 0
+        pane.topLeftCell = "A121"
+        pane.state = "frozen"
+
+        sheet_view = SheetView(pane=pane)
+        ws.views.sheetView[0] = sheet_view
+
+        excel_bytes = BytesIO()
+        wb.save(excel_bytes)
+        excel_bytes.seek(0)
+
+        self.mock_download_client.download_file.return_value = excel_bytes.getvalue()
+
+        parser = SharePointExcelParser(self.mock_download_client)
+
+        # カスタム上限(150)以内なので正常に処理される
+        result_json = parser.parse_to_json("test.xlsx")
+        result = json.loads(result_json)
+
+        sheet_data = result["sheets"][0]
+        assert sheet_data["frozen_rows"] == 120

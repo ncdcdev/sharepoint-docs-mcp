@@ -418,10 +418,12 @@ class SharePointExcelParser:
         frozen_rows, frozen_cols = self._get_frozen_panes(sheet)
 
         # frozen_rows検証（DoS対策）
+        # frozen_rowsは補助的なメタ情報なので、上限超過時はリセットして処理を続行
         if frozen_rows > config.excel_max_frozen_rows:
             logger.warning(
-                "固定行数が上限を超えたため、freeze_panesを無視します "
-                "(max_rows=%s, frozen_rows=%s, sheet=%s)",
+                "固定行数が上限(%d)を超えたため、freeze_panes情報を無視します。"
+                "ファイルの解析は続行されますが、ヘッダー自動追加機能は利用できません。"
+                " (frozen_rows=%d, sheet=%s)",
                 config.excel_max_frozen_rows,
                 frozen_rows,
                 sheet.title,
