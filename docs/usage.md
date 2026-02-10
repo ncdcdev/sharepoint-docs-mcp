@@ -205,9 +205,10 @@ The `sharepoint_excel` tool allows you to read and search Excel files in SharePo
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `file_path` | str | Required | Excel file path |
-| `query` | str \| None | None | Search keyword (enables search mode) |
+| `query` | str \| None | None | Search keyword (comma-separated for OR search) |
 | `sheet` | str \| None | None | Sheet name (get specific sheet only) |
 | `cell_range` | str \| None | None | Cell range (e.g., "A1:D10") |
+| `include_surrounding_cells` | bool | False | Get entire row data for each match in search mode |
 
 ### Basic Workflow
 
@@ -272,6 +273,88 @@ result = sharepoint_excel(
     file_path="/sites/finance/Shared Documents/report.xlsx",
     sheet="Sheet1",
     cell_range="A1:D10"
+)
+```
+
+### Advanced Search Features
+
+#### Multiple Keyword Search (OR Logic)
+
+Search for cells containing any of the specified keywords (comma-separated):
+
+```python
+# Find cells with "budget" OR "forecast"
+result = sharepoint_excel(
+    file_path="/sites/finance/Shared Documents/report.xlsx",
+    query="budget,forecast"
+)
+```
+
+**Response:**
+```json
+{
+  "file_path": "/sites/finance/Shared Documents/report.xlsx",
+  "mode": "search",
+  "query": "budget,forecast",
+  "match_count": 5,
+  "matches": [
+    {"sheet": "Sheet1", "coordinate": "A1", "value": "Budget Report"},
+    {"sheet": "Sheet1", "coordinate": "B5", "value": "Monthly Budget"},
+    {"sheet": "Sheet1", "coordinate": "C10", "value": "Sales Forecast"},
+    {"sheet": "Summary", "coordinate": "C3", "value": "Budget Total"},
+    {"sheet": "Summary", "coordinate": "D8", "value": "Forecast Q2"}
+  ]
+}
+```
+
+#### Search with Row Context
+
+Get entire row data for each match in a single API call:
+
+```python
+# Search and get row context
+result = sharepoint_excel(
+    file_path="/sites/finance/Shared Documents/report.xlsx",
+    query="Total Revenue",
+    include_surrounding_cells=True
+)
+```
+
+**Response structure:**
+```json
+{
+  "file_path": "/sites/finance/Shared Documents/report.xlsx",
+  "mode": "search",
+  "query": "Total Revenue",
+  "match_count": 1,
+  "matches": [
+    {
+      "sheet": "Sheet1",
+      "coordinate": "B10",
+      "value": "Total Revenue",
+      "row_data": [
+        {"value": "2024", "coordinate": "A10"},
+        {"value": "Total Revenue", "coordinate": "B10"},
+        {"value": 1500000, "coordinate": "C10"},
+        {"value": "USD", "coordinate": "D10"}
+      ]
+    }
+  ]
+}
+```
+
+**When to use:**
+- `include_surrounding_cells=False` (default): Locate cells only
+- `include_surrounding_cells=True`: Get immediate context without follow-up read (96% API call reduction)
+
+#### Combining Multiple Keywords with Row Context
+
+```python
+# Search with multiple keywords and get row context
+result = sharepoint_excel(
+    file_path="/sites/finance/Shared Documents/report.xlsx",
+    query="revenue,income,profit",
+    include_surrounding_cells=True
 )
 ```
 

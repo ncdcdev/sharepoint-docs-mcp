@@ -33,8 +33,10 @@ stdioとHTTPの両方のトランスポートに対応しています。
   - SharePoint/OneDriveファイルに応じた自動メソッド選択
 - **sharepoint_excel**
   - SharePoint上のExcelファイルの読み取りと検索
-  - 検索モード: `query`パラメータで特定テキストを含むセルを検索
-  - 読み取りモード: `sheet`と`cell_range`パラメータで特定シート/範囲を取得
+  - **検索モード**: `query`パラメータで特定テキストを含むセルを検索
+    - **複数キーワードOR検索**: カンマ区切りでキーワード指定（例: `"予算,見積"`）
+    - **行コンテキスト**: `include_surrounding_cells=True`で行全体のデータを取得（API呼び出しをN+1から1に削減）
+  - **読み取りモード**: `sheet`と`cell_range`パラメータで特定シート/範囲を取得
   - **ヘッダー自動追加**: `cell_range`指定時、デフォルトで固定行（ヘッダー）を自動的に含める
     - `include_frozen_rows=False`を指定すると、指定範囲のみを取得
     - `frozen_rows=0`のシートでは、`expand_axis_range=True`で1行目（列の場合）またはA列（行の場合）から自動取得

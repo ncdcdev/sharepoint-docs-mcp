@@ -33,8 +33,10 @@ Two authentication methods are supported:
   - Automatic method selection for SharePoint vs OneDrive files
 - **sharepoint_excel**
   - Read or search Excel files in SharePoint
-  - Search mode: find cells containing specific text with `query` parameter
-  - Read mode: get data from specific sheets/ranges with `sheet` and `cell_range` parameters
+  - **Search mode**: find cells containing specific text with `query` parameter
+    - **Multiple keyword OR search**: use comma-separated keywords (e.g., `"budget,forecast"`)
+    - **Row context**: set `include_surrounding_cells=True` to get entire row data (reduces API calls from N+1 to 1)
+  - **Read mode**: get data from specific sheets/ranges with `sheet` and `cell_range` parameters
   - **Automatic header inclusion**: when `cell_range` is specified, frozen rows (headers) are automatically included by default
     - Set `include_frozen_rows=False` to get only the specified range
     - For sheets with `frozen_rows=0`, use `expand_axis_range=True` to include row 1 (for columns) or column A (for rows)

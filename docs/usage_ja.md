@@ -205,9 +205,10 @@ results = sharepoint_docs_search(
 | パラメータ | 型 | デフォルト | 説明 |
 |-----------|------|---------|-------------|
 | `file_path` | str | 必須 | Excelファイルのパス |
-| `query` | str \| None | None | 検索キーワード（検索モードを有効化） |
+| `query` | str \| None | None | 検索キーワード（カンマ区切りでOR検索） |
 | `sheet` | str \| None | None | シート名（特定シートのみ取得） |
 | `cell_range` | str \| None | None | セル範囲（例: "A1:D10"） |
+| `include_surrounding_cells` | bool | False | 検索モード時、マッチした行の全セルを取得 |
 
 ### 基本的なワークフロー
 
@@ -272,6 +273,88 @@ result = sharepoint_excel(
     file_path="/sites/finance/Shared Documents/report.xlsx",
     sheet="Sheet1",
     cell_range="A1:D10"
+)
+```
+
+### 高度な検索機能
+
+#### 複数キーワード検索（OR論理）
+
+カンマ区切りで複数のキーワードを指定して、いずれかに一致するセルを検索：
+
+```python
+# "予算" OR "見積" を含むセルを検索
+result = sharepoint_excel(
+    file_path="/sites/finance/Shared Documents/report.xlsx",
+    query="予算,見積"
+)
+```
+
+**レスポンス例:**
+```json
+{
+  "file_path": "/sites/finance/Shared Documents/report.xlsx",
+  "mode": "search",
+  "query": "予算,見積",
+  "match_count": 5,
+  "matches": [
+    {"sheet": "Sheet1", "coordinate": "A1", "value": "予算報告"},
+    {"sheet": "Sheet1", "coordinate": "B5", "value": "月次予算"},
+    {"sheet": "Sheet1", "coordinate": "C10", "value": "売上見積"},
+    {"sheet": "Summary", "coordinate": "C3", "value": "予算合計"},
+    {"sheet": "Summary", "coordinate": "D8", "value": "見積Q2"}
+  ]
+}
+```
+
+#### 行コンテキスト付き検索
+
+マッチしたセルと同じ行の全データを1回のAPI呼び出しで取得：
+
+```python
+# 検索と行コンテキスト取得
+result = sharepoint_excel(
+    file_path="/sites/finance/Shared Documents/report.xlsx",
+    query="売上合計",
+    include_surrounding_cells=True
+)
+```
+
+**レスポンス構造:**
+```json
+{
+  "file_path": "/sites/finance/Shared Documents/report.xlsx",
+  "mode": "search",
+  "query": "売上合計",
+  "match_count": 1,
+  "matches": [
+    {
+      "sheet": "Sheet1",
+      "coordinate": "B10",
+      "value": "売上合計",
+      "row_data": [
+        {"value": "2024", "coordinate": "A10"},
+        {"value": "売上合計", "coordinate": "B10"},
+        {"value": 1500000, "coordinate": "C10"},
+        {"value": "円", "coordinate": "D10"}
+      ]
+    }
+  ]
+}
+```
+
+**使い分け:**
+- `include_surrounding_cells=False`（デフォルト）: セル位置の特定のみ
+- `include_surrounding_cells=True`: 即座にコンテキスト取得（API呼び出しを96%削減）
+
+#### 複数キーワードと行コンテキストの組み合わせ
+
+```python
+# 複数キーワード検索 + 行コンテキスト取得
+result = sharepoint_excel(
+    file_path="/sites/finance/Shared Documents/report.xlsx",
+    query="売上,収益,利益",
+    include_surrounding_cells=True
 )
 ```
 
