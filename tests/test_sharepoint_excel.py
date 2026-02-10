@@ -635,7 +635,10 @@ class TestSharePointExcelParser:
         self.mock_download_client.download_file.return_value = excel_bytes
 
         parser = SharePointExcelParser(self.mock_download_client)
-        result_json = parser.parse_to_json("/test/frozen.xlsx", cell_range="A1:D5")
+        # include_frozen_rows=Falseを指定（既存の動作を維持）
+        result_json = parser.parse_to_json(
+            "/test/frozen.xlsx", cell_range="A1:D5", include_frozen_rows=False
+        )
 
         result = json.loads(result_json)
         sheet = result["sheets"][0]
@@ -652,7 +655,10 @@ class TestSharePointExcelParser:
         self.mock_download_client.download_file.return_value = excel_bytes
 
         parser = SharePointExcelParser(self.mock_download_client)
-        result_json = parser.parse_to_json("/test/frozen.xlsx", cell_range="A5:D10")
+        # include_frozen_rows=Falseを指定（既存の動作を維持）
+        result_json = parser.parse_to_json(
+            "/test/frozen.xlsx", cell_range="A5:D10", include_frozen_rows=False
+        )
 
         result = json.loads(result_json)
         sheet = result["sheets"][0]
@@ -1012,3 +1018,285 @@ class TestSharePointExcelParser:
         # データも正しく取得されている
         assert "rows" in sheet_data
         assert len(sheet_data["rows"]) > 0
+
+    def _create_frozen_rows_excel(self, freeze_panes: str) -> bytes:
+        """frozen_rows機能テスト用のExcelファイルを作成
+
+        Args:
+            freeze_panes: freeze_panesの指定（例: "A3"で2行固定）
+
+        Returns:
+            Excelファイルのバイトデータ
+        """
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "TestSheet"
+
+        # ヘッダー行（固定行）
+        ws["A1"] = "名前"
+        ws["B1"] = "年齢"
+        ws["A2"] = "Name"
+        ws["B2"] = "Age"
+
+        # データ行
+        ws["A4"] = "花子"
+        ws["B4"] = 25
+        ws["A5"] = "次郎"
+        ws["B5"] = 30
+        ws["A6"] = "三郎"
+        ws["B6"] = 35
+
+        # freeze_panesを設定
+        ws.freeze_panes = freeze_panes
+
+        # BytesIOに保存
+        excel_bytes = BytesIO()
+        wb.save(excel_bytes)
+        excel_bytes.seek(0)
+        return excel_bytes.getvalue()
+
+    def test_include_frozen_rows_default_true(self):
+        """デフォルト（include_frozen_rows=True）でヘッダーが自動追加されること"""
+        # frozen_rows=2のExcelファイルを作成
+        excel_bytes = self._create_frozen_rows_excel("A3")
+        self.mock_download_client.download_file.return_value = excel_bytes
+
+        parser = SharePointExcelParser(self.mock_download_client)
+
+        # cell_range="A4:B6"を指定（データ範囲のみ）
+        result_json = parser.parse_to_json(
+            "test.xlsx", sheet_name="TestSheet", cell_range="A4:B6"
+        )
+
+        result = json.loads(result_json)
+        sheet_data = result["sheets"][0]
+
+        # frozen_rowsが2であることを確認
+        assert sheet_data["frozen_rows"] == 2
+
+        # rowsにヘッダー（A1:B2）+ データ（A4:B6）が含まれる
+        assert len(sheet_data["rows"]) == 5  # 2 + 3
+
+        # ヘッダー行（A1:B2）
+        assert sheet_data["rows"][0][0]["value"] == "名前"
+        assert sheet_data["rows"][0][0]["coordinate"] == "A1"
+        assert sheet_data["rows"][1][0]["value"] == "Name"
+        assert sheet_data["rows"][1][0]["coordinate"] == "A2"
+
+        # データ行（A4:B6）
+        assert sheet_data["rows"][2][0]["value"] == "花子"
+        assert sheet_data["rows"][2][0]["coordinate"] == "A4"
+        assert sheet_data["rows"][3][0]["value"] == "次郎"
+        assert sheet_data["rows"][3][0]["coordinate"] == "A5"
+        assert sheet_data["rows"][4][0]["value"] == "三郎"
+        assert sheet_data["rows"][4][0]["coordinate"] == "A6"
+
+    def test_include_frozen_rows_false(self):
+        """include_frozen_rows=Falseでヘッダーが追加されないこと"""
+        # frozen_rows=2のExcelファイルを作成
+        excel_bytes = self._create_frozen_rows_excel("A3")
+        self.mock_download_client.download_file.return_value = excel_bytes
+
+        parser = SharePointExcelParser(self.mock_download_client)
+
+        # include_frozen_rows=Falseを指定
+        result_json = parser.parse_to_json(
+            "test.xlsx",
+            sheet_name="TestSheet",
+            cell_range="A4:B6",
+            include_frozen_rows=False,
+        )
+
+        result = json.loads(result_json)
+        sheet_data = result["sheets"][0]
+
+        # frozen_rowsが2であることを確認
+        assert sheet_data["frozen_rows"] == 2
+
+        # rowsにはデータ範囲（A4:B6）のみ
+        assert len(sheet_data["rows"]) == 3
+
+        # データ行のみ
+        assert sheet_data["rows"][0][0]["value"] == "花子"
+        assert sheet_data["rows"][0][0]["coordinate"] == "A4"
+        assert sheet_data["rows"][1][0]["value"] == "次郎"
+        assert sheet_data["rows"][1][0]["coordinate"] == "A5"
+        assert sheet_data["rows"][2][0]["value"] == "三郎"
+        assert sheet_data["rows"][2][0]["coordinate"] == "A6"
+
+    def test_include_frozen_rows_no_frozen_rows(self):
+        """frozen_rows=0の場合はヘッダー追加なし"""
+        # frozen_panesなしのExcelファイルを作成
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "TestSheet"
+        ws["A4"] = "花子"
+        ws["B4"] = 25
+        ws["A5"] = "次郎"
+        ws["B5"] = 30
+
+        excel_bytes = BytesIO()
+        wb.save(excel_bytes)
+        excel_bytes.seek(0)
+
+        self.mock_download_client.download_file.return_value = excel_bytes.getvalue()
+
+        parser = SharePointExcelParser(self.mock_download_client)
+
+        result_json = parser.parse_to_json(
+            "test.xlsx", sheet_name="TestSheet", cell_range="A4:B5"
+        )
+
+        result = json.loads(result_json)
+        sheet_data = result["sheets"][0]
+
+        # frozen_rowsが0
+        assert sheet_data["frozen_rows"] == 0
+
+        # rowsにはデータ範囲のみ
+        assert len(sheet_data["rows"]) == 2
+
+    def test_include_frozen_rows_range_includes_headers(self):
+        """cell_rangeが既にヘッダーを含む場合は重複回避"""
+        # frozen_rows=2のExcelファイルを作成
+        excel_bytes = self._create_frozen_rows_excel("A3")
+        self.mock_download_client.download_file.return_value = excel_bytes
+
+        parser = SharePointExcelParser(self.mock_download_client)
+
+        # cell_range="A1:B6"（ヘッダーを含む）
+        result_json = parser.parse_to_json(
+            "test.xlsx", sheet_name="TestSheet", cell_range="A1:B6"
+        )
+
+        result = json.loads(result_json)
+        sheet_data = result["sheets"][0]
+
+        # frozen_rowsが2
+        assert sheet_data["frozen_rows"] == 2
+
+        # rowsには全データ（重複なし）
+        # A1, A2は1回ずつ、A4, A5, A6も1回ずつ
+        rows = sheet_data["rows"]
+
+        # A1が最初に1回だけ登場
+        a1_count = sum(
+            1 for row in rows for cell in row if cell["coordinate"] == "A1"
+        )
+        assert a1_count == 1
+
+        # A2も1回だけ登場
+        a2_count = sum(
+            1 for row in rows for cell in row if cell["coordinate"] == "A2"
+        )
+        assert a2_count == 1
+
+    def test_include_frozen_rows_single_cell(self):
+        """単一セル指定時もヘッダーが追加されること（軸拡張あり）"""
+        # frozen_rows=2のExcelファイルを作成
+        excel_bytes = self._create_frozen_rows_excel("A3")
+        self.mock_download_client.download_file.return_value = excel_bytes
+
+        parser = SharePointExcelParser(self.mock_download_client)
+
+        # cell_range="B5"（単一セル）
+        # → B1:B5に拡張される（_expand_axis_rangeの動作）
+        result_json = parser.parse_to_json(
+            "test.xlsx", sheet_name="TestSheet", cell_range="B5"
+        )
+
+        result = json.loads(result_json)
+        sheet_data = result["sheets"][0]
+
+        # frozen_rowsが2
+        assert sheet_data["frozen_rows"] == 2
+
+        # 軸拡張: B5 → B1:B5
+        # ヘッダー自動追加でB1:B2が追加されるが、B1:B2はすでに範囲に含まれているため
+        # 重複回避により追加されない
+        # 結果: B1:B5のみ（5行）
+        assert len(sheet_data["rows"]) == 5
+
+        # B1からB5まで順に確認
+        assert sheet_data["rows"][0][0]["coordinate"] == "B1"
+        assert sheet_data["rows"][1][0]["coordinate"] == "B2"
+        assert sheet_data["rows"][2][0]["coordinate"] == "B3"
+        assert sheet_data["rows"][3][0]["coordinate"] == "B4"
+        assert sheet_data["rows"][4][0]["coordinate"] == "B5"
+
+    def test_include_frozen_rows_without_cell_range(self):
+        """cell_range未指定時はヘッダー追加不要（全シート取得）"""
+        # frozen_rows=2のExcelファイルを作成
+        excel_bytes = self._create_frozen_rows_excel("A3")
+        self.mock_download_client.download_file.return_value = excel_bytes
+
+        parser = SharePointExcelParser(self.mock_download_client)
+
+        # cell_rangeなし（全シート取得）
+        result_json = parser.parse_to_json("test.xlsx", sheet_name="TestSheet")
+
+        result = json.loads(result_json)
+        sheet_data = result["sheets"][0]
+
+        # frozen_rowsが2
+        assert sheet_data["frozen_rows"] == 2
+
+        # rowsには全データ（A1～A6）
+        # requested_rangeは設定されていない
+        assert "requested_range" not in sheet_data
+
+    def test_include_frozen_rows_with_merged_cells(self):
+        """マージセルとの統合が正しく機能すること"""
+        # frozen_rows=2、マージセル付きのExcelファイルを作成
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "TestSheet"
+
+        # ヘッダー行（マージセル）
+        ws["A1"] = "名前"
+        ws.merge_cells("A1:B1")  # ヘッダーをマージ
+
+        ws["A2"] = "Name"
+        ws["B2"] = "Age"
+
+        # データ行
+        ws["A4"] = "花子"
+        ws["B4"] = 25
+        ws["A5"] = "次郎"
+        ws["B5"] = 30
+
+        # freeze_panesを設定
+        ws.freeze_panes = "A3"
+
+        excel_bytes = BytesIO()
+        wb.save(excel_bytes)
+        excel_bytes.seek(0)
+
+        self.mock_download_client.download_file.return_value = excel_bytes.getvalue()
+
+        parser = SharePointExcelParser(self.mock_download_client)
+
+        # cell_range="A4:B5"を指定
+        result_json = parser.parse_to_json(
+            "test.xlsx", sheet_name="TestSheet", cell_range="A4:B5"
+        )
+
+        result = json.loads(result_json)
+        sheet_data = result["sheets"][0]
+
+        # frozen_rowsが2
+        assert sheet_data["frozen_rows"] == 2
+
+        # マージセル情報が含まれる
+        assert "merged_ranges" in sheet_data
+        assert len(sheet_data["merged_ranges"]) == 1
+        assert sheet_data["merged_ranges"][0]["range"] == "A1:B1"
+
+        # rowsにはヘッダー（A1:B2）+ データ（A4:B5）
+        assert len(sheet_data["rows"]) == 4
+
+        # ヘッダー行（A1はマージセル）
+        assert sheet_data["rows"][0][0]["value"] == "名前"
+        assert sheet_data["rows"][0][0]["coordinate"] == "A1"
+        assert sheet_data["rows"][0][0]["merged"]["is_top_left"] is True
+        assert sheet_data["rows"][0][0]["merged"]["range"] == "A1:B1"
