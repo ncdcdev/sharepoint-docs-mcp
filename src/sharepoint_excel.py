@@ -453,8 +453,9 @@ class SharePointExcelParser:
         sheet_data["frozen_rows"] = frozen_rows
         sheet_data["frozen_cols"] = frozen_cols
 
-        # frozen_rows=0 かつ cell_range指定時の警告
-        if frozen_rows == 0 and cell_range:
+        # frozen_rows=0 かつ cell_range指定時、expand_axis_range=Falseの場合のみ警告
+        # expand_axis_range=Trueの場合は1行目/A列が含まれるため警告不要
+        if frozen_rows == 0 and cell_range and not expand_axis_range:
             sheet_data["header_detection"] = {
                 "status": "no_frozen_rows",
                 "frozen_rows": 0,
