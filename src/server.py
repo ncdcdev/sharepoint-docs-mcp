@@ -542,8 +542,10 @@ def register_tools():
                 "frozen at the top of the sheet (typically column headers). "
                 "Response includes cell data in 'rows' (value and coordinate) and structural information "
                 "(sheet name, dimensions, frozen_rows, frozen_cols, freeze_panes when present, merged_ranges when merged cells exist). "
-                "Recommended workflow: 1) Search with query to locate relevant content, "
-                "2) Read specific range based on search results."
+                "Header detection: Cannot be auto-detected from frozen_rows. "
+                "ALWAYS read exactly 5 rows for header check: 'A1:Z5' (NOT 'A1:Z50' or more). "
+                "Prefer 'query' search when possible to locate data first. "
+                "Workflow: 1) Search OR read 'A1:Z5', 2) Read specific range only."
             )
         )(sharepoint_excel)
         logging.info("Registered tool: sharepoint_excel")
