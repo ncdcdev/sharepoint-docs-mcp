@@ -108,6 +108,7 @@ class SharePointExcelParser:
         cell_range: str | None = None,
         include_frozen_rows: bool = True,
         include_cell_styles: bool = False,
+        expand_axis_range: bool = False,
     ) -> str:
         """
         Excelファイルを解析してJSON形式で返す
@@ -121,6 +122,9 @@ class SharePointExcelParser:
                 False: 指定されたcell_rangeのみを取得
             include_cell_styles: セルの色・サイズ情報（default: false）
                 色分けデータ抽出時のみ使用。トークン消費+約20%
+            expand_axis_range: 単一列/行指定時に開始側を自動拡張（default: false）
+                True: 例 "J50:J100" → "J1:J100"（行1に拡張）
+                False: 指定範囲をそのまま使用
 
         Returns:
             JSON文字列
@@ -212,6 +216,7 @@ class SharePointExcelParser:
                     cell_range,
                     include_frozen_rows,
                     include_cell_styles,
+                    expand_axis_range,
                 )
                 result["sheets"].append(sheet_data)
 
@@ -399,6 +404,7 @@ class SharePointExcelParser:
         cell_range: str | None = None,
         include_frozen_rows: bool = True,
         include_cell_styles: bool = False,
+        expand_axis_range: bool = False,
     ) -> dict[str, Any]:
         """
         シートを解析してdict形式で返す
@@ -408,6 +414,7 @@ class SharePointExcelParser:
             cell_range: セル範囲指定（例: "A1:D10"）
             include_frozen_rows: cell_range指定時に固定行（ヘッダー）を自動追加
             include_cell_styles: セルのスタイル情報を含めるか
+            expand_axis_range: 単一列/行指定時に開始側を自動拡張
 
         Returns:
             シートデータのdict
@@ -446,6 +453,19 @@ class SharePointExcelParser:
         sheet_data["frozen_rows"] = frozen_rows
         sheet_data["frozen_cols"] = frozen_cols
 
+        # frozen_rows=0 かつ cell_range指定時、expand_axis_range=Falseの場合のみ警告
+        # expand_axis_range=Trueの場合は1行目/A列が含まれるため警告不要
+        if frozen_rows == 0 and cell_range and not expand_axis_range:
+            sheet_data["header_detection"] = {
+                "status": "no_frozen_rows",
+                "frozen_rows": 0,
+                "note": "This sheet has no frozen rows. Headers are not automatically included.",
+                "suggestions": [
+                    "If headers are needed, read 'A1:Z5' to check header structure",
+                    "Or retry with expand_axis_range=True to include row 1 (for columns) or column A (for rows)",
+                ],
+            }
+
         # セル範囲の正規化・拡張（cell_rangeがある場合）
         # マージセル情報のキャッシュに使用するため、先に計算する
         effective_range_for_merge = None
@@ -453,15 +473,16 @@ class SharePointExcelParser:
         if cell_range:
             sheet_data["requested_range"] = cell_range
             effective_range = self._normalize_column_range(cell_range, sheet)
-            expanded_range = self._expand_axis_range(effective_range)
-            if expanded_range != effective_range:
-                logger.info(
-                    "Expanded axis range '%s' -> '%s' (sheet=%s)",
-                    effective_range,
-                    expanded_range,
-                    sheet.title,
-                )
-                effective_range = expanded_range
+            if expand_axis_range:
+                expanded_range = self._expand_axis_range(effective_range)
+                if expanded_range != effective_range:
+                    logger.info(
+                        "Expanded axis range '%s' -> '%s' (sheet=%s)",
+                        effective_range,
+                        expanded_range,
+                        sheet.title,
+                    )
+                    effective_range = expanded_range
 
             if effective_range != cell_range:
                 logger.info(

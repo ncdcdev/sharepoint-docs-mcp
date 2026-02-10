@@ -37,6 +37,7 @@ Two authentication methods are supported:
   - Read mode: get data from specific sheets/ranges with `sheet` and `cell_range` parameters
   - **Automatic header inclusion**: when `cell_range` is specified, frozen rows (headers) are automatically included by default
     - Set `include_frozen_rows=False` to get only the specified range
+    - For sheets with `frozen_rows=0`, use `expand_axis_range=True` to include row 1 (for columns) or column A (for rows)
   - **Cell style information** (optional): set `include_cell_styles=True` to get background colors, column widths, and row heights
     - Default is `False` to minimize token usage
     - Useful for identifying highlighted cells, colored headers, or visually emphasized content

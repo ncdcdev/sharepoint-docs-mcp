@@ -226,6 +226,7 @@ class TestSharePointExcel:
                     cell_range=None,
                     include_frozen_rows=True,
                     include_cell_styles=False,
+                    expand_axis_range=False,
                 )
 
     @pytest.mark.unit
@@ -267,6 +268,7 @@ class TestSharePointExcel:
                     cell_range=None,
                     include_frozen_rows=True,
                     include_cell_styles=False,
+                    expand_axis_range=False,
                 )
 
     @pytest.mark.unit
@@ -290,6 +292,7 @@ class TestSharePointExcel:
                     cell_range="A1:D10",
                     include_frozen_rows=True,
                     include_cell_styles=False,
+                    expand_axis_range=False,
                 )
 
     @pytest.mark.unit

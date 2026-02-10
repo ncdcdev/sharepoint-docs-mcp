@@ -455,6 +455,7 @@ def sharepoint_excel(
     cell_range: str | None = None,
     include_frozen_rows: bool = True,
     include_cell_styles: bool = False,
+    expand_axis_range: bool = False,
     ctx: Context | None = None,
 ) -> str:
     """
@@ -467,8 +468,6 @@ def sharepoint_excel(
         cell_range: セル範囲（例: "A1:D10"）
             - 推奨形式: "A1:D10"（開始セル:終了セル）
             - 列のみ: "A:D" も可（自動的に行範囲が追加されます）
-            - ⚠️ 単一列/行の部分範囲は開始側のみ 1/A に自動拡張されます
-              例: "J50:J100" → "J1:J100"（開始行が 1 行目に拡張されます）
         include_frozen_rows: cell_range指定時に固定行を自動追加（デフォルト: True）
             True: frozen_rowsで指定された行（通常はヘッダー）を自動的に取得
             False: 指定されたcell_rangeのみを取得
@@ -476,6 +475,9 @@ def sharepoint_excel(
             色分けされたデータを抽出する場合のみTrueを指定
             背景色（fill）、列幅（width）、行高さ（height）を取得
             ※トークン消費が約20%増加
+        expand_axis_range: 単一列/行の部分範囲を開始側に自動拡張（default: false）
+            True: 例 "J50:J100" → "J1:J100"（行1に拡張）
+            frozen_rows=0でヘッダー文脈が不明な場合に使用
         ctx: FastMCP context (injected automatically)
 
     Returns:
@@ -504,6 +506,7 @@ def sharepoint_excel(
             cell_range=cell_range,
             include_frozen_rows=include_frozen_rows,
             include_cell_styles=include_cell_styles,
+            expand_axis_range=expand_axis_range,
         )
 
     except Exception as e:
@@ -549,10 +552,14 @@ def register_tools():
                 "Response includes cell data in 'rows' (value and coordinate) and structural information "
                 "(sheet name, dimensions, frozen_rows, frozen_cols, freeze_panes when present, merged_ranges when merged cells exist). "
                 "Cell styles (include_cell_styles, default: false): background colors and sizes. Use only for color-coded data extraction. "
-                "Header detection: Cannot be auto-detected from frozen_rows. "
+                "Header detection: For sheets with frozen_rows > 0, headers are automatically included with include_frozen_rows=True (default). "
+                "For sheets with frozen_rows=0, headers are not automatically included and context may be unclear. "
                 "ALWAYS read exactly 5 rows for header check: 'A1:Z5' (NOT 'A1:Z50' or more). "
                 "Prefer 'query' search when possible to locate data first. "
-                "Workflow: 1) Search OR read 'A1:Z5', 2) Read specific range only."
+                "Workflow: 1) Search OR read 'A1:Z5' for header check, "
+                "2) Read specific range (include_frozen_rows adds frozen headers automatically), "
+                "3) If frozen_rows=0 and header context is unclear, retry with expand_axis_range=True "
+                "to auto-include row 1 (for columns) or column A (for rows)."
             )
         )(sharepoint_excel)
         logging.info("Registered tool: sharepoint_excel")
