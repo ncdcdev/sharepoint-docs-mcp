@@ -1555,10 +1555,6 @@ class TestSharePointExcelParser:
 
     def test_omit_null_dimensions(self):
         """dimensions=nullが省略されること"""
-        # 通常のExcelを作成
-        excel_bytes = self._create_test_excel()
-        self.mock_download_client.download_file.return_value = excel_bytes
-
         parser = SharePointExcelParser(self.mock_download_client)
 
         # モックを使用してsheet.dimensionsをNoneに設定
@@ -1568,6 +1564,8 @@ class TestSharePointExcelParser:
             mock_sheet.title = "EmptySheet"
             mock_sheet.dimensions = None  # dimensionsをNoneに設定
             mock_sheet.freeze_panes = None  # freeze_panesもNone
+            # sheet_viewを設定して_get_frozen_panes()での警告ログを防ぐ
+            mock_sheet.sheet_view = Mock(pane=None)
             # merged_cellsはranges属性を持つオブジェクト
             mock_merged_cells = Mock()
             mock_merged_cells.ranges = []
@@ -1580,6 +1578,8 @@ class TestSharePointExcelParser:
             mock_wb.close = Mock()
             mock_load.return_value = mock_wb
 
+            # load_workbookがモックされているため、download_fileの戻り値は実際には使われない
+            self.mock_download_client.download_file.return_value = b""
             result_json = parser.parse_to_json("/test/empty.xlsx")
 
         result = json.loads(result_json)
