@@ -428,6 +428,7 @@ class SharePointExcelParser:
         # セル範囲の正規化・拡張（cell_rangeがある場合）
         # マージセル情報のキャッシュに使用するため、先に計算する
         effective_range_for_merge = None
+        header_range = None  # ヘッダー範囲（再利用のため事前に初期化）
         if cell_range:
             sheet_data["requested_range"] = cell_range
             effective_range = self._normalize_column_range(cell_range, sheet)
@@ -491,20 +492,18 @@ class SharePointExcelParser:
 
             else:
                 # ヘッダー自動追加（include_frozen_rows=Trueの場合）
-                if include_frozen_rows and frozen_rows > 0:
-                    header_range = self._calculate_header_range(effective_range, frozen_rows)
-
-                    if header_range:
-                        # ヘッダー範囲を取得
-                        header_data = sheet[header_range]
-                        header_rows = self._normalize_range_data(header_data)
-                        all_rows.extend(
-                            self._parse_rows(
-                                header_rows,
-                                merged_cell_map,
-                                merged_anchor_value_map,
-                            )
+                # header_rangeは既に計算済み（L456付近）なので再利用
+                if header_range:
+                    # ヘッダー範囲を取得
+                    header_data = sheet[header_range]
+                    header_rows = self._normalize_range_data(header_data)
+                    all_rows.extend(
+                        self._parse_rows(
+                            header_rows,
+                            merged_cell_map,
+                            merged_anchor_value_map,
                         )
+                    )
 
                 # 通常のセル範囲取得（データ範囲）
                 range_data = sheet[effective_range]
