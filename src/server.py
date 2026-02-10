@@ -453,6 +453,7 @@ def sharepoint_excel(
     query: str | None = None,
     sheet: str | None = None,
     cell_range: str | None = None,
+    include_frozen_rows: bool = True,
     ctx: Context | None = None,
 ) -> str:
     """
@@ -467,6 +468,9 @@ def sharepoint_excel(
             - 列のみ: "A:D" も可（自動的に行範囲が追加されます）
             - ⚠️ 単一列/行の部分範囲は開始側のみ 1/A に自動拡張されます
               例: "J50:J100" → "J1:J100"（開始行が 1 行目に拡張されます）
+        include_frozen_rows: cell_range指定時に固定行を自動追加（デフォルト: True）
+            True: frozen_rowsで指定された行（通常はヘッダー）を自動的に取得
+            False: 指定されたcell_rangeのみを取得
         ctx: FastMCP context (injected automatically)
 
     Returns:
@@ -493,6 +497,7 @@ def sharepoint_excel(
             file_path,
             sheet_name=sheet,
             cell_range=cell_range,
+            include_frozen_rows=include_frozen_rows,
         )
 
     except Exception as e:
@@ -532,10 +537,15 @@ def register_tools():
                 "Read or search Excel files in SharePoint. "
                 "Search mode: use 'query' parameter to find cells containing specific text (returns cell locations). "
                 "Read mode: use 'sheet' and 'cell_range' parameters to retrieve data from specific sections. "
+                "When cell_range is specified with include_frozen_rows=True (default), frozen rows are automatically "
+                "included even if they are outside the specified range. frozen_rows indicates the number of header rows "
+                "frozen at the top of the sheet (typically column headers). "
                 "Response includes cell data in 'rows' (value and coordinate) and structural information "
-                "(sheet name, dimensions, freeze_panes when present, merged_ranges when merged cells exist). "
-                "Recommended workflow: 1) Search with query to locate relevant content, "
-                "2) Read specific range based on search results."
+                "(sheet name, dimensions, frozen_rows, frozen_cols, freeze_panes when present, merged_ranges when merged cells exist). "
+                "Header detection: Cannot be auto-detected from frozen_rows. "
+                "ALWAYS read exactly 5 rows for header check: 'A1:Z5' (NOT 'A1:Z50' or more). "
+                "Prefer 'query' search when possible to locate data first. "
+                "Workflow: 1) Search OR read 'A1:Z5', 2) Read specific range only."
             )
         )(sharepoint_excel)
         logging.info("Registered tool: sharepoint_excel")
