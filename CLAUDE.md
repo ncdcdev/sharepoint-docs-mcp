@@ -89,9 +89,12 @@ def some_function():
 - [ ] Does this add significant value to justify the complexity?
 
 **Context Efficiency**
-- Keep tool descriptions concise (they're included in every LLM call)
-- Prioritize essential information over exhaustive documentation
-- Use external docs (README) for detailed explanations
+- **LLM Usability First**: Tool descriptions must prioritize LLM's ability to use the tool correctly
+- Avoid verbose or redundant phrasing, but never sacrifice clarity for brevity
+- Include essential information that LLM needs for correct usage (modes, defaults, behavior)
+- Complex tools require detailed descriptions - token cost is acceptable if it ensures correct usage
+- Use external docs (README) for human-oriented explanations, not as replacement for tool clarity
+- **Lesson learned**: Overly brief descriptions can cause LLM to misuse tools, negating any token savings
 
 ### Project-Specific Guidelines
 
