@@ -37,6 +37,9 @@ Two authentication methods are supported:
   - Read mode: get data from specific sheets/ranges with `sheet` and `cell_range` parameters
   - **Automatic header inclusion**: when `cell_range` is specified, frozen rows (headers) are automatically included by default
     - Set `include_frozen_rows=False` to get only the specified range
+  - **Cell style information** (optional): set `include_cell_styles=True` to get background colors, column widths, and row heights
+    - Default is `False` to minimize token usage
+    - Useful for identifying highlighted cells, colored headers, or visually emphasized content
   - Response includes cell data in `rows` (value and coordinate) and structural information when available
   - Structural info: sheet name, dimensions, frozen_rows, frozen_cols, freeze_panes (when present), merged_ranges (when merged cells exist)
   - No Excel Services dependency - uses direct file download + openpyxl parsing

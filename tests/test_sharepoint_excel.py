@@ -1389,3 +1389,119 @@ class TestSharePointExcelParser:
 
         sheet_data = result["sheets"][0]
         assert sheet_data["frozen_rows"] == 120
+
+    def test_parse_with_cell_styles_disabled(self):
+        """include_cell_styles=False（デフォルト）でスタイル情報が含まれないこと"""
+        excel_bytes = self._create_formatted_excel()
+        self.mock_download_client.download_file.return_value = excel_bytes
+
+        parser = SharePointExcelParser(self.mock_download_client)
+        # デフォルト（include_cell_styles=False）で解析
+        result_json = parser.parse_to_json("/test/formatted.xlsx")
+
+        result = json.loads(result_json)
+        cell = result["sheets"][0]["rows"][0][0]
+
+        # value と coordinate は含まれる
+        assert "value" in cell
+        assert "coordinate" in cell
+        assert cell["value"] == "Name"
+
+        # スタイル情報は含まれない
+        assert "fill" not in cell
+        assert "width" not in cell
+        assert "height" not in cell
+
+    def test_parse_with_cell_styles_enabled(self):
+        """include_cell_styles=Trueでスタイル情報が含まれること"""
+        excel_bytes = self._create_formatted_excel()
+        self.mock_download_client.download_file.return_value = excel_bytes
+
+        parser = SharePointExcelParser(self.mock_download_client)
+        # include_cell_styles=Trueで解析
+        result_json = parser.parse_to_json(
+            "/test/formatted.xlsx", include_cell_styles=True
+        )
+
+        result = json.loads(result_json)
+        cell = result["sheets"][0]["rows"][0][0]
+
+        # 基本情報は含まれる
+        assert cell["value"] == "Name"
+        assert cell["coordinate"] == "A1"
+
+        # 背景色情報が含まれる
+        assert "fill" in cell
+        assert cell["fill"]["pattern_type"] == "solid"
+        assert "fg_color" in cell["fill"]
+        # 16進数形式であることを確認
+        if cell["fill"]["fg_color"]:
+            assert cell["fill"]["fg_color"].startswith("#")
+
+    def test_cell_styles_with_width_height(self):
+        """列幅・行高さが設定されたセルでwidth/heightが正しく返されること"""
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "SizedSheet"
+
+        # セルにデータを設定
+        ws["A1"] = "Wide Column"
+        ws["A2"] = "Tall Row"
+
+        # 列幅と行高さを設定
+        ws.column_dimensions["A"].width = 30
+        ws.row_dimensions[2].height = 50
+
+        excel_bytes = BytesIO()
+        wb.save(excel_bytes)
+        excel_bytes.seek(0)
+
+        self.mock_download_client.download_file.return_value = excel_bytes.getvalue()
+
+        parser = SharePointExcelParser(self.mock_download_client)
+        result_json = parser.parse_to_json("/test/sized.xlsx", include_cell_styles=True)
+
+        result = json.loads(result_json)
+        rows = result["sheets"][0]["rows"]
+
+        # A1セル: 列幅が設定されている
+        cell_a1 = rows[0][0]
+        assert cell_a1["coordinate"] == "A1"
+        assert "width" in cell_a1
+        assert cell_a1["width"] == 30
+
+        # A2セル: 列幅と行高さが設定されている
+        cell_a2 = rows[1][0]
+        assert cell_a2["coordinate"] == "A2"
+        assert "width" in cell_a2
+        assert cell_a2["width"] == 30
+        assert "height" in cell_a2
+        assert cell_a2["height"] == 50
+
+    def test_cell_styles_none_when_not_set(self):
+        """スタイルが設定されていないセルではfillなどが含まれないこと"""
+        # シンプルなExcelファイルを作成（スタイルなし）
+        excel_bytes = self._create_test_excel()
+        self.mock_download_client.download_file.return_value = excel_bytes
+
+        parser = SharePointExcelParser(self.mock_download_client)
+        # include_cell_styles=Trueで解析
+        result_json = parser.parse_to_json(
+            "/test/file.xlsx", include_cell_styles=True
+        )
+
+        result = json.loads(result_json)
+        cell = result["sheets"][0]["rows"][0][0]
+
+        # 基本情報は含まれる
+        assert cell["value"] == "Name"
+        assert cell["coordinate"] == "A1"
+
+        # スタイルが設定されていないので、fillやwidth/heightは含まれない
+        # （openpyxlがデフォルト値を返す場合もあるが、明示的に設定されていない）
+        # fill情報がない、またはpattern_typeがNoneの場合は含まれない
+        if "fill" in cell:
+            # fillが含まれる場合でも、pattern_typeが設定されていないはず
+            assert cell["fill"].get("pattern_type") is None or cell["fill"].get(
+                "pattern_type"
+            ) == "none"
