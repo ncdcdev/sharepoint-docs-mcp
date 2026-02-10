@@ -62,6 +62,7 @@ class SharePointExcelParser:
             workbook = load_workbook(file_stream, data_only=False, rich_text=True)
 
             matches = []
+            warnings = []
 
             # sheet_name 指定がある場合はそのシートを優先して検索
             if sheet_name:
@@ -76,6 +77,9 @@ class SharePointExcelParser:
                             self._scan_sheet(workbook[sn], sn, query, matches)
                 else:
                     # sheet_name が存在しない場合は「指定なし」と同じ扱いで全シート検索
+                    warnings.append(
+                        f"Sheet '{sheet_name}' not found. Searching all sheets instead."
+                    )
                     for sn in workbook.sheetnames:
                         self._scan_sheet(workbook[sn], sn, query, matches)
             else:
@@ -85,17 +89,17 @@ class SharePointExcelParser:
 
             logger.info(f"Found {len(matches)} matches for query '{query}'")
 
-            return json.dumps(
-                {
-                    "file_path": file_path,
-                    "mode": "search",
-                    "query": query,
-                    "match_count": len(matches),
-                    "matches": matches,
-                },
-                ensure_ascii=False,
-                indent=2,
-            )
+            result = {
+                "file_path": file_path,
+                "mode": "search",
+                "query": query,
+                "match_count": len(matches),
+                "matches": matches,
+            }
+            if warnings:
+                result["warnings"] = warnings
+
+            return json.dumps(result, ensure_ascii=False, indent=2)
 
         except Exception as e:
             logger.error(f"Failed to search cells in Excel file: {str(e)}")
@@ -273,6 +277,8 @@ class SharePointExcelParser:
         # 空シートを避ける意図
         if sheet.dimensions:
             # パフォーマンスのため_cellsを優先し、無い場合は公開APIにフォールバック
+            # 注意: _cellsはopenpyxlのプライベート属性のため、将来のバージョンで変更される可能性があります。
+            # その場合はiter_rows()を使用するフォールバックロジックが動作します。
             if hasattr(sheet, "_cells"):
                 # 実在セルのみを走査（高速）
                 for cell in sheet._cells.values():
@@ -434,6 +440,7 @@ class SharePointExcelParser:
 
         # frozen_rows検証（DoS対策）
         # frozen_rowsは補助的なメタ情報なので、上限超過時はリセットして処理を続行
+        frozen_rows_ignored = False
         if frozen_rows > config.excel_max_frozen_rows:
             logger.warning(
                 "固定行数が上限(%d)を超えたため、freeze_panes情報を無視します。"
@@ -443,6 +450,7 @@ class SharePointExcelParser:
                 frozen_rows,
                 sheet.title,
             )
+            frozen_rows_ignored = True
             frozen_rows = 0
             frozen_cols = 0  # freeze_panes全体を無視
 
@@ -456,15 +464,28 @@ class SharePointExcelParser:
         # frozen_rows=0 かつ cell_range指定時、expand_axis_range=Falseの場合のみ警告
         # expand_axis_range=Trueの場合は1行目/A列が含まれるため警告不要
         if frozen_rows == 0 and cell_range and not expand_axis_range:
-            sheet_data["header_detection"] = {
-                "status": "no_frozen_rows",
-                "frozen_rows": 0,
-                "note": "This sheet has no frozen rows. Headers are not automatically included.",
-                "suggestions": [
-                    "If headers are needed, read 'A1:Z5' to check header structure",
-                    "Or retry with expand_axis_range=True to include row 1 (for columns) or column A (for rows)",
-                ],
-            }
+            if frozen_rows_ignored:
+                # 上限超過で無視されたケース
+                sheet_data["header_detection"] = {
+                    "status": "ignored_due_to_limit",
+                    "frozen_rows": 0,
+                    "note": "This sheet has frozen rows but they exceed the limit and were ignored. Headers are not automatically included.",
+                    "suggestions": [
+                        "Read 'A1:Z5' to check header structure",
+                        "Or retry with expand_axis_range=True to include row 1 (for columns) or column A (for rows)",
+                    ],
+                }
+            else:
+                # 元々frozen_rowsが0のケース
+                sheet_data["header_detection"] = {
+                    "status": "no_frozen_rows",
+                    "frozen_rows": 0,
+                    "note": "This sheet has no frozen rows. Headers are not automatically included.",
+                    "suggestions": [
+                        "If headers are needed, read 'A1:Z5' to check header structure",
+                        "Or retry with expand_axis_range=True to include row 1 (for columns) or column A (for rows)",
+                    ],
+                }
 
         # セル範囲の正規化・拡張（cell_rangeがある場合）
         # マージセル情報のキャッシュに使用するため、先に計算する
@@ -701,6 +722,8 @@ class SharePointExcelParser:
 
                 # 実在セル（sheet._cells）だけから、結合範囲内の最小(row,col)の値を選ぶ
                 # 互換性のため_cellsの有無をチェックしてフォールバック
+                # 注意: _cellsはopenpyxlのプライベート属性のため、将来のバージョンで変更される可能性があります。
+                # その場合は公開APIを使用するフォールバックロジックが動作します。
                 if hasattr(sheet, "_cells"):
                     # プライベート属性を使った高速版
                     for (r, c), cell_obj in sheet._cells.items():
@@ -755,6 +778,7 @@ class SharePointExcelParser:
     def _expand_axis_range(self, range_str: str) -> str:
         """
         指定されたセル範囲を「枠分離」ではなく「方向に拡張」する。
+        - 単一セル (例: C5) -> C1:C5
         - 単一列 (例: Z100:Z200) -> Z1:Z200
         - 単一行 (例: D200:Z200) -> A200:Z200
         - それ以外（矩形など）はそのまま
