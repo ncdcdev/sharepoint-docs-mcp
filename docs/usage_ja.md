@@ -359,6 +359,58 @@ result = sharepoint_excel(
 )
 ```
 
+#### 検索のベストプラクティスと制限事項
+
+**クエリのガイドライン:**
+- クエリは空文字列や空白のみは許可されません
+- マッチ数を減らすため、具体的なキーワードを使用してください
+- スペース区切りで複数キーワードを指定するとAND検索になります（例: `"予算 2024"`）
+
+**パフォーマンスに関する考慮事項:**
+- 検索結果は**最大1000件**に制限されています
+- **500件以上**でクエリの絞り込みを推奨する警告が表示されます
+- `include_surrounding_cells=True` は行コンテキストが必要な場合のみ使用してください
+- 大量の結果が返される場合は、より具体的なキーワードで絞り込んでください
+
+**エラーハンドリング:**
+- 行データ取得に失敗した場合も、マッチ自体は `row_data_error` フィールド付きで返されます
+- レスポンスの `warnings` 配列で実用的なフィードバックを確認できます
+
+**使用例:**
+
+```python
+# 良い例: 具体的なキーワード
+result = sharepoint_excel(
+    file_path="/sites/finance/Shared Documents/report.xlsx",
+    query="Q4 売上 予測"
+)
+
+# 避けるべき: 汎用的すぎる（1000件以上ヒットする可能性）
+result = sharepoint_excel(
+    file_path="/sites/finance/Shared Documents/report.xlsx",
+    query="データ"
+)
+
+# 大量結果の処理
+import json
+result_json = sharepoint_excel(
+    file_path="/sites/finance/Shared Documents/report.xlsx",
+    query="予算"
+)
+result = json.loads(result_json)
+
+if "warnings" in result:
+    print("検索フィードバック:", result["warnings"])
+    # フィードバックに基づいてクエリを絞り込む
+
+# 安全な行コンテキスト使用
+result = sharepoint_excel(
+    file_path="/sites/finance/Shared Documents/report.xlsx",
+    query="合計売上 Q4",
+    include_surrounding_cells=True
+)
+```
+
 ### JSON出力形式
 
 #### 読み取りモード（デフォルト）

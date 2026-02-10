@@ -359,6 +359,58 @@ result = sharepoint_excel(
 )
 ```
 
+#### Search Best Practices and Limitations
+
+**Query Guidelines:**
+- Query cannot be empty or whitespace-only
+- Use specific keywords to reduce match count
+- Combine multiple keywords with spaces for AND search (e.g., `"budget 2024"`)
+
+**Performance Considerations:**
+- Search is limited to **1000 matches maximum**
+- Warning issued at **500+ matches** - consider refining query
+- Use `include_surrounding_cells=True` only when row context is needed
+- For large result sets, narrow down with more specific keywords
+
+**Error Handling:**
+- If row data retrieval fails, match is still returned with `row_data_error` field
+- Check response `warnings` array for actionable feedback
+
+**Examples:**
+
+```python
+# Good: Specific keywords
+result = sharepoint_excel(
+    file_path="/sites/finance/Shared Documents/report.xlsx",
+    query="Q4 revenue forecast"
+)
+
+# Avoid: Too generic (may hit 1000+ cells)
+result = sharepoint_excel(
+    file_path="/sites/finance/Shared Documents/report.xlsx",
+    query="data"
+)
+
+# Handle large results
+import json
+result_json = sharepoint_excel(
+    file_path="/sites/finance/Shared Documents/report.xlsx",
+    query="budget"
+)
+result = json.loads(result_json)
+
+if "warnings" in result:
+    print("Search feedback:", result["warnings"])
+    # Refine query based on feedback
+
+# Safe row context usage
+result = sharepoint_excel(
+    file_path="/sites/finance/Shared Documents/report.xlsx",
+    query="Total Revenue Q4",
+    include_surrounding_cells=True
+)
+```
+
 ### JSON Output Format
 
 #### Read Mode (Default)
