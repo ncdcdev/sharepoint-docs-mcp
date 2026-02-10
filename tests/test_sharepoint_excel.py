@@ -397,6 +397,258 @@ class TestSharePointExcelParser:
         assert "Sheet1" in sheets
         assert "Sheet2" in sheets
 
+    def _create_test_data_excel(self) -> bytes:
+        """テスト用のデータExcelファイルを作成（検索テスト用）"""
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Sheet1"
+        # ヘッダー行
+        ws["A1"] = "ID"
+        ws["B1"] = "名前"
+        ws["C1"] = "金額"
+        ws["D1"] = "備考"
+        # データ行
+        ws["A2"] = 1
+        ws["B2"] = "商品A"
+        ws["C2"] = 1000
+        ws["D2"] = "在庫あり"
+        ws["A3"] = 2
+        ws["B3"] = "商品B"
+        ws["C3"] = 2000
+        ws["D3"] = "売上好調"
+        ws["A4"] = 3
+        ws["B4"] = "商品C"
+        ws["C4"] = 1500
+        ws["D4"] = "在庫わずか"
+
+        excel_bytes = BytesIO()
+        wb.save(excel_bytes)
+        excel_bytes.seek(0)
+        return excel_bytes.getvalue()
+
+    def _create_search_test_excel(self) -> bytes:
+        """複数キーワード検索テスト用のExcelファイルを作成"""
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Sheet1"
+        ws["A1"] = "予算報告"
+        ws["A2"] = "売上予測"
+        ws["A3"] = "経費明細"
+        ws["A4"] = "利益計算"
+
+        ws2 = wb.create_sheet("Sheet2")
+        ws2["A1"] = "予算案"
+        ws2["A2"] = "データ"
+
+        excel_bytes = BytesIO()
+        wb.save(excel_bytes)
+        excel_bytes.seek(0)
+        return excel_bytes.getvalue()
+
+    def test_search_with_surrounding_cells_disabled(self):
+        """デフォルト動作（include_surrounding_cells=False）の確認"""
+        excel_bytes = self._create_test_data_excel()
+        self.mock_download_client.download_file.return_value = excel_bytes
+
+        parser = SharePointExcelParser(self.mock_download_client)
+        result_json = parser.search_cells(
+            "/test/file.xlsx", "商品B", include_surrounding_cells=False
+        )
+
+        result = json.loads(result_json)
+        assert result["match_count"] == 1
+        assert len(result["matches"]) == 1
+
+        match = result["matches"][0]
+        assert match["coordinate"] == "B3"
+        assert match["value"] == "商品B"
+        # row_dataは含まれない
+        assert "row_data" not in match
+
+    def test_search_with_surrounding_cells_enabled(self):
+        """include_surrounding_cells=Trueで行データ取得"""
+        excel_bytes = self._create_test_data_excel()
+        self.mock_download_client.download_file.return_value = excel_bytes
+
+        parser = SharePointExcelParser(self.mock_download_client)
+        result_json = parser.search_cells(
+            "/test/file.xlsx", "商品B", include_surrounding_cells=True
+        )
+
+        result = json.loads(result_json)
+        assert result["match_count"] == 1
+        match = result["matches"][0]
+
+        # row_dataが含まれる
+        assert "row_data" in match
+        row_data = match["row_data"]
+        assert len(row_data) == 4  # A3, B3, C3, D3
+
+        # 各セルのデータを確認
+        assert row_data[0]["coordinate"] == "A3"
+        assert row_data[0]["value"] == 2
+        assert row_data[1]["coordinate"] == "B3"
+        assert row_data[1]["value"] == "商品B"
+        assert row_data[2]["coordinate"] == "C3"
+        assert row_data[2]["value"] == 2000
+        assert row_data[3]["coordinate"] == "D3"
+        assert row_data[3]["value"] == "売上好調"
+
+    def test_search_with_surrounding_cells_multiple_matches(self):
+        """複数マッチ時の行データ取得"""
+        excel_bytes = self._create_test_data_excel()
+        self.mock_download_client.download_file.return_value = excel_bytes
+
+        parser = SharePointExcelParser(self.mock_download_client)
+        result_json = parser.search_cells(
+            "/test/file.xlsx", "在庫", include_surrounding_cells=True
+        )
+
+        result = json.loads(result_json)
+        assert result["match_count"] == 2
+        assert len(result["matches"]) == 2
+
+        # 1つ目のマッチ（D2: "在庫あり"）
+        match1 = result["matches"][0]
+        assert match1["coordinate"] == "D2"
+        assert match1["value"] == "在庫あり"
+        assert "row_data" in match1
+        assert len(match1["row_data"]) == 4
+        assert match1["row_data"][1]["value"] == "商品A"
+
+        # 2つ目のマッチ（D4: "在庫わずか"）
+        match2 = result["matches"][1]
+        assert match2["coordinate"] == "D4"
+        assert match2["value"] == "在庫わずか"
+        assert "row_data" in match2
+        assert len(match2["row_data"]) == 4
+        assert match2["row_data"][1]["value"] == "商品C"
+
+    def test_search_with_surrounding_cells_empty_cells(self):
+        """空セル（None）も含まれること確認"""
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Sheet1"
+        ws["A1"] = "データ"
+        ws["B1"] = None  # 空セル
+        ws["C1"] = "情報"
+
+        excel_bytes = BytesIO()
+        wb.save(excel_bytes)
+        excel_bytes.seek(0)
+
+        self.mock_download_client.download_file.return_value = excel_bytes.getvalue()
+
+        parser = SharePointExcelParser(self.mock_download_client)
+        result_json = parser.search_cells(
+            "/test/file.xlsx", "データ", include_surrounding_cells=True
+        )
+
+        result = json.loads(result_json)
+        assert result["match_count"] == 1
+        match = result["matches"][0]
+
+        # row_dataに空セルも含まれる
+        assert "row_data" in match
+        row_data = match["row_data"]
+        assert len(row_data) == 3
+        assert row_data[0]["value"] == "データ"
+        assert row_data[1]["value"] is None  # 空セル
+        assert row_data[2]["value"] == "情報"
+
+    def test_search_single_keyword_backward_compatible(self):
+        """単一キーワード（後方互換性）"""
+        excel_bytes = self._create_search_test_excel()
+        self.mock_download_client.download_file.return_value = excel_bytes
+
+        parser = SharePointExcelParser(self.mock_download_client)
+        result_json = parser.search_cells("/test/file.xlsx", "予算")
+
+        result = json.loads(result_json)
+        assert result["match_count"] == 2
+        # Sheet1の"予算報告"とSheet2の"予算案"
+        values = [m["value"] for m in result["matches"]]
+        assert "予算報告" in values
+        assert "予算案" in values
+
+    def test_search_multiple_keywords_comma_separated(self):
+        """カンマ区切りOR検索"""
+        excel_bytes = self._create_search_test_excel()
+        self.mock_download_client.download_file.return_value = excel_bytes
+
+        parser = SharePointExcelParser(self.mock_download_client)
+        result_json = parser.search_cells("/test/file.xlsx", "予算,利益")
+
+        result = json.loads(result_json)
+        # "予算報告", "予算案", "利益計算"の3つがマッチ
+        assert result["match_count"] == 3
+        values = [m["value"] for m in result["matches"]]
+        assert "予算報告" in values
+        assert "予算案" in values
+        assert "利益計算" in values
+
+    def test_search_multiple_keywords_with_spaces(self):
+        """前後スペースの処理"""
+        excel_bytes = self._create_search_test_excel()
+        self.mock_download_client.download_file.return_value = excel_bytes
+
+        parser = SharePointExcelParser(self.mock_download_client)
+        # スペースを含むキーワード指定
+        result_json = parser.search_cells("/test/file.xlsx", " 予算 , 利益 ")
+
+        result = json.loads(result_json)
+        # スペースがトリムされて正しくマッチ
+        assert result["match_count"] == 3
+        values = [m["value"] for m in result["matches"]]
+        assert "予算報告" in values
+        assert "予算案" in values
+        assert "利益計算" in values
+
+    def test_search_multiple_keywords_no_match(self):
+        """全キーワードでマッチなし"""
+        excel_bytes = self._create_search_test_excel()
+        self.mock_download_client.download_file.return_value = excel_bytes
+
+        parser = SharePointExcelParser(self.mock_download_client)
+        result_json = parser.search_cells("/test/file.xlsx", "在庫,配送")
+
+        result = json.loads(result_json)
+        assert result["match_count"] == 0
+        assert result["matches"] == []
+
+    def test_search_multiple_keywords_across_sheets(self):
+        """複数シートにまたがる検索"""
+        excel_bytes = self._create_search_test_excel()
+        self.mock_download_client.download_file.return_value = excel_bytes
+
+        parser = SharePointExcelParser(self.mock_download_client)
+        result_json = parser.search_cells("/test/file.xlsx", "予算,データ")
+
+        result = json.loads(result_json)
+        # "予算報告"(Sheet1), "予算案"(Sheet2), "データ"(Sheet2)
+        assert result["match_count"] == 3
+        sheets = [m["sheet"] for m in result["matches"]]
+        assert "Sheet1" in sheets
+        assert "Sheet2" in sheets
+
+    def test_search_multiple_keywords_with_surrounding_cells(self):
+        """両機能の組み合わせ"""
+        excel_bytes = self._create_search_test_excel()
+        self.mock_download_client.download_file.return_value = excel_bytes
+
+        parser = SharePointExcelParser(self.mock_download_client)
+        result_json = parser.search_cells(
+            "/test/file.xlsx", "予算,利益", include_surrounding_cells=True
+        )
+
+        result = json.loads(result_json)
+        assert result["match_count"] == 3
+
+        # 各マッチにrow_dataが含まれる
+        for match in result["matches"]:
+            assert "row_data" in match
+            assert len(match["row_data"]) > 0
+
     def test_parse_specific_sheet(self):
         """特定シートのみ取得するテスト"""
         excel_bytes = self._create_multi_sheet_excel()

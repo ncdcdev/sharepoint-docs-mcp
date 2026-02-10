@@ -456,6 +456,7 @@ def sharepoint_excel(
     include_frozen_rows: bool = True,
     include_cell_styles: bool = False,
     expand_axis_range: bool = False,
+    include_surrounding_cells: bool = False,
     ctx: Context | None = None,
 ) -> str:
     """
@@ -463,7 +464,7 @@ def sharepoint_excel(
 
     Args:
         file_path: Excelファイルのパス
-        query: 検索キーワード（指定すると検索モード）
+        query: 検索キーワード（カンマ区切りで複数指定可能、OR検索）
         sheet: シート名（特定シートのみ取得）
         cell_range: セル範囲（例: "A1:D10"）
             - 推奨形式: "A1:D10"（開始セル:終了セル）
@@ -478,6 +479,9 @@ def sharepoint_excel(
         expand_axis_range: 単一列/行の部分範囲を開始側に自動拡張（default: false）
             True: 例 "J50:J100" → "J1:J100"（行1に拡張）
             frozen_rows=0でヘッダー文脈が不明な場合に使用
+        include_surrounding_cells: 検索モード時、マッチした行の全セルを含める（default: false）
+            True: マッチしたセルと同じ行の全セルデータを取得（API呼び出しを96%削減）
+            False: マッチしたセルの座標と値のみ返す
         ctx: FastMCP context (injected automatically)
 
     Returns:
@@ -497,7 +501,12 @@ def sharepoint_excel(
 
         # 検索モード
         if query:
-            return parser.search_cells(file_path, query, sheet_name=sheet)
+            return parser.search_cells(
+                file_path,
+                query,
+                sheet_name=sheet,
+                include_surrounding_cells=include_surrounding_cells,
+            )
 
         # 読み取りモード
         return parser.parse_to_json(
@@ -544,22 +553,28 @@ def register_tools():
         mcp.tool(
             description=(
                 "Read or search Excel files in SharePoint. "
-                "Search mode: use 'query' parameter to find cells containing specific text (returns cell locations). "
-                "Read mode: use 'sheet' and 'cell_range' parameters to retrieve data from specific sections. "
-                "When cell_range is specified with include_frozen_rows=True (default), frozen rows are automatically "
-                "included even if they are outside the specified range. frozen_rows indicates the number of header rows "
-                "frozen at the top of the sheet (typically column headers). "
-                "Response includes cell data in 'rows' (value and coordinate) and structural information "
-                "(sheet name, dimensions, frozen_rows, frozen_cols, freeze_panes when present, merged_ranges when merged cells exist). "
-                "Cell styles (include_cell_styles, default: false): background colors and sizes. Use only for color-coded data extraction. "
-                "Header detection: For sheets with frozen_rows > 0, headers are automatically included with include_frozen_rows=True (default). "
-                "For sheets with frozen_rows=0, headers are not automatically included and context may be unclear. "
-                "ALWAYS read exactly 5 rows for header check: 'A1:Z5' (NOT 'A1:Z50' or more). "
-                "Prefer 'query' search when possible to locate data first. "
-                "Workflow: 1) Search OR read 'A1:Z5' for header check, "
-                "2) Read specific range (include_frozen_rows adds frozen headers automatically), "
-                "3) If frozen_rows=0 and header context is unclear, retry with expand_axis_range=True "
-                "to auto-include row 1 (for columns) or column A (for rows)."
+                # 検索モード
+                "Search mode: use 'query' parameter to find cells containing text. "
+                "Multiple keywords (comma-separated) perform OR search (e.g., 'budget,forecast'). "
+                "Set include_surrounding_cells=True to get entire row data for each match "
+                "(default: False, returns only matched cell). "
+                "Reduces API calls from N+1 to 1 when row context is needed. "
+                # 読み取りモード
+                "Read mode: use 'sheet' and 'cell_range' parameters to retrieve data. "
+                "When cell_range is specified with include_frozen_rows=True (default), "
+                "frozen rows are automatically included. "
+                # レスポンス構造
+                "Response includes cell data in 'rows' (value and coordinate) and "
+                "structural information (sheet name, dimensions, frozen_rows, etc). "
+                # スタイル情報
+                "Cell styles (include_cell_styles=False by default): background colors and sizes. "
+                # ヘッダー検出
+                "Header detection: For frozen_rows > 0, headers auto-included with include_frozen_rows=True. "
+                "For frozen_rows=0, read 'A1:Z5' for header check (max 5 rows). "
+                # 推奨ワークフロー
+                "Workflow: 1) Search with query (optionally include_surrounding_cells=True for context), "
+                "2) Read specific range if needed, "
+                "3) Use expand_axis_range=True if frozen_rows=0 and context unclear."
             )
         )(sharepoint_excel)
         logging.info("Registered tool: sharepoint_excel")

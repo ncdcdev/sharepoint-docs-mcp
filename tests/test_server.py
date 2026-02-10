@@ -244,7 +244,10 @@ class TestSharePointExcel:
 
                 # 検索メソッドが呼ばれることを確認
                 mock_excel_parser.search_cells.assert_called_once_with(
-                    "/sites/test/Shared Documents/test.xlsx", "売上", sheet_name=None
+                    "/sites/test/Shared Documents/test.xlsx",
+                    "売上",
+                    sheet_name=None,
+                    include_surrounding_cells=False,
                 )
                 # parse_to_jsonは呼ばれない
                 mock_excel_parser.parse_to_json.assert_not_called()

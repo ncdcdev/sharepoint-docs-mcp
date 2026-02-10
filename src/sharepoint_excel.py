@@ -34,20 +34,23 @@ class SharePointExcelParser:
         file_path: str,
         query: str,
         sheet_name: str | None = None,
+        include_surrounding_cells: bool = False,
     ) -> str:
         """
         セル内容を検索して該当位置を返す
 
         Args:
             file_path: Excelファイルのパス
-            query: 検索キーワード
+            query: 検索キーワード（カンマ区切りで複数指定可能、OR検索）
             sheet_name: 検索対象シート名（指定時はまずそのシートを検索し、マッチ0件なら全シート検索にフォールバック）
+            include_surrounding_cells: Trueの場合、マッチしたセルと同じ行の全セルを含める（デフォルト: False）
 
         Returns:
             JSON文字列（マッチしたセルの位置情報）
         """
         logger.info(
-            f"Searching cells in Excel file: {file_path} (query={query}, sheet={sheet_name})"
+            f"Searching cells in Excel file: {file_path} (query={query}, sheet={sheet_name}, "
+            f"include_surrounding_cells={include_surrounding_cells})"
         )
 
         try:
@@ -67,25 +70,49 @@ class SharePointExcelParser:
             # sheet_name 指定がある場合はそのシートを優先して検索
             if sheet_name:
                 if sheet_name in workbook.sheetnames:
-                    self._scan_sheet(workbook[sheet_name], sheet_name, query, matches)
+                    self._scan_sheet(
+                        workbook[sheet_name],
+                        sheet_name,
+                        query,
+                        matches,
+                        include_surrounding_cells=include_surrounding_cells,
+                    )
 
                     # マッチが無ければ全シート走査にフォールバック
                     if len(matches) == 0:
                         for sn in workbook.sheetnames:
                             if sn == sheet_name:
                                 continue
-                            self._scan_sheet(workbook[sn], sn, query, matches)
+                            self._scan_sheet(
+                                workbook[sn],
+                                sn,
+                                query,
+                                matches,
+                                include_surrounding_cells=include_surrounding_cells,
+                            )
                 else:
                     # sheet_name が存在しない場合は「指定なし」と同じ扱いで全シート検索
                     warnings.append(
                         f"Sheet '{sheet_name}' not found. Searching all sheets instead."
                     )
                     for sn in workbook.sheetnames:
-                        self._scan_sheet(workbook[sn], sn, query, matches)
+                        self._scan_sheet(
+                            workbook[sn],
+                            sn,
+                            query,
+                            matches,
+                            include_surrounding_cells=include_surrounding_cells,
+                        )
             else:
                 # 全シート検索
                 for sn in workbook.sheetnames:
-                    self._scan_sheet(workbook[sn], sn, query, matches)
+                    self._scan_sheet(
+                        workbook[sn],
+                        sn,
+                        query,
+                        matches,
+                        include_surrounding_cells=include_surrounding_cells,
+                    )
 
             logger.info(f"Found {len(matches)} matches for query '{query}'")
 
@@ -270,10 +297,21 @@ class SharePointExcelParser:
         sheet_name_for_result: str,
         query: str,
         matches: list[dict[str, Any]],
+        include_surrounding_cells: bool = False,
     ) -> None:
         """
         シート内のセルを走査してqueryに一致するセルをmatchesに追加する
+
+        Args:
+            sheet: 走査対象のシート
+            sheet_name_for_result: 結果に含めるシート名
+            query: 検索クエリ（カンマ区切りで複数キーワード指定可能）
+            matches: マッチ結果を格納するリスト
+            include_surrounding_cells: Trueの場合、マッチしたセルと同じ行の全セルを含める
         """
+        # カンマ区切りで複数キーワードを解析
+        keywords = [kw.strip() for kw in query.split(",") if kw.strip()]
+
         # 空シートを避ける意図
         if sheet.dimensions:
             # パフォーマンスのため_cellsを優先し、無い場合は公開APIにフォールバック
@@ -281,31 +319,57 @@ class SharePointExcelParser:
             # その場合はiter_rows()を使用するフォールバックロジックが動作します。
             if hasattr(sheet, "_cells"):
                 # 実在セルのみを走査（高速）
-                for cell in sheet._cells.values():
+                # Note: リストに変換してから反復処理することで、
+                # row_data取得時のシート内部の辞書変更によるエラーを回避
+                for cell in list(sheet._cells.values()):
                     if cell.value is not None:
                         cell_value_str = str(cell.value)
-                        if query in cell_value_str:
-                            matches.append(
-                                {
-                                    "sheet": sheet_name_for_result,
-                                    "coordinate": cell.coordinate,
-                                    "value": self._serialize_value(cell.value),
-                                }
-                            )
+                        # OR検索: いずれかのキーワードにマッチ
+                        if any(keyword in cell_value_str for keyword in keywords):
+                            match_entry = {
+                                "sheet": sheet_name_for_result,
+                                "coordinate": cell.coordinate,
+                                "value": self._serialize_value(cell.value),
+                            }
+
+                            # 行データを追加
+                            if include_surrounding_cells:
+                                row_cells = sheet[cell.row]
+                                match_entry["row_data"] = [
+                                    {
+                                        "value": self._serialize_value(c.value),
+                                        "coordinate": c.coordinate,
+                                    }
+                                    for c in row_cells
+                                ]
+
+                            matches.append(match_entry)
             else:
                 # openpyxl公開APIを使用（互換性確保）
                 for row in sheet.iter_rows(values_only=False):
                     for cell in row:
                         if cell.value is not None:
                             cell_value_str = str(cell.value)
-                            if query in cell_value_str:
-                                matches.append(
-                                    {
-                                        "sheet": sheet_name_for_result,
-                                        "coordinate": cell.coordinate,
-                                        "value": self._serialize_value(cell.value),
-                                    }
-                                )
+                            # OR検索: いずれかのキーワードにマッチ
+                            if any(keyword in cell_value_str for keyword in keywords):
+                                match_entry = {
+                                    "sheet": sheet_name_for_result,
+                                    "coordinate": cell.coordinate,
+                                    "value": self._serialize_value(cell.value),
+                                }
+
+                                # 行データを追加
+                                if include_surrounding_cells:
+                                    row_cells = sheet[cell.row]
+                                    match_entry["row_data"] = [
+                                        {
+                                            "value": self._serialize_value(c.value),
+                                            "coordinate": c.coordinate,
+                                        }
+                                        for c in row_cells
+                                    ]
+
+                                matches.append(match_entry)
 
     def _calculate_header_range(self, cell_range: str, frozen_rows: int) -> str | None:
         """
