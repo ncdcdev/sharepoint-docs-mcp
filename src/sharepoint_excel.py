@@ -464,28 +464,26 @@ class SharePointExcelParser:
         # frozen_rows=0 かつ cell_range指定時、expand_axis_range=Falseの場合のみ警告
         # expand_axis_range=Trueの場合は1行目/A列が含まれるため警告不要
         if frozen_rows == 0 and cell_range and not expand_axis_range:
-            if frozen_rows_ignored:
-                # 上限超過で無視されたケース
-                sheet_data["header_detection"] = {
-                    "status": "ignored_due_to_limit",
-                    "frozen_rows": 0,
-                    "note": "This sheet has frozen rows but they exceed the limit and were ignored. Headers are not automatically included.",
-                    "suggestions": [
-                        "Read 'A1:Z5' to check header structure",
-                        "Or retry with expand_axis_range=True to include row 1 (for columns) or column A (for rows)",
-                    ],
-                }
-            else:
-                # 元々frozen_rowsが0のケース
-                sheet_data["header_detection"] = {
-                    "status": "no_frozen_rows",
-                    "frozen_rows": 0,
-                    "note": "This sheet has no frozen rows. Headers are not automatically included.",
-                    "suggestions": [
-                        "If headers are needed, read 'A1:Z5' to check header structure",
-                        "Or retry with expand_axis_range=True to include row 1 (for columns) or column A (for rows)",
-                    ],
-                }
+            status, note = (
+                (
+                    "ignored_due_to_limit",
+                    "This sheet has frozen rows but they exceed the limit and were ignored. Headers are not automatically included.",
+                )
+                if frozen_rows_ignored
+                else (
+                    "no_frozen_rows",
+                    "This sheet has no frozen rows. Headers are not automatically included.",
+                )
+            )
+            sheet_data["header_detection"] = {
+                "status": status,
+                "frozen_rows": 0,
+                "note": note,
+                "suggestions": [
+                    "If headers are needed, read 'A1:Z5' to check header structure",
+                    "Or retry with expand_axis_range=True to include row 1 (for columns) or column A (for rows)",
+                ],
+            }
 
         # セル範囲の正規化・拡張（cell_rangeがある場合）
         # マージセル情報のキャッシュに使用するため、先に計算する
