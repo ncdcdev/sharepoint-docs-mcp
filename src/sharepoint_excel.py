@@ -18,6 +18,10 @@ from src.config import config
 
 logger = logging.getLogger(__name__)
 
+# 検索マッチ数の制限（DoS対策）
+MAX_SEARCH_MATCHES = 1000  # 最大マッチ数
+MAX_SEARCH_MATCHES_WARNING = 500  # 警告閾値
+
 
 class SharePointExcelParser:
     """SharePoint Excelファイル解析クライアント"""
@@ -42,12 +46,23 @@ class SharePointExcelParser:
         Args:
             file_path: Excelファイルのパス
             query: 検索キーワード（スペース区切りで複数指定可能、AND検索）
+                   空文字列や空白のみは許可されない
             sheet_name: 検索対象シート名（指定時はまずそのシートを検索し、マッチ0件なら全シート検索にフォールバック）
             include_surrounding_cells: Trueの場合、マッチしたセルと同じ行の全セルを含める（デフォルト: False）
 
         Returns:
             JSON文字列（マッチしたセルの位置情報）
+
+        Raises:
+            ValueError: queryが空または空白のみの場合
         """
+        # Query validation
+        if not query or not query.strip():
+            raise ValueError(
+                "Search query cannot be empty. "
+                "Please provide at least one keyword to search for."
+            )
+
         logger.info(
             f"Searching cells in Excel file: {file_path} (query={query}, sheet={sheet_name}, "
             f"include_surrounding_cells={include_surrounding_cells})"
@@ -116,11 +131,25 @@ class SharePointExcelParser:
 
             logger.info(f"Found {len(matches)} matches for query '{query}'")
 
+            # 結果数に応じた警告
+            match_count = len(matches)
+
+            if match_count >= MAX_SEARCH_MATCHES:
+                warnings.append(
+                    f"Search reached maximum limit ({MAX_SEARCH_MATCHES} matches). "
+                    "Results may be incomplete. Consider using more specific keywords."
+                )
+            elif match_count >= MAX_SEARCH_MATCHES_WARNING:
+                warnings.append(
+                    f"Large number of matches ({match_count}). "
+                    "Consider refining your query for more precise results."
+                )
+
             result = {
                 "file_path": file_path,
                 "mode": "search",
                 "query": query,
-                "match_count": len(matches),
+                "match_count": match_count,
                 "matches": matches,
             }
             if warnings:
@@ -298,6 +327,7 @@ class SharePointExcelParser:
         query: str,
         matches: list[dict[str, Any]],
         include_surrounding_cells: bool = False,
+        max_matches: int | None = None,
     ) -> None:
         """
         シート内のセルを走査してqueryに一致するセルをmatchesに追加する
@@ -308,9 +338,11 @@ class SharePointExcelParser:
             query: 検索クエリ（スペース区切りで複数キーワード指定可能、AND検索）
             matches: マッチ結果を格納するリスト
             include_surrounding_cells: Trueの場合、マッチしたセルと同じ行の全セルを含める
+            max_matches: 最大マッチ数（Noneの場合はMAX_SEARCH_MATCHES使用）
         """
         # スペース区切りで複数キーワードを解析（AND検索）
         keywords = [kw.strip() for kw in query.split() if kw.strip()]
+        limit = max_matches if max_matches is not None else MAX_SEARCH_MATCHES
 
         # 空シートを避ける意図
         if sheet.dimensions:
@@ -322,6 +354,14 @@ class SharePointExcelParser:
                 # Note: リストに変換してから反復処理することで、
                 # row_data取得時のシート内部の辞書変更によるエラーを回避
                 for cell in list(sheet._cells.values()):
+                    # 制限チェック
+                    if len(matches) >= limit:
+                        logger.warning(
+                            f"Reached maximum match count ({limit}) in sheet '{sheet_name_for_result}'. "
+                            "Consider refining your search query for better results."
+                        )
+                        break
+
                     if cell.value is not None:
                         cell_value_str = str(cell.value)
                         # AND検索: 全てのキーワードにマッチ
@@ -334,20 +374,41 @@ class SharePointExcelParser:
 
                             # 行データを追加
                             if include_surrounding_cells:
-                                row_cells = sheet[cell.row]
-                                match_entry["row_data"] = [
-                                    {
-                                        "value": self._serialize_value(c.value),
-                                        "coordinate": c.coordinate,
-                                    }
-                                    for c in row_cells
-                                ]
+                                try:
+                                    row_cells = sheet[cell.row]
+                                    match_entry["row_data"] = [
+                                        {
+                                            "value": self._serialize_value(c.value),
+                                            "coordinate": c.coordinate,
+                                        }
+                                        for c in row_cells
+                                    ]
+                                except Exception as e:
+                                    # row_data取得失敗時はマッチエントリのみ保持（フォールバック）
+                                    logger.warning(
+                                        f"Failed to get row data for cell {cell.coordinate} "
+                                        f"in sheet '{sheet_name_for_result}': {e}"
+                                    )
+                                    # row_dataなしでマッチを記録
+                                    match_entry["row_data_error"] = str(e)
 
                             matches.append(match_entry)
             else:
                 # openpyxl公開APIを使用（互換性確保）
                 for row in sheet.iter_rows(values_only=False):
+                    # 制限チェック
+                    if len(matches) >= limit:
+                        logger.warning(
+                            f"Reached maximum match count ({limit}) in sheet '{sheet_name_for_result}'. "
+                            "Consider refining your search query for better results."
+                        )
+                        break
+
                     for cell in row:
+                        # 内側のループでも制限チェック
+                        if len(matches) >= limit:
+                            break
+
                         if cell.value is not None:
                             cell_value_str = str(cell.value)
                             # AND検索: 全てのキーワードにマッチ
@@ -360,14 +421,23 @@ class SharePointExcelParser:
 
                                 # 行データを追加
                                 if include_surrounding_cells:
-                                    row_cells = sheet[cell.row]
-                                    match_entry["row_data"] = [
-                                        {
-                                            "value": self._serialize_value(c.value),
-                                            "coordinate": c.coordinate,
-                                        }
-                                        for c in row_cells
-                                    ]
+                                    try:
+                                        row_cells = sheet[cell.row]
+                                        match_entry["row_data"] = [
+                                            {
+                                                "value": self._serialize_value(c.value),
+                                                "coordinate": c.coordinate,
+                                            }
+                                            for c in row_cells
+                                        ]
+                                    except Exception as e:
+                                        # row_data取得失敗時はマッチエントリのみ保持（フォールバック）
+                                        logger.warning(
+                                            f"Failed to get row data for cell {cell.coordinate} "
+                                            f"in sheet '{sheet_name_for_result}': {e}"
+                                        )
+                                        # row_dataなしでマッチを記録
+                                        match_entry["row_data_error"] = str(e)
 
                                 matches.append(match_entry)
 
