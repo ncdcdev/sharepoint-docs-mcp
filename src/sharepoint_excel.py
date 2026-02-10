@@ -122,6 +122,7 @@ class SharePointExcelParser:
         Returns:
             JSON文字列
             - 各セルのデータ: value（値）、coordinate（座標）
+            - 構造情報: シート名、dimensions（シート全体のセル範囲、例: "A1:D10"）
             - 構造情報: frozen_rows（固定行数）、frozen_cols（固定列数）
             - 条件付き構造情報: freeze_panes（存在する場合）、merged_ranges（結合セルが存在する場合）
         """
@@ -304,7 +305,11 @@ class SharePointExcelParser:
 
         早期リターン条件:
         - frozen_rows=0: ヘッダーなし
-        - start_row <= frozen_rows: 既にヘッダーを含む
+        - start_row == 1: 既に1行目から開始（ヘッダー全体を含む）
+
+        部分的な重なり処理:
+        - frozen_rows=2, cell_range="A2:B6" の場合
+          → 不足分 "A1:B1" を返して、最終的に "A1:B6" になる
         """
         # frozen_rowsが0の場合はヘッダーなし
         if frozen_rows == 0:
@@ -322,9 +327,15 @@ class SharePointExcelParser:
         start_col_letter, start_row = coordinate_from_string(start)
         end_col_letter, _ = coordinate_from_string(end)
 
-        # 開始行が既にヘッダーを含む場合は重複回避
-        if start_row <= frozen_rows:
+        # 既に1行目から開始している場合は追加不要（ヘッダー全体を含む）
+        if start_row == 1:
             return None
+
+        # 部分的な重なりがある場合は、不足している上部のヘッダー行を追加
+        if start_row <= frozen_rows:
+            # 1行目から(start_row-1)行目までを追加
+            header_range = f"{start_col_letter}1:{end_col_letter}{start_row - 1}"
+            return header_range
 
         # ヘッダー範囲を計算: {start_col}1:{end_col}{frozen_rows}
         header_range = f"{start_col_letter}1:{end_col_letter}{frozen_rows}"
