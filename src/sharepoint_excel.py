@@ -41,7 +41,7 @@ class SharePointExcelParser:
 
         Args:
             file_path: Excelファイルのパス
-            query: 検索キーワード（カンマ区切りで複数指定可能、OR検索）
+            query: 検索キーワード（スペース区切りで複数指定可能、AND検索）
             sheet_name: 検索対象シート名（指定時はまずそのシートを検索し、マッチ0件なら全シート検索にフォールバック）
             include_surrounding_cells: Trueの場合、マッチしたセルと同じ行の全セルを含める（デフォルト: False）
 
@@ -305,12 +305,12 @@ class SharePointExcelParser:
         Args:
             sheet: 走査対象のシート
             sheet_name_for_result: 結果に含めるシート名
-            query: 検索クエリ（カンマ区切りで複数キーワード指定可能）
+            query: 検索クエリ（スペース区切りで複数キーワード指定可能、AND検索）
             matches: マッチ結果を格納するリスト
             include_surrounding_cells: Trueの場合、マッチしたセルと同じ行の全セルを含める
         """
-        # カンマ区切りで複数キーワードを解析
-        keywords = [kw.strip() for kw in query.split(",") if kw.strip()]
+        # スペース区切りで複数キーワードを解析（AND検索）
+        keywords = [kw.strip() for kw in query.split() if kw.strip()]
 
         # 空シートを避ける意図
         if sheet.dimensions:
@@ -324,8 +324,8 @@ class SharePointExcelParser:
                 for cell in list(sheet._cells.values()):
                     if cell.value is not None:
                         cell_value_str = str(cell.value)
-                        # OR検索: いずれかのキーワードにマッチ
-                        if any(keyword in cell_value_str for keyword in keywords):
+                        # AND検索: 全てのキーワードにマッチ
+                        if all(keyword in cell_value_str for keyword in keywords):
                             match_entry = {
                                 "sheet": sheet_name_for_result,
                                 "coordinate": cell.coordinate,
@@ -350,8 +350,8 @@ class SharePointExcelParser:
                     for cell in row:
                         if cell.value is not None:
                             cell_value_str = str(cell.value)
-                            # OR検索: いずれかのキーワードにマッチ
-                            if any(keyword in cell_value_str for keyword in keywords):
+                            # AND検索: 全てのキーワードにマッチ
+                            if all(keyword in cell_value_str for keyword in keywords):
                                 match_entry = {
                                     "sheet": sheet_name_for_result,
                                     "coordinate": cell.coordinate,

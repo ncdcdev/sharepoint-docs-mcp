@@ -464,7 +464,7 @@ def sharepoint_excel(
 
     Args:
         file_path: Excelファイルのパス
-        query: 検索キーワード（カンマ区切りで複数指定可能、OR検索）
+        query: 検索キーワード（スペース区切りで複数指定可能、AND検索）
         sheet: シート名（特定シートのみ取得）
         cell_range: セル範囲（例: "A1:D10"）
             - 推奨形式: "A1:D10"（開始セル:終了セル）
@@ -555,7 +555,7 @@ def register_tools():
                 "Read or search Excel files in SharePoint. "
                 # 検索モード
                 "Search mode: use 'query' parameter to find cells containing text. "
-                "Multiple keywords (comma-separated) perform OR search (e.g., 'budget,forecast'). "
+                "Multiple keywords (space-separated) perform AND search (e.g., 'budget forecast' finds cells containing both). "
                 "Set include_surrounding_cells=True to get entire row data for each match "
                 "(default: False, returns only matched cell). "
                 "Reduces API calls from N+1 to 1 when row context is needed. "
