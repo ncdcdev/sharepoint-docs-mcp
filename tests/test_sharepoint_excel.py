@@ -1498,10 +1498,6 @@ class TestSharePointExcelParser:
         assert cell["coordinate"] == "A1"
 
         # スタイルが設定されていないので、fillやwidth/heightは含まれない
-        # （openpyxlがデフォルト値を返す場合もあるが、明示的に設定されていない）
-        # fill情報がない、またはpattern_typeがNoneの場合は含まれない
-        if "fill" in cell:
-            # fillが含まれる場合でも、pattern_typeが設定されていないはず
-            assert cell["fill"].get("pattern_type") is None or cell["fill"].get(
-                "pattern_type"
-            ) == "none"
+        assert "fill" not in cell
+        assert "width" not in cell
+        assert "height" not in cell

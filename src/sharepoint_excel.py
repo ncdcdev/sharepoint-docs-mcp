@@ -526,6 +526,19 @@ class SharePointExcelParser:
         if merged_ranges:
             sheet_data["merged_ranges"] = merged_ranges
 
+        # セルサイズのキャッシュを構築（パフォーマンス最適化）
+        col_widths: dict[str, float] | None = None
+        row_heights: dict[int, float] | None = None
+        if include_cell_styles:
+            col_widths = {}
+            row_heights = {}
+            for col_letter, dim in sheet.column_dimensions.items():
+                if dim.width:
+                    col_widths[col_letter] = dim.width
+            for row_num, dim in sheet.row_dimensions.items():
+                if dim.height:
+                    row_heights[row_num] = dim.height
+
         # データ取得
         if cell_range:
             # ヘッダー自動追加（include_frozen_rows=Trueの場合）
@@ -540,6 +553,8 @@ class SharePointExcelParser:
                         include_cell_styles,
                         merged_cell_map,
                         merged_anchor_value_map,
+                        col_widths,
+                        row_heights,
                     )
                 )
 
@@ -552,6 +567,8 @@ class SharePointExcelParser:
                     include_cell_styles,
                     merged_cell_map,
                     merged_anchor_value_map,
+                    col_widths,
+                    row_heights,
                 )
             )
 
@@ -566,6 +583,8 @@ class SharePointExcelParser:
                         include_cell_styles,
                         merged_cell_map,
                         merged_anchor_value_map,
+                        col_widths,
+                        row_heights,
                     )
                 )
 
@@ -754,6 +773,8 @@ class SharePointExcelParser:
         include_cell_styles: bool = False,
         merged_cell_map: dict[str, str] | None = None,
         merged_anchor_value_map: dict[str, Any] | None = None,
+        col_widths: dict[str, float] | None = None,
+        row_heights: dict[int, float] | None = None,
     ) -> dict[str, Any]:
         """
         セルを解析してdict形式で返す
@@ -763,6 +784,8 @@ class SharePointExcelParser:
             include_cell_styles: セルのスタイル情報を含めるか（デフォルト: False）
             merged_cell_map: マージセル座標からマージ範囲へのマップ（パフォーマンス最適化用）
             merged_anchor_value_map: マージ範囲 -> アンカー値 のマップ（結合セルの値埋め用）
+            col_widths: 列幅のキャッシュ（パフォーマンス最適化用）
+            row_heights: 行高さのキャッシュ（パフォーマンス最適化用）
 
         Returns:
             セルデータのdict
@@ -807,17 +830,12 @@ class SharePointExcelParser:
             # MergedCellの場合は属性が存在しないため、hasattrでチェック
             if hasattr(cell, "column_letter") and hasattr(cell, "row"):
                 if cell.column_letter and cell.row:
-                    sheet = cell.parent
-                    # 列幅
-                    if cell.column_letter in sheet.column_dimensions:
-                        col_dim = sheet.column_dimensions[cell.column_letter]
-                        if col_dim.width:
-                            cell_data["width"] = col_dim.width
-                    # 行高さ
-                    if cell.row in sheet.row_dimensions:
-                        row_dim = sheet.row_dimensions[cell.row]
-                        if row_dim.height:
-                            cell_data["height"] = row_dim.height
+                    # キャッシュから列幅を取得（パフォーマンス最適化）
+                    if col_widths and cell.column_letter in col_widths:
+                        cell_data["width"] = col_widths[cell.column_letter]
+                    # キャッシュから行高さを取得（パフォーマンス最適化）
+                    if row_heights and cell.row in row_heights:
+                        cell_data["height"] = row_heights[cell.row]
 
         return cell_data
 
@@ -827,6 +845,8 @@ class SharePointExcelParser:
         include_cell_styles: bool = False,
         merged_cell_map: dict[str, str] | None = None,
         merged_anchor_value_map: dict[str, Any] | None = None,
+        col_widths: dict[str, float] | None = None,
+        row_heights: dict[int, float] | None = None,
     ) -> list[list[dict[str, Any]]]:
         """
         行データを解析してリスト形式で返す（コード重複削減用ヘルパー）
@@ -836,6 +856,8 @@ class SharePointExcelParser:
             include_cell_styles: セルのスタイル情報を含めるか
             merged_cell_map: マージセル情報
             merged_anchor_value_map: マージ範囲 -> アンカー値
+            col_widths: 列幅のキャッシュ（パフォーマンス最適化用）
+            row_heights: 行高さのキャッシュ（パフォーマンス最適化用）
 
         Returns:
             解析された行データのリスト
@@ -848,6 +870,8 @@ class SharePointExcelParser:
                     include_cell_styles,
                     merged_cell_map,
                     merged_anchor_value_map,
+                    col_widths,
+                    row_heights,
                 )
                 for cell in row
             ]
