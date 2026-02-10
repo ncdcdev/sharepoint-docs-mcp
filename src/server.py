@@ -555,10 +555,13 @@ def register_tools():
                 "Read or search Excel files in SharePoint. "
                 # 検索モード
                 "Search mode: use 'query' parameter to find cells containing text. "
-                "Multiple keywords (space-separated) perform AND search (e.g., 'budget forecast' finds cells containing both). "
+                "Multiple keywords (space-separated) perform AND search (e.g., 'budget forecast' finds cells with both). "
+                "Query cannot be empty or whitespace-only. "
                 "Set include_surrounding_cells=True to get entire row data for each match "
                 "(default: False, returns only matched cell). "
                 "Reduces API calls from N+1 to 1 when row context is needed. "
+                "WARNING: Search is limited to 1000 matches max. "
+                "If you get 500+ matches, consider refining your query with more specific keywords. "
                 # 読み取りモード
                 "Read mode: use 'sheet' and 'cell_range' parameters to retrieve data. "
                 "When cell_range is specified with include_frozen_rows=True (default), "
@@ -566,15 +569,20 @@ def register_tools():
                 # レスポンス構造
                 "Response includes cell data in 'rows' (value and coordinate) and "
                 "structural information (sheet name, dimensions, frozen_rows, etc). "
+                "Search responses may include 'warnings' array for actionable feedback. "
+                # エラーハンドリング
+                "Error handling: If row_data retrieval fails with include_surrounding_cells=True, "
+                "match is still returned with 'row_data_error' field. "
                 # スタイル情報
                 "Cell styles (include_cell_styles=False by default): background colors and sizes. "
                 # ヘッダー検出
                 "Header detection: For frozen_rows > 0, headers auto-included with include_frozen_rows=True. "
                 "For frozen_rows=0, read 'A1:Z5' for header check (max 5 rows). "
                 # 推奨ワークフロー
-                "Workflow: 1) Search with query (optionally include_surrounding_cells=True for context), "
-                "2) Read specific range if needed, "
-                "3) Use expand_axis_range=True if frozen_rows=0 and context unclear."
+                "Workflow: 1) Search with specific keywords (avoid too generic terms), "
+                "2) If 500+ matches, refine query, "
+                "3) Use include_surrounding_cells=True for context when needed, "
+                "4) Read specific range if more data required."
             )
         )(sharepoint_excel)
         logging.info("Registered tool: sharepoint_excel")
