@@ -208,6 +208,7 @@ results = sharepoint_docs_search(
 | `query` | str \| None | None | 検索キーワード（検索モードを有効化） |
 | `sheet` | str \| None | None | シート名（特定シートのみ取得） |
 | `cell_range` | str \| None | None | セル範囲（例: "A1:D10"） |
+| `include_row_data` | bool | False | 検索マッチごとに行全体のデータを含める（検索モード専用） |
 
 ### 基本的なワークフロー
 
@@ -247,6 +248,53 @@ result = sharepoint_excel(
   ]
 }
 ```
+
+**行データ付き検索（`include_row_data=True`）:**
+
+`include_row_data=True`を使用すると、各マッチの行全体のデータを1回の呼び出しで取得できます（N+1回の読み取りを回避）。
+
+```python
+result = sharepoint_excel(
+    file_path="/sites/finance/Shared Documents/report.xlsx",
+    query="予算",
+    include_row_data=True
+)
+```
+
+```json
+{
+  "matches": [
+    {
+      "sheet": "Sheet1",
+      "coordinate": "B5",
+      "value": "月間予算",
+      "row_data": [
+        {"coordinate": "A5", "value": "カテゴリ"},
+        {"coordinate": "B5", "value": "月間予算"},
+        {"coordinate": "C5", "value": 50000}
+      ]
+    }
+  ]
+}
+```
+
+**パフォーマンス目安:**
+- **小規模** (<50件): 効果大、推奨
+- **中規模** (50-200件): 効果あり、レスポンスサイズに注意
+- **大規模** (>200件): レスポンスサイズへの影響を考慮
+
+**重要な注意事項:**
+- `row_data` にはマッチした行の非nullセルのみが含まれます
+- `row_data` にはヘッダー行は含まれません（frozen_rows設定時も同様）
+- 列の意味を理解するには、先に `A1:Z5` を読み取ってヘッダーコンテキストを確認してください
+- **同一行に複数マッチがある場合**: 各マッチに独立した `row_data` が含まれます（重複）
+  - 例: "予算" が A5 と B5 の両方にマッチした場合、両方のマッチに同じ row_data が含まれます
+  - 各マッチが自己完結していますが、レスポンスサイズが増加する可能性があります
+
+**実証済みユースケース:**
+- 23件のマッチを1回の呼び出しで処理（`include_row_data` なしでは24回必要）
+- トークン削減: 約2,300トークン
+- レスポンス時間: 大幅短縮
 
 #### 2. 全データ取得（デフォルト）
 ```python
