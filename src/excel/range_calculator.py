@@ -4,8 +4,12 @@ Excel範囲計算ユーティリティ
 セル範囲の計算・変換・検証を担当するヘルパークラス
 """
 
+import logging
+
 from openpyxl.utils import column_index_from_string, get_column_letter
 from openpyxl.utils.cell import coordinate_from_string
+
+logger = logging.getLogger(__name__)
 
 
 class ExcelRangeCalculator:
@@ -127,7 +131,7 @@ class ExcelRangeCalculator:
             try:
                 col, row = coordinate_from_string(raw.replace("$", ""))
                 return f"{col}1:{col}{row}"
-            except Exception:
+            except ValueError:
                 return range_str
 
         start_cell, end_cell = raw.split(":", 1)
@@ -160,33 +164,36 @@ class ExcelRangeCalculator:
             range_str: セル範囲（例: "A1:D10" または "A1:XFD1048576"）
 
         Returns:
-            (rows, cols)のタプル
-
-        Raises:
-            ValueError: 逆順序の範囲を検出した場合
+            (rows, cols)のタプル。
+            エラー時は (0, 0) を返す。
         """
-        if ":" not in range_str:
-            # 単一セルの場合
-            return (1, 1)
+        try:
+            if ":" not in range_str:
+                # 単一セルの場合
+                return (1, 1)
 
-        start_cell, end_cell = range_str.split(":")
-        start_col, start_row = coordinate_from_string(start_cell)
-        end_col, end_row = coordinate_from_string(end_cell)
+            start_cell, end_cell = range_str.split(":")
+            start_col, start_row = coordinate_from_string(start_cell)
+            end_col, end_row = coordinate_from_string(end_cell)
 
-        start_col_idx = column_index_from_string(start_col)
-        end_col_idx = column_index_from_string(end_col)
+            start_col_idx = column_index_from_string(start_col)
+            end_col_idx = column_index_from_string(end_col)
 
-        # 逆順序の範囲を検出（セキュリティ対策）
-        if end_row < start_row or end_col_idx < start_col_idx:
-            raise ValueError(
-                f"無効なセル範囲: '{range_str}'。"
-                f"範囲は正しい順序で指定してください（例: 'A1:Z100'）"
-            )
+            # 逆順序の範囲を検出（セキュリティ対策）
+            if end_row < start_row or end_col_idx < start_col_idx:
+                raise ValueError(
+                    f"無効なセル範囲: '{range_str}'。"
+                    f"範囲は正しい順序で指定してください（例: 'A1:Z100'）"
+                )
 
-        rows = end_row - start_row + 1
-        cols = end_col_idx - start_col_idx + 1
+            rows = end_row - start_row + 1
+            cols = end_col_idx - start_col_idx + 1
 
-        return (rows, cols)
+            return (rows, cols)
+        except Exception as e:
+            # 元の実装との互換性維持: エラー時は (0, 0) を返す
+            logger.warning(f"Failed to calculate range size '{range_str}': {e}")
+            return (0, 0)
 
     @staticmethod
     def normalize_column_range(cell_range: str, max_row: int) -> str:

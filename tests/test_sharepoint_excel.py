@@ -861,10 +861,15 @@ class TestSharePointExcelParser:
 
     def test_no_duplicate_range_normalization(self):
         """
-        列範囲指定と拡張が正しく動作することを確認
+        セル範囲の正規化・拡張が重複して実行されないことを確認
 
-        課題3-2の対応：範囲計算がヘルパークラスで一元化されたことを検証
+        課題3-2の対応：_parse_sheetと_build_merged_cell_cacheで
+        重複していた計算が1回のみになったことを検証
         """
+        from unittest.mock import patch
+
+        from src.excel import ExcelRangeCalculator
+
         # テスト用Excelを作成（結合セルあり）
         wb = Workbook()
         ws = wb.active
@@ -888,11 +893,25 @@ class TestSharePointExcelParser:
 
         parser = SharePointExcelParser(self.mock_download_client)
 
-        # 列範囲指定で解析（expand_axis_range=Trueで拡張を有効化）
-        result = parser.parse_to_json(
-            "/test/file.xlsx", cell_range="A:B", expand_axis_range=True
-        )
-        result_data = json.loads(result)
+        # 範囲計算メソッドの呼び出し回数を監視
+        with patch.object(
+            ExcelRangeCalculator,
+            "normalize_column_range",
+            wraps=ExcelRangeCalculator.normalize_column_range,
+        ) as mock_normalize, patch.object(
+            ExcelRangeCalculator,
+            "expand_axis_range",
+            wraps=ExcelRangeCalculator.expand_axis_range,
+        ) as mock_expand:
+            # 列範囲指定で解析（expand_axis_range=Trueで拡張を有効化）
+            result = parser.parse_to_json(
+                "/test/file.xlsx", cell_range="A:B", expand_axis_range=True
+            )
+            result_data = json.loads(result)
+
+            # 呼び出し回数が1回であることを確認（重複なし）
+            assert mock_normalize.call_count == 1
+            assert mock_expand.call_count == 1
 
         # 結果が正しいことを確認
         assert "sheets" in result_data

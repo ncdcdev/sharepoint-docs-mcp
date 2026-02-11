@@ -175,7 +175,7 @@ class TestExcelPaneManager:
         assert validated == 0
 
     def test_validate_frozen_rows_negative_value(self):
-        """負の値の場合はTrueと元の値が返ること（実際には発生しない）"""
+        """負の値の場合はTrueと0が返ること（防御的処理）"""
         is_valid, validated = ExcelPaneManager.validate_frozen_rows(-1, 100)
         assert is_valid is True
-        assert validated == -1
+        assert validated == 0

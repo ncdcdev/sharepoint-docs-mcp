@@ -127,22 +127,22 @@ class TestExcelRangeCalculator:
         assert cols == 1
 
     def test_calculate_range_size_reverse_order_raises(self):
-        """逆順序の範囲でValueErrorが発生すること"""
-        with pytest.raises(ValueError) as exc_info:
-            ExcelRangeCalculator.calculate_range_size("D10:A1")
-        assert "無効なセル範囲" in str(exc_info.value)
+        """逆順序の範囲で(0, 0)が返ること（互換性維持）"""
+        rows, cols = ExcelRangeCalculator.calculate_range_size("D10:A1")
+        assert rows == 0
+        assert cols == 0
 
     def test_calculate_range_size_reverse_column_raises(self):
-        """逆順序の列でValueErrorが発生すること"""
-        with pytest.raises(ValueError) as exc_info:
-            ExcelRangeCalculator.calculate_range_size("D1:A10")
-        assert "無効なセル範囲" in str(exc_info.value)
+        """逆順序の列で(0, 0)が返ること（互換性維持）"""
+        rows, cols = ExcelRangeCalculator.calculate_range_size("D1:A10")
+        assert rows == 0
+        assert cols == 0
 
     def test_calculate_range_size_reverse_row_raises(self):
-        """逆順序の行でValueErrorが発生すること"""
-        with pytest.raises(ValueError) as exc_info:
-            ExcelRangeCalculator.calculate_range_size("A10:D1")
-        assert "無効なセル範囲" in str(exc_info.value)
+        """逆順序の行で(0, 0)が返ること（互換性維持）"""
+        rows, cols = ExcelRangeCalculator.calculate_range_size("A10:D1")
+        assert rows == 0
+        assert cols == 0
 
     # normalize_column_range のテスト
 

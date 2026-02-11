@@ -36,8 +36,6 @@ class ExcelMergedCellHandler:
             - merged_anchor_value_map: 結合範囲 -> アンカー値のマップ
             - merged_ranges: 結合範囲情報のリスト
         """
-        merged_cell_map: dict[str, str] | None = None
-        merged_anchor_value_map: dict[str, Any] | None = None
         merged_ranges: list[dict[str, Any]] = []
 
         # 今回返す予定の範囲（結合情報の部分展開に使用）
@@ -70,8 +68,8 @@ class ExcelMergedCellHandler:
         target_min_col = min(start_col_idx, end_col_idx)
         target_max_col = max(start_col_idx, end_col_idx)
 
-        merged_cell_map = {}
-        merged_anchor_value_map = {}
+        merged_cell_map: dict[str, str] = {}
+        merged_anchor_value_map: dict[str, Any] = {}
 
         for merged_range in sheet.merged_cells.ranges:
             merged_range_str = str(merged_range)
