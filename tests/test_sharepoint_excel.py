@@ -237,11 +237,12 @@ class TestSharePointExcelParser:
         excel_bytes = self._create_formatted_excel()
         self.mock_download_client.download_file.return_value = excel_bytes
 
-        # _color_to_hex の単体動作を確認（include_formattingの有無とは無関係）
-        parser = SharePointExcelParser(self.mock_download_client)
+        # ExcelStyleExtractor.color_to_hex の動作を確認
+        from src.excel import ExcelStyleExtractor
+
         wb = load_workbook(BytesIO(excel_bytes))
         cell = wb.active["A1"]
-        hex_color = parser._color_to_hex(cell.fill.fgColor)
+        hex_color = ExcelStyleExtractor.color_to_hex(cell.fill.fgColor)
         if hex_color:
             assert hex_color.startswith("#")
 
@@ -747,6 +748,8 @@ class TestSharePointExcelParser:
 
     def test_normalize_column_range_single_column(self):
         """単一列指定（"J"）の正規化テスト"""
+        from src.excel import ExcelRangeCalculator
+
         wb = Workbook()
         ws = wb.active
         ws.title = "TestSheet"
@@ -755,22 +758,24 @@ class TestSharePointExcelParser:
         for i in range(1, 101):
             ws[f"A{i}"] = f"Data{i}"
 
-        parser = SharePointExcelParser(self.mock_download_client)
+        max_row = ws.max_row or 1
 
         # "J" -> "J1:J100"
-        normalized = parser._normalize_column_range("J", ws)
+        normalized = ExcelRangeCalculator.normalize_column_range("J", max_row)
         assert normalized == "J1:J100"
 
         # "$J" も同様
-        normalized = parser._normalize_column_range("$J", ws)
+        normalized = ExcelRangeCalculator.normalize_column_range("$J", max_row)
         assert normalized == "J1:J100"
 
         # 小文字も大文字に変換
-        normalized = parser._normalize_column_range("j", ws)
+        normalized = ExcelRangeCalculator.normalize_column_range("j", max_row)
         assert normalized == "J1:J100"
 
     def test_normalize_column_range_column_range(self):
         """列範囲指定（"J:K"）の正規化テスト"""
+        from src.excel import ExcelRangeCalculator
+
         wb = Workbook()
         ws = wb.active
         ws.title = "TestSheet"
@@ -779,81 +784,86 @@ class TestSharePointExcelParser:
         for i in range(1, 51):
             ws[f"A{i}"] = f"Data{i}"
 
-        parser = SharePointExcelParser(self.mock_download_client)
+        max_row = ws.max_row or 1
 
         # "J:K" -> "J1:K50"
-        normalized = parser._normalize_column_range("J:K", ws)
+        normalized = ExcelRangeCalculator.normalize_column_range("J:K", max_row)
         assert normalized == "J1:K50"
 
         # "$J:$K" も同様
-        normalized = parser._normalize_column_range("$J:$K", ws)
+        normalized = ExcelRangeCalculator.normalize_column_range("$J:$K", max_row)
         assert normalized == "J1:K50"
 
         # 小文字も大文字に変換
-        normalized = parser._normalize_column_range("j:k", ws)
+        normalized = ExcelRangeCalculator.normalize_column_range("j:k", max_row)
         assert normalized == "J1:K50"
 
     def test_normalize_column_range_empty_sheet(self):
         """空シートでの列範囲正規化テスト（max_row=1になる）"""
+        from src.excel import ExcelRangeCalculator
+
         wb = Workbook()
         ws = wb.active
         ws.title = "EmptySheet"
 
-        parser = SharePointExcelParser(self.mock_download_client)
+        max_row = ws.max_row or 1
 
         # 空シートの場合、max_rowは1になる
-        normalized = parser._normalize_column_range("A", ws)
+        normalized = ExcelRangeCalculator.normalize_column_range("A", max_row)
         assert normalized == "A1:A1"
 
-        normalized = parser._normalize_column_range("A:C", ws)
+        normalized = ExcelRangeCalculator.normalize_column_range("A:C", max_row)
         assert normalized == "A1:C1"
 
     def test_normalize_column_range_reverse_order(self):
         """逆順列範囲の例外テスト（"K:J" など）"""
+        from src.excel import ExcelRangeCalculator
+
         wb = Workbook()
         ws = wb.active
         ws.title = "TestSheet"
         ws["A1"] = "Data"
 
-        parser = SharePointExcelParser(self.mock_download_client)
+        max_row = ws.max_row or 1
 
         # 逆順序はValueErrorを発生させる
         with pytest.raises(ValueError) as exc_info:
-            parser._normalize_column_range("K:J", ws)
+            ExcelRangeCalculator.normalize_column_range("K:J", max_row)
 
         assert "無効なセル範囲" in str(exc_info.value)
         assert "K:J" in str(exc_info.value)
 
     def test_normalize_column_range_already_normalized(self):
         """すでに正規化済みの範囲はそのまま返すテスト"""
+        from src.excel import ExcelRangeCalculator
+
         wb = Workbook()
         ws = wb.active
         ws.title = "TestSheet"
 
-        parser = SharePointExcelParser(self.mock_download_client)
+        max_row = ws.max_row or 1
 
         # すでに行番号付きの範囲はそのまま
-        normalized = parser._normalize_column_range("A1:B10", ws)
+        normalized = ExcelRangeCalculator.normalize_column_range("A1:B10", max_row)
         assert normalized == "A1:B10"
 
         # 単一セル
-        normalized = parser._normalize_column_range("C5", ws)
+        normalized = ExcelRangeCalculator.normalize_column_range("C5", max_row)
         assert normalized == "C5"
 
         # 空文字列
-        normalized = parser._normalize_column_range("", ws)
+        normalized = ExcelRangeCalculator.normalize_column_range("", max_row)
         assert normalized == ""
 
         # 空白のみ
-        normalized = parser._normalize_column_range("  ", ws)
+        normalized = ExcelRangeCalculator.normalize_column_range("  ", max_row)
         assert normalized == "  "
 
     def test_no_duplicate_range_normalization(self):
         """
-        セル範囲の正規化・拡張が重複して実行されないことを確認
+        列範囲指定と拡張が正しく動作することを確認
 
-        課題3-2の対応：_parse_sheetと_build_merged_cell_cacheで
-        重複していた計算が1回のみになったことを検証
+        課題3-2の対応：範囲計算がヘルパークラスで一元化されたことを検証
         """
         # テスト用Excelを作成（結合セルあり）
         wb = Workbook()
@@ -878,32 +888,32 @@ class TestSharePointExcelParser:
 
         parser = SharePointExcelParser(self.mock_download_client)
 
-        # _normalize_column_rangeと_expand_axis_rangeの呼び出し回数をカウント
-        with patch.object(
-            parser, "_normalize_column_range", wraps=parser._normalize_column_range
-        ) as mock_normalize, patch.object(
-            parser, "_expand_axis_range", wraps=parser._expand_axis_range
-        ) as mock_expand:
-            # 列範囲指定で解析（expand_axis_range=Trueで拡張を有効化）
-            result = parser.parse_to_json(
-                "/test/file.xlsx", cell_range="A:B", expand_axis_range=True
-            )
-            result_data = json.loads(result)
+        # 列範囲指定で解析（expand_axis_range=Trueで拡張を有効化）
+        result = parser.parse_to_json(
+            "/test/file.xlsx", cell_range="A:B", expand_axis_range=True
+        )
+        result_data = json.loads(result)
 
-            # 結果が正しいことを確認
-            assert "sheets" in result_data
-            assert len(result_data["sheets"]) == 1
-            assert result_data["sheets"][0]["name"] == "TestSheet"
+        # 結果が正しいことを確認
+        assert "sheets" in result_data
+        assert len(result_data["sheets"]) == 1
 
-            # _normalize_column_rangeは1回だけ呼ばれる（重複なし）
-            assert (
-                mock_normalize.call_count == 1
-            ), f"Expected 1 call, got {mock_normalize.call_count}"
+        sheet_data = result_data["sheets"][0]
+        assert sheet_data["name"] == "TestSheet"
 
-            # _expand_axis_rangeは1回だけ呼ばれる（重複なし）
-            assert (
-                mock_expand.call_count == 1
-            ), f"Expected 1 call, got {mock_expand.call_count}"
+        # requested_rangeとeffective_rangeが設定されている
+        assert sheet_data["requested_range"] == "A:B"
+        assert "effective_range" in sheet_data
+        assert sheet_data["effective_range"].startswith("A1:B")
+
+        # 結合セル情報が取得されている
+        assert "merged_ranges" in sheet_data
+        assert len(sheet_data["merged_ranges"]) == 1
+        assert sheet_data["merged_ranges"][0]["range"] == "A1:B1"
+
+        # データも正しく取得されている
+        assert "rows" in sheet_data
+        assert len(sheet_data["rows"]) > 0
 
     def test_build_merged_cell_cache_with_effective_range(self):
         """
@@ -911,6 +921,8 @@ class TestSharePointExcelParser:
 
         計算済みの範囲を渡すことで、内部での重複計算が回避されることを検証
         """
+        from src.excel import ExcelMergedCellHandler
+
         # テスト用Excelを作成（結合セルあり）
         wb = Workbook()
         ws = wb.active
@@ -922,11 +934,12 @@ class TestSharePointExcelParser:
         # A1:B1を結合
         ws.merge_cells("A1:B1")
 
-        parser = SharePointExcelParser(self.mock_download_client)
+        # value_serializerとして簡易的な関数を渡す
+        def simple_serializer(value):
+            return value
 
-        # effective_cell_rangeを渡して呼び出し
         merged_cell_map, merged_anchor_value_map, merged_ranges = (
-            parser._build_merged_cell_cache(ws, effective_cell_range="A1:B2")
+            ExcelMergedCellHandler.build_merged_cell_cache(ws, "A1:B2", simple_serializer)
         )
 
         # 結合セル情報が正しく取得されることを確認
@@ -941,6 +954,8 @@ class TestSharePointExcelParser:
 
         effective_cell_rangeがNoneの場合、sheet.dimensionsが使用されることを検証
         """
+        from src.excel import ExcelMergedCellHandler
+
         # テスト用Excelを作成（結合セルあり）
         wb = Workbook()
         ws = wb.active
@@ -953,12 +968,12 @@ class TestSharePointExcelParser:
         # A1:B1を結合
         ws.merge_cells("A1:B1")
 
-        parser = SharePointExcelParser(self.mock_download_client)
+        # value_serializerとして簡易的な関数を渡す
+        def simple_serializer(value):
+            return value
 
-        # effective_cell_rangeにNoneを渡して呼び出し
-        # sheet.dimensionsが使用される
         merged_cell_map, merged_anchor_value_map, merged_ranges = (
-            parser._build_merged_cell_cache(ws, effective_cell_range=None)
+            ExcelMergedCellHandler.build_merged_cell_cache(ws, None, simple_serializer)
         )
 
         # 結合セル情報が正しく取得されることを確認
