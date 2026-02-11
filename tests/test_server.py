@@ -244,7 +244,7 @@ class TestSharePointExcel:
 
                 # 検索メソッドが呼ばれることを確認
                 mock_excel_parser.search_cells.assert_called_once_with(
-                    "/sites/test/Shared Documents/test.xlsx", "売上", sheet_name=None
+                    "/sites/test/Shared Documents/test.xlsx", "売上", sheet_name=None, include_row_data=False
                 )
                 # parse_to_jsonは呼ばれない
                 mock_excel_parser.parse_to_json.assert_not_called()
@@ -294,6 +294,26 @@ class TestSharePointExcel:
                     include_cell_styles=False,
                     expand_axis_range=False,
                 )
+
+    @pytest.mark.unit
+    def test_excel_search_with_include_row_data(
+        self, mock_config, mock_sharepoint_client, mock_excel_parser
+    ):
+        """Excel検索モードでinclude_row_data=Trueが渡されるテスト"""
+        with patch(
+            "src.server._get_sharepoint_client", return_value=mock_sharepoint_client
+        ):
+            with patch("src.server.config", mock_config):
+                sharepoint_excel(
+                    file_path="/sites/test/Shared Documents/test.xlsx",
+                    query="売上",
+                    include_row_data=True,
+                )
+
+                mock_excel_parser.search_cells.assert_called_once_with(
+                    "/sites/test/Shared Documents/test.xlsx", "売上", sheet_name=None, include_row_data=True
+                )
+                mock_excel_parser.parse_to_json.assert_not_called()
 
     @pytest.mark.unit
     def test_excel_with_real_json(

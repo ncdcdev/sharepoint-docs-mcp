@@ -456,6 +456,7 @@ def sharepoint_excel(
     include_frozen_rows: bool = True,
     include_cell_styles: bool = False,
     expand_axis_range: bool = False,
+    include_row_data: bool = False,
     ctx: Context | None = None,
 ) -> str:
     """
@@ -478,6 +479,9 @@ def sharepoint_excel(
         expand_axis_range: 単一列/行の部分範囲を開始側に自動拡張（default: false）
             True: 例 "J50:J100" → "J1:J100"（行1に拡張）
             frozen_rows=0でヘッダー文脈が不明な場合に使用
+        include_row_data: 検索モード時、マッチしたセルの行全体のデータを含める（default: false）
+            True: 各マッチに row_data（同一行の非nullセル一覧）を追加
+            読み取りモードでは無視される
         ctx: FastMCP context (injected automatically)
 
     Returns:
@@ -497,7 +501,9 @@ def sharepoint_excel(
 
         # 検索モード
         if query:
-            return parser.search_cells(file_path, query, sheet_name=sheet)
+            return parser.search_cells(
+                file_path, query, sheet_name=sheet, include_row_data=include_row_data
+            )
 
         # 読み取りモード
         return parser.parse_to_json(
@@ -544,7 +550,7 @@ def register_tools():
         mcp.tool(
             description=(
                 "Read or search Excel files in SharePoint. "
-                "Search mode: use 'query' parameter to find cells containing specific text (returns cell locations). "
+                "Search mode: use 'query' parameter to find cells containing specific text (returns cell locations and optionally row data). "
                 "Read mode: use 'sheet' and 'cell_range' parameters to retrieve data from specific sections. "
                 "When cell_range is specified with include_frozen_rows=True (default), frozen rows are automatically "
                 "included even if they are outside the specified range. frozen_rows indicates the number of header rows "
@@ -555,10 +561,13 @@ def register_tools():
                 "Header detection: For sheets with frozen_rows > 0, headers are automatically included with include_frozen_rows=True (default). "
                 "For sheets with frozen_rows=0, headers are not automatically included and context may be unclear. "
                 "ALWAYS read exactly 5 rows for header check: 'A1:Z5' (NOT 'A1:Z50' or more). "
+                "IMPORTANT: include_row_data=True returns matched row data only (not headers), same-row matches duplicate data. "
+                "Always read 'A1:Z5' first for header context. Effective for <200 matches. "
                 "Prefer 'query' search when possible to locate data first. "
-                "Workflow: 1) Search OR read 'A1:Z5' for header check, "
-                "2) Read specific range (include_frozen_rows adds frozen headers automatically), "
-                "3) If frozen_rows=0 and header context is unclear, retry with expand_axis_range=True "
+                "Workflow: 1) Read 'A1:Z5' for header check (REQUIRED for understanding column structure), "
+                "2) Search with query (optionally with include_row_data=True to get matched row data), "
+                "3) Read specific range if needed (include_frozen_rows adds frozen headers automatically), "
+                "4) If frozen_rows=0 and header context is unclear, retry with expand_axis_range=True "
                 "to auto-include row 1 (for columns) or column A (for rows)."
             )
         )(sharepoint_excel)
