@@ -37,6 +37,7 @@ class SharePointExcelParser:
         file_path: str,
         query: str,
         sheet_name: str | None = None,
+        include_row_data: bool = False,
     ) -> str:
         """
         セル内容を検索して該当位置を返す
@@ -70,25 +71,35 @@ class SharePointExcelParser:
             # sheet_name 指定がある場合はそのシートを優先して検索
             if sheet_name:
                 if sheet_name in workbook.sheetnames:
-                    self._scan_sheet(workbook[sheet_name], sheet_name, query, matches)
+                    self._scan_sheet(
+                        workbook[sheet_name],
+                        sheet_name,
+                        query,
+                        matches,
+                        include_row_data,
+                    )
 
                     # マッチが無ければ全シート走査にフォールバック
                     if len(matches) == 0:
                         for sn in workbook.sheetnames:
                             if sn == sheet_name:
                                 continue
-                            self._scan_sheet(workbook[sn], sn, query, matches)
+                            self._scan_sheet(
+                                workbook[sn], sn, query, matches, include_row_data
+                            )
                 else:
                     # sheet_name が存在しない場合は「指定なし」と同じ扱いで全シート検索
                     warnings.append(
                         f"Sheet '{sheet_name}' not found. Searching all sheets instead."
                     )
                     for sn in workbook.sheetnames:
-                        self._scan_sheet(workbook[sn], sn, query, matches)
+                        self._scan_sheet(
+                            workbook[sn], sn, query, matches, include_row_data
+                        )
             else:
                 # 全シート検索
                 for sn in workbook.sheetnames:
-                    self._scan_sheet(workbook[sn], sn, query, matches)
+                    self._scan_sheet(workbook[sn], sn, query, matches, include_row_data)
 
             logger.info(f"Found {len(matches)} matches for query '{query}'")
 
@@ -273,6 +284,7 @@ class SharePointExcelParser:
         sheet_name_for_result: str,
         query: str,
         matches: list[dict[str, Any]],
+        include_row_data: bool = False,
     ) -> None:
         """
         シート内のセルを走査してqueryに一致するセルをmatchesに追加する
@@ -284,17 +296,26 @@ class SharePointExcelParser:
             # その場合はiter_rows()を使用するフォールバックロジックが動作します。
             if hasattr(sheet, "_cells"):
                 # 実在セルのみを走査（高速）
+                # まずマッチを収集（_cellsのイテレーション中にsheetアクセスすると辞書が変わるため）
+                new_matches: list[dict[str, Any]] = []
                 for cell in sheet._cells.values():
                     if cell.value is not None:
                         cell_value_str = str(cell.value)
                         if query in cell_value_str:
-                            matches.append(
+                            new_matches.append(
                                 {
                                     "sheet": sheet_name_for_result,
                                     "coordinate": cell.coordinate,
                                     "value": self._serialize_value(cell.value),
+                                    "_row": cell.row,
                                 }
                             )
+                # イテレーション完了後に行データを取得
+                for match in new_matches:
+                    row_num = match.pop("_row")
+                    if include_row_data:
+                        match["row_data"] = self._get_row_data(sheet, row_num)
+                    matches.append(match)
             else:
                 # openpyxl公開APIを使用（互換性確保）
                 for row in sheet.iter_rows(values_only=False):
@@ -302,13 +323,45 @@ class SharePointExcelParser:
                         if cell.value is not None:
                             cell_value_str = str(cell.value)
                             if query in cell_value_str:
-                                matches.append(
-                                    {
-                                        "sheet": sheet_name_for_result,
-                                        "coordinate": cell.coordinate,
-                                        "value": self._serialize_value(cell.value),
-                                    }
-                                )
+                                match = {
+                                    "sheet": sheet_name_for_result,
+                                    "coordinate": cell.coordinate,
+                                    "value": self._serialize_value(cell.value),
+                                }
+                                if include_row_data:
+                                    match["row_data"] = [
+                                        {
+                                            "coordinate": c.coordinate,
+                                            "value": self._serialize_value(c.value),
+                                        }
+                                        for c in row
+                                        if c.value is not None
+                                    ]
+                                matches.append(match)
+
+    def _get_row_data(self, sheet, row_num: int) -> list[dict[str, Any]]:
+        """
+        指定行の非nullセルデータをリストとして返す
+
+        Args:
+            sheet: openpyxl Worksheet
+            row_num: 行番号
+
+        Returns:
+            非nullセルの [{coordinate, value}, ...] リスト
+        """
+        row_cells = sheet[row_num]
+        # 単一列シートではCellオブジェクト単体が返される場合がある
+        if isinstance(row_cells, Cell):
+            row_cells = (row_cells,)
+        return [
+            {
+                "coordinate": c.coordinate,
+                "value": self._serialize_value(c.value),
+            }
+            for c in row_cells
+            if c.value is not None
+        ]
 
     def _parse_sheet(
         self,
