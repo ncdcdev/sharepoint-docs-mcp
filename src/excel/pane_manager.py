@@ -67,8 +67,8 @@ class ExcelPaneManager:
 
         Returns:
             (is_valid, validated_frozen_rows)のタプル
-            - is_valid: 上限以内ならTrue、超過または負の場合はFalse
-            - validated_frozen_rows: 無効時は0、それ以外は元の値
+            - is_valid: 上限超過の場合のみFalse、それ以外はTrue
+            - validated_frozen_rows: 負の値は0に丸める、上限超過は0、それ以外は元の値
         """
         # 負の値は無効として0に丸める
         if frozen_rows < 0:

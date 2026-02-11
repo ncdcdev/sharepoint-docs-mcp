@@ -117,11 +117,19 @@ class ExcelRangeCalculator:
     @staticmethod
     def expand_axis_range(range_str: str) -> str:
         """
-        指定されたセル範囲を「枠分離」ではなく「方向に拡張」する。
-        - 単一セル (例: C5) -> C1:C5
-        - 単一列 (例: Z100:Z200) -> Z1:Z200
-        - 単一行 (例: D200:Z200) -> A200:Z200
-        - それ以外（矩形など）はそのまま
+        単一セル・列・行を1行目/A列まで拡張する
+
+        Examples:
+            - 単一セル: "C5" -> "C1:C5"（列方向に拡張）
+            - 単一列: "Z100:Z200" -> "Z1:Z200"（上端まで拡張）
+            - 単一行: "D200:Z200" -> "A200:Z200"（左端まで拡張）
+            - 矩形範囲: そのまま（変更なし）
+
+        Args:
+            range_str: セル範囲文字列
+
+        Returns:
+            拡張されたセル範囲（または元の範囲）
         """
         if not range_str:
             return range_str
