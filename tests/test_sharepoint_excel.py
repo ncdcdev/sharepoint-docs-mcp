@@ -1780,3 +1780,120 @@ class TestSharePointExcelParser:
 
         # dimensionsがNoneの場合は省略
         assert "dimensions" not in sheet
+
+    def test_search_cells_include_row_data_true(self):
+        """include_row_data=Trueで行データが含まれることのテスト"""
+        excel_bytes = self._create_test_excel()
+        self.mock_download_client.download_file.return_value = excel_bytes
+
+        parser = SharePointExcelParser(self.mock_download_client)
+        result_json = parser.search_cells(
+            "/test/file.xlsx", "John", include_row_data=True
+        )
+
+        result = json.loads(result_json)
+        assert result["match_count"] == 1
+        match = result["matches"][0]
+        assert match["coordinate"] == "A2"
+        assert match["value"] == "John"
+
+        # row_dataが含まれる
+        assert "row_data" in match
+        row_data = match["row_data"]
+        # A2="John", B2=25 の2セル
+        assert len(row_data) == 2
+        coords = [c["coordinate"] for c in row_data]
+        assert "A2" in coords
+        assert "B2" in coords
+        # 値の確認
+        values = {c["coordinate"]: c["value"] for c in row_data}
+        assert values["A2"] == "John"
+        assert values["B2"] == 25
+
+    def test_search_cells_include_row_data_false_default(self):
+        """デフォルト（include_row_data=False）でrow_dataが含まれないことのテスト"""
+        excel_bytes = self._create_test_excel()
+        self.mock_download_client.download_file.return_value = excel_bytes
+
+        parser = SharePointExcelParser(self.mock_download_client)
+        result_json = parser.search_cells("/test/file.xlsx", "John")
+
+        result = json.loads(result_json)
+        assert result["match_count"] == 1
+        match = result["matches"][0]
+        assert "row_data" not in match
+
+    def test_search_cells_include_row_data_multiple_matches_same_row(self):
+        """同一行に複数マッチ時、各マッチにrow_dataが含まれることのテスト"""
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Sheet1"
+        ws["A1"] = "売上報告"
+        ws["B1"] = "売上合計"
+        ws["C1"] = 1000
+
+        excel_bytes = BytesIO()
+        wb.save(excel_bytes)
+        excel_bytes.seek(0)
+
+        self.mock_download_client.download_file.return_value = excel_bytes.getvalue()
+
+        parser = SharePointExcelParser(self.mock_download_client)
+        result_json = parser.search_cells(
+            "/test/file.xlsx", "売上", include_row_data=True
+        )
+
+        result = json.loads(result_json)
+        assert result["match_count"] == 2
+
+        # 各マッチにrow_dataが独立して含まれる
+        for match in result["matches"]:
+            assert "row_data" in match
+            # 同一行なので同じrow_data（A1, B1, C1の3セル）
+            assert len(match["row_data"]) == 3
+
+    def test_search_cells_include_row_data_null_cells_excluded(self):
+        """nullセルがrow_dataから除外されることのテスト"""
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Sheet1"
+        ws["A1"] = "Name"
+        # B1 is None (null)
+        ws["C1"] = "Value"
+
+        excel_bytes = BytesIO()
+        wb.save(excel_bytes)
+        excel_bytes.seek(0)
+
+        self.mock_download_client.download_file.return_value = excel_bytes.getvalue()
+
+        parser = SharePointExcelParser(self.mock_download_client)
+        result_json = parser.search_cells(
+            "/test/file.xlsx", "Name", include_row_data=True
+        )
+
+        result = json.loads(result_json)
+        assert result["match_count"] == 1
+        row_data = result["matches"][0]["row_data"]
+        # nullセルは除外される（A1とC1のみ）
+        coords = [c["coordinate"] for c in row_data]
+        assert "A1" in coords
+        assert "C1" in coords
+        assert "B1" not in coords
+
+    def test_search_cells_include_row_data_multiple_sheets(self):
+        """複数シート検索時にinclude_row_dataが正しく動作すること"""
+        excel_bytes = self._create_multi_sheet_excel()
+        self.mock_download_client.download_file.return_value = excel_bytes
+
+        parser = SharePointExcelParser(self.mock_download_client)
+        result_json = parser.search_cells(
+            "/test/file.xlsx", "Data", include_row_data=True
+        )
+
+        result = json.loads(result_json)
+        assert result["match_count"] == 2
+
+        for match in result["matches"]:
+            assert "row_data" in match
+            assert len(match["row_data"]) >= 1
