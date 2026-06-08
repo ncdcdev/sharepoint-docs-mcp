@@ -31,6 +31,11 @@ Two authentication methods are supported:
 - **sharepoint_docs_download**
   - File download from search results
   - Automatic method selection for SharePoint vs OneDrive files
+- **sharepoint_list_folder**
+  - List files and subfolders directly in a SharePoint or OneDrive folder
+  - Bypasses the search index — use when `sharepoint_docs_search` cannot find a file due to indexing issues
+  - Supports pagination via continuation token (`next_token`)
+  - File paths in results can be passed directly to `sharepoint_docs_download`
 - **sharepoint_excel**
   - Read or search Excel files in SharePoint
   - Search mode: find cells containing specific text with `query` parameter

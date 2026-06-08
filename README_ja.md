@@ -31,6 +31,11 @@ stdioとHTTPの両方のトランスポートに対応しています。
 - **sharepoint_docs_download**
   - 検索結果からファイルをダウンロード
   - SharePoint/OneDriveファイルに応じた自動メソッド選択
+- **sharepoint_list_folder**
+  - SharePointまたはOneDriveのフォルダ内のファイル・サブフォルダを直接リスト取得
+  - 検索インデックスをバイパス — `sharepoint_docs_search` でファイルが見つからない場合に使用
+  - 継続トークン（`next_token`）によるページング対応
+  - 返却されたファイルパスは `sharepoint_docs_download` にそのまま渡せる
 - **sharepoint_excel**
   - SharePoint上のExcelファイルの読み取りと検索
   - 検索モード: `query`パラメータで特定テキストを含むセルを検索
