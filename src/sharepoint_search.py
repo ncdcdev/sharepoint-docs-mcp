@@ -199,7 +199,7 @@ class SharePointSearchClient:
         self,
         folder_path: str,
         max_results: int = 100,
-        skip: int = 0,
+        next_token: str | None = None,
     ) -> dict[str, Any]:
         """
         SharePointまたはOneDriveフォルダ内のファイル・サブフォルダをリスト取得
@@ -207,12 +207,14 @@ class SharePointSearchClient:
         Args:
             folder_path: フォルダのフルURLまたはサーバー相対URL
             max_results: 取得するファイルの最大件数
-            skip: スキップするファイル数（ページング用）
+            next_token: 次ページ取得用トークン（前回レスポンスの next_token を渡す）
 
         Returns:
-            {"folders": [...], "files": [...], "has_more": bool}
+            {"folders": [...], "files": [...], "next_token": str | None}
         """
-        logger.info(f"Listing folder: {folder_path} (max={max_results}, skip={skip})")
+        logger.info(
+            f"Listing folder: {folder_path} (max={max_results}, page={'1' if next_token is None else 'next'})"
+        )
 
         try:
             access_token = self.auth.get_access_token()
@@ -261,52 +263,53 @@ class SharePointSearchClient:
             # シングルクォートをエスケープ（SharePoint REST API仕様）
             escaped_path = server_relative_url.replace("'", "''")
 
-            # サブフォルダを全件取得（ページングなし）
-            folders_url = f"{api_base_url}/_api/web/GetFolderByServerRelativeUrl('{escaped_path}')/Folders"
-            folders_resp = requests.get(
-                folders_url,
-                params={
-                    "$select": "Name,ServerRelativeUrl,TimeLastModified",
-                    "$orderby": "Name",
-                },
-                headers=headers,
-                timeout=30,
-            )
-            folders_resp.raise_for_status()
-
+            # サブフォルダは最初のページでのみ取得
             folders = []
-            folders_data = folders_resp.json()
-            if isinstance(folders_data, dict) and "d" in folders_data:
-                for item in folders_data["d"].get("results", []):
-                    server_rel = item.get("ServerRelativeUrl", "")
-                    folders.append({
-                        "name": item.get("Name", ""),
-                        "path": f"{domain}{server_rel}",
-                        "modified": item.get("TimeLastModified", ""),
-                    })
+            if next_token is None:
+                folders_url = f"{api_base_url}/_api/web/GetFolderByServerRelativeUrl('{escaped_path}')/Folders"
+                folders_resp = requests.get(
+                    folders_url,
+                    params={
+                        "$select": "Name,ServerRelativeUrl,TimeLastModified",
+                        "$orderby": "Name",
+                    },
+                    headers=headers,
+                    timeout=30,
+                )
+                folders_resp.raise_for_status()
+                folders_data = folders_resp.json()
+                if isinstance(folders_data, dict) and "d" in folders_data:
+                    for item in folders_data["d"].get("results", []):
+                        server_rel = item.get("ServerRelativeUrl", "")
+                        folders.append({
+                            "name": item.get("Name", ""),
+                            "path": f"{domain}{server_rel}",
+                            "modified": item.get("TimeLastModified", ""),
+                        })
 
-            # ファイルをページング付きで取得（+1で has_more を検出）
-            files_url = f"{api_base_url}/_api/web/GetFolderByServerRelativeUrl('{escaped_path}')/Files"
-            files_resp = requests.get(
-                files_url,
-                params={
-                    "$select": "Name,ServerRelativeUrl,Length,TimeLastModified",
-                    "$top": max_results + 1,
-                    "$skip": skip,
-                    "$orderby": "Name",
-                },
-                headers=headers,
-                timeout=30,
-            )
+            # ファイルをページング付きで取得
+            # next_token が指定された場合はその URL をそのまま使用（SharePoint の $skiptoken 方式）
+            if next_token:
+                files_resp = requests.get(next_token, headers=headers, timeout=30)
+            else:
+                files_url = f"{api_base_url}/_api/web/GetFolderByServerRelativeUrl('{escaped_path}')/Files"
+                files_resp = requests.get(
+                    files_url,
+                    params={
+                        "$select": "Name,ServerRelativeUrl,Length,TimeLastModified",
+                        "$top": max_results,
+                        "$orderby": "Name",
+                    },
+                    headers=headers,
+                    timeout=30,
+                )
             files_resp.raise_for_status()
 
             files = []
-            has_more = False
+            next_page_token = None
             files_data = files_resp.json()
             if isinstance(files_data, dict) and "d" in files_data:
-                results = files_data["d"].get("results", [])
-                has_more = len(results) > max_results
-                for item in results[:max_results]:
+                for item in files_data["d"].get("results", []):
                     server_rel = item.get("ServerRelativeUrl", "")
                     size_str = item.get("Length", "0")
                     files.append({
@@ -315,11 +318,14 @@ class SharePointSearchClient:
                         "size": int(size_str) if size_str else 0,
                         "modified": item.get("TimeLastModified", ""),
                     })
+                # d.__next が存在する場合は次ページのトークンとして返す
+                next_page_token = files_data["d"].get("__next")
 
             logger.info(
-                f"Folder listed: {len(folders)} folders, {len(files)} files, has_more={has_more}"
+                f"Folder listed: {len(folders)} folders, {len(files)} files, "
+                f"has_more={next_page_token is not None}"
             )
-            return {"folders": folders, "files": files, "has_more": has_more}
+            return {"folders": folders, "files": files, "next_token": next_page_token}
 
         except Exception as e:
             logger.error(f"Folder listing failed: {str(e)}")

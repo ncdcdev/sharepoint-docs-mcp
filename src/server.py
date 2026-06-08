@@ -531,7 +531,7 @@ def sharepoint_excel(
 def sharepoint_list_folder(
     folder_path: str,
     max_results: int = 100,
-    skip: int = 0,
+    next_token: str | None = None,
     ctx: Context | None = None,
 ) -> dict[str, Any]:
     """
@@ -546,15 +546,15 @@ def sharepoint_list_folder(
               https://company.sharepoint.com/sites/mysite/Shared Documents/Reports
               /sites/mysite/Shared Documents/Reports
         max_results: Max files per page (default: 100, max: 500). Folders are always returned in full.
-        skip: Number of files to skip for pagination (default: 0).
-            To get page 2: skip=max_results. Page 3: skip=max_results*2.
+        next_token: Continuation token from a previous response (default: None = first page).
+            Pass the next_token value from the previous response to retrieve the next page.
         ctx: FastMCP context (injected automatically)
 
     Returns:
         {
-          "folders": [{"name": str, "path": str, "modified": str}],
+          "folders": [{"name": str, "path": str, "modified": str}],  -- only on first page
           "files": [{"name": str, "path": str, "size": int, "modified": str}],
-          "has_more": bool  -- true when more files exist; increment skip by max_results
+          "next_token": str | None  -- null if last page; pass to next call for more files
         }
         File paths can be passed directly to sharepoint_docs_download.
     """
@@ -566,7 +566,7 @@ def sharepoint_list_folder(
         return client.list_folder(
             folder_path=folder_path,
             max_results=max_results,
-            skip=skip,
+            next_token=next_token,
         )
     except Exception as e:
         logging.error(f"SharePoint folder listing failed: {str(e)}")
@@ -597,8 +597,8 @@ def register_tools():
                 "List files and folders directly in a SharePoint or OneDrive folder (bypasses search index). "
                 "Use when sharepoint_docs_search cannot find a file due to indexing issues. "
                 "Input: full URL or server-relative URL of the folder. "
-                "Returns: folders (all subfolders), files (paginated), has_more (true = more pages exist). "
-                "Pagination: increment skip by max_results for each next page. "
+                "Returns: folders (first page only), files (paginated), next_token (null = last page). "
+                "Pagination: pass next_token from previous response to retrieve the next page. "
                 "File paths in results can be passed directly to sharepoint_docs_download."
             )
         )(sharepoint_list_folder)
