@@ -8,6 +8,7 @@ This guide covers how to use the SharePoint MCP server with various clients and 
 - [MCP Inspector Verification](#mcp-inspector-verification)
 - [Claude Desktop Integration](#claude-desktop-integration)
 - [Search Usage Examples](#search-usage-examples)
+- [Folder Listing Usage Examples](#folder-listing-usage-examples)
 - [Excel Operations Usage Examples](#excel-operations-usage-examples)
 
 ## MCP Server Startup
@@ -186,6 +187,84 @@ results = sharepoint_docs_search(
     response_format="compact",
     max_results=10,
 )
+```
+
+## Folder Listing Usage Examples
+
+The `sharepoint_list_folder` tool lists files and subfolders directly in a SharePoint or OneDrive folder, bypassing the search index. Use it when `sharepoint_docs_search` cannot find a file due to indexing issues.
+
+### Tool Parameters
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `folder_path` | str | Required | Full URL or server-relative URL of the folder |
+| `max_results` | int | 100 | Max files per page (capped at 500). Subfolders are always returned in full. |
+| `next_token` | str \| None | None | Continuation token from the previous response (omit for the first page) |
+
+### Basic Usage
+
+```python
+# First page — list files and subfolders in a folder
+result = sharepoint_list_folder(
+    folder_path="https://company.sharepoint.com/sites/mysite/Shared Documents/Reports"
+)
+```
+
+**Response:**
+```json
+{
+  "folders": [
+    {"name": "2023", "path": "https://company.sharepoint.com/sites/mysite/Shared Documents/Reports/2023", "modified": "2024-01-15T10:30:00Z"},
+    {"name": "2024", "path": "https://company.sharepoint.com/sites/mysite/Shared Documents/Reports/2024", "modified": "2024-06-01T09:00:00Z"}
+  ],
+  "files": [
+    {"name": "summary.pdf", "path": "https://company.sharepoint.com/sites/mysite/Shared Documents/Reports/summary.pdf", "size": 102400, "modified": "2024-06-01T09:00:00Z"}
+  ],
+  "next_token": null
+}
+```
+
+- `folders` is only populated on the first page (when `next_token` is omitted).
+- `next_token` is `null` when no further pages exist; otherwise pass it to the next call.
+
+### Pagination
+
+```python
+# Page 1
+page1 = sharepoint_list_folder(folder_path="/sites/mysite/Shared Documents/Archive", max_results=50)
+
+# Page 2 (only if page1["next_token"] is not null)
+if page1["next_token"]:
+    page2 = sharepoint_list_folder(
+        folder_path="/sites/mysite/Shared Documents/Archive",
+        max_results=50,
+        next_token=page1["next_token"],
+    )
+```
+
+### Download a File from Listing Results
+
+File paths returned by `sharepoint_list_folder` can be passed directly to `sharepoint_docs_download`:
+
+```python
+# List folder contents
+result = sharepoint_list_folder(folder_path="/sites/mysite/Shared Documents/Reports")
+
+# Download the first file
+file_path = result["files"][0]["path"]
+content = sharepoint_docs_download(file_path=file_path)
+```
+
+### Server-Relative URL
+
+Both full URLs and server-relative URLs are accepted:
+
+```python
+# Full URL
+sharepoint_list_folder(folder_path="https://company.sharepoint.com/sites/mysite/Shared Documents")
+
+# Server-relative URL
+sharepoint_list_folder(folder_path="/sites/mysite/Shared Documents")
 ```
 
 ## Excel Operations Usage Examples

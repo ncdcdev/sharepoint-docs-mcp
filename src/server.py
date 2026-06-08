@@ -528,6 +528,51 @@ def sharepoint_excel(
         ) from e
 
 
+def sharepoint_list_folder(
+    folder_path: str,
+    max_results: int = 100,
+    next_token: str | None = None,
+    ctx: Context | None = None,
+) -> dict[str, Any]:
+    """
+    List files and folders directly in a SharePoint or OneDrive folder.
+
+    Use this when sharepoint_docs_search cannot find a file due to indexing issues.
+    This reads folder contents directly from SharePoint, bypassing the search index.
+
+    Args:
+        folder_path: Full URL or server-relative URL of the folder.
+            Examples:
+              https://company.sharepoint.com/sites/mysite/Shared Documents/Reports
+              /sites/mysite/Shared Documents/Reports
+        max_results: Max files per page (default: 100, max: 500). Folders are always returned in full.
+        next_token: Continuation token from a previous response (default: None = first page).
+            Pass the next_token value from the previous response to retrieve the next page.
+        ctx: FastMCP context (injected automatically)
+
+    Returns:
+        {
+          "folders": [{"name": str, "path": str, "modified": str}],  -- only on first page
+          "files": [{"name": str, "path": str, "size": int, "modified": str}],
+          "next_token": str | None  -- null if last page; pass to next call for more files
+        }
+        File paths can be passed directly to sharepoint_docs_download.
+    """
+    logging.info(f"Listing SharePoint folder: {folder_path}")
+
+    try:
+        client = _get_sharepoint_client(ctx)
+        max_results = min(max_results, 500)
+        return client.list_folder(
+            folder_path=folder_path,
+            max_results=max_results,
+            next_token=next_token,
+        )
+    except Exception as e:
+        logging.error(f"SharePoint folder listing failed: {str(e)}")
+        raise handle_sharepoint_error(e, "list") from e
+
+
 def register_tools():
     """Register MCP tools
 
@@ -545,6 +590,21 @@ def register_tools():
         logging.info("Registered tool: sharepoint_docs_download")
     else:
         logging.info("Tool disabled: sharepoint_docs_download")
+
+    if config.is_tool_enabled("sharepoint_list_folder"):
+        mcp.tool(
+            description=(
+                "List files and folders directly in a SharePoint or OneDrive folder (bypasses search index). "
+                "Use when sharepoint_docs_search cannot find a file due to indexing issues. "
+                "Input: full URL or server-relative URL of the folder. "
+                "Returns: folders (first page only), files (paginated), next_token (null = last page). "
+                "Pagination: pass next_token from previous response to retrieve the next page. "
+                "File paths in results can be passed directly to sharepoint_docs_download."
+            )
+        )(sharepoint_list_folder)
+        logging.info("Registered tool: sharepoint_list_folder")
+    else:
+        logging.info("Tool disabled: sharepoint_list_folder")
 
     if config.is_tool_enabled("sharepoint_excel"):
         mcp.tool(
