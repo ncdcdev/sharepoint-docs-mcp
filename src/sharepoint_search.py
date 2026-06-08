@@ -195,6 +195,136 @@ class SharePointSearchClient:
 
         return filters
 
+    def list_folder(
+        self,
+        folder_path: str,
+        max_results: int = 100,
+        skip: int = 0,
+    ) -> dict[str, Any]:
+        """
+        SharePointまたはOneDriveフォルダ内のファイル・サブフォルダをリスト取得
+
+        Args:
+            folder_path: フォルダのフルURLまたはサーバー相対URL
+            max_results: 取得するファイルの最大件数
+            skip: スキップするファイル数（ページング用）
+
+        Returns:
+            {"folders": [...], "files": [...], "has_more": bool}
+        """
+        logger.info(f"Listing folder: {folder_path} (max={max_results}, skip={skip})")
+
+        try:
+            access_token = self.auth.get_access_token()
+
+            # フルURLとサーバー相対URLの両方を受け付ける
+            parsed_url = urlparse(folder_path)
+            if parsed_url.scheme:
+                server_relative_url = unquote(parsed_url.path)
+                domain = f"{parsed_url.scheme}://{parsed_url.netloc}"
+            else:
+                server_relative_url = folder_path
+                domain = None
+
+            # OneDriveかSharePointかを判定
+            path_segments = server_relative_url.split("/")
+            is_onedrive = len(path_segments) >= 2 and path_segments[1] == "personal"
+
+            # APIベースURLとドメインを決定（download_fileと同じロジック）
+            if is_onedrive:
+                onedrive_base = global_config.base_url.replace(
+                    ".sharepoint.com", "-my.sharepoint.com"
+                )
+                if domain is None:
+                    domain = onedrive_base
+                if len(path_segments) >= 3:
+                    api_base_url = f"{onedrive_base}/personal/{path_segments[2]}"
+                else:
+                    api_base_url = onedrive_base
+            elif global_config.is_site_specific:
+                api_base_url = self.site_url
+                if domain is None:
+                    domain = global_config.base_url
+            else:
+                if len(path_segments) >= 3 and path_segments[1] == "sites":
+                    api_base_url = f"{global_config.base_url}/sites/{path_segments[2]}"
+                else:
+                    api_base_url = global_config.base_url
+                if domain is None:
+                    domain = global_config.base_url
+
+            headers = {
+                "Accept": "application/json;odata=verbose",
+                "Authorization": f"Bearer {access_token}",
+            }
+
+            # シングルクォートをエスケープ（SharePoint REST API仕様）
+            escaped_path = server_relative_url.replace("'", "''")
+
+            # サブフォルダを全件取得（ページングなし）
+            folders_url = f"{api_base_url}/_api/web/GetFolderByServerRelativeUrl('{escaped_path}')/Folders"
+            folders_resp = requests.get(
+                folders_url,
+                params={
+                    "$select": "Name,ServerRelativeUrl,TimeLastModified",
+                    "$orderby": "Name",
+                },
+                headers=headers,
+                timeout=30,
+            )
+            folders_resp.raise_for_status()
+
+            folders = []
+            folders_data = folders_resp.json()
+            if isinstance(folders_data, dict) and "d" in folders_data:
+                for item in folders_data["d"].get("results", []):
+                    server_rel = item.get("ServerRelativeUrl", "")
+                    folders.append({
+                        "name": item.get("Name", ""),
+                        "path": f"{domain}{server_rel}",
+                        "modified": item.get("TimeLastModified", ""),
+                    })
+
+            # ファイルをページング付きで取得（+1で has_more を検出）
+            files_url = f"{api_base_url}/_api/web/GetFolderByServerRelativeUrl('{escaped_path}')/Files"
+            files_resp = requests.get(
+                files_url,
+                params={
+                    "$select": "Name,ServerRelativeUrl,Length,TimeLastModified",
+                    "$top": max_results + 1,
+                    "$skip": skip,
+                    "$orderby": "Name",
+                },
+                headers=headers,
+                timeout=30,
+            )
+            files_resp.raise_for_status()
+
+            files = []
+            has_more = False
+            files_data = files_resp.json()
+            if isinstance(files_data, dict) and "d" in files_data:
+                results = files_data["d"].get("results", [])
+                has_more = len(results) > max_results
+                for item in results[:max_results]:
+                    server_rel = item.get("ServerRelativeUrl", "")
+                    size_str = item.get("Length", "0")
+                    files.append({
+                        "name": item.get("Name", ""),
+                        "path": f"{domain}{server_rel}",
+                        "size": int(size_str) if size_str else 0,
+                        "modified": item.get("TimeLastModified", ""),
+                    })
+
+            logger.info(
+                f"Folder listed: {len(folders)} folders, {len(files)} files, has_more={has_more}"
+            )
+            return {"folders": folders, "files": files, "has_more": has_more}
+
+        except Exception as e:
+            logger.error(f"Folder listing failed: {str(e)}")
+            raise handle_sharepoint_error(e, "list") from e
+
     def download_file(self, file_path: str) -> bytes:
         """
         SharePointからファイルをダウンロード

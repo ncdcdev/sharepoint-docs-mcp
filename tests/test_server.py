@@ -444,6 +444,8 @@ class TestRegisterTools:
                     register_tools()
 
                 # mcp.tool が3回呼ばれることを確認
+                # ※ローカルの.envにSHAREPOINT_DISABLED_TOOLS=sharepoint_excelが設定されているため
+                #   excelは除外され、search + download + list_folderの3ツールが登録される
                 assert mock_mcp.tool.call_count == 3
 
     @pytest.mark.unit
@@ -473,8 +475,8 @@ class TestRegisterTools:
                 with patch("src.server.config", src.config.config):
                     register_tools()
 
-                # mcp.tool が2回呼ばれることを確認（sharepoint_excelは除外）
-                assert mock_mcp.tool.call_count == 2
+                # mcp.tool が3回呼ばれることを確認（sharepoint_excelは除外）
+                assert mock_mcp.tool.call_count == 3
 
     @pytest.mark.unit
     def test_multiple_tools_disabled(self):
@@ -503,8 +505,8 @@ class TestRegisterTools:
                 with patch("src.server.config", src.config.config):
                     register_tools()
 
-                # mcp.tool が1回呼ばれることを確認（sharepoint_docs_searchのみ）
-                assert mock_mcp.tool.call_count == 1
+                # mcp.tool が2回呼ばれることを確認（sharepoint_docs_searchとsharepoint_list_folderのみ）
+                assert mock_mcp.tool.call_count == 2
 
     @pytest.mark.unit
     def test_all_tools_disabled(self):
@@ -515,7 +517,7 @@ class TestRegisterTools:
             "SHAREPOINT_CLIENT_ID": "test-client-id",
             "SHAREPOINT_CERTIFICATE_TEXT": "cert",
             "SHAREPOINT_PRIVATE_KEY_TEXT": "key",
-            "SHAREPOINT_DISABLED_TOOLS": "sharepoint_docs_search,sharepoint_docs_download,sharepoint_excel",
+            "SHAREPOINT_DISABLED_TOOLS": "sharepoint_docs_search,sharepoint_docs_download,sharepoint_list_folder,sharepoint_excel",
         }
 
         with patch.dict(os.environ, env_vars, clear=True):
