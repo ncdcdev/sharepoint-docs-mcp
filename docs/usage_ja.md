@@ -8,6 +8,7 @@
 - [MCP Inspectorでの検証](#mcp-inspectorでの検証)
 - [Claude Desktopとの統合](#claude-desktopとの統合)
 - [検索の使用例](#検索の使用例)
+- [フォルダ一覧の使用例](#フォルダ一覧の使用例)
 - [Excel操作の使用例](#excel操作の使用例)
 
 ## MCPサーバーの起動
@@ -186,6 +187,84 @@ results = sharepoint_docs_search(
     response_format="compact",
     max_results=10,
 )
+```
+
+## フォルダ一覧の使用例
+
+`sharepoint_list_folder` ツールは、検索インデックスをバイパスして SharePoint または OneDrive のフォルダ内のファイル・サブフォルダを直接取得します。`sharepoint_docs_search` でファイルが見つからない場合に使用してください。
+
+### ツールパラメータ
+
+| パラメータ | 型 | デフォルト | 説明 |
+|-----------|------|---------|-------------|
+| `folder_path` | str | 必須 | フォルダのフルURLまたはサーバー相対URL |
+| `max_results` | int | 100 | 1ページあたりの最大ファイル数（上限500）。サブフォルダは常に全件返却。 |
+| `next_token` | str \| None | None | 前回レスポンスの継続トークン（最初のページでは省略） |
+
+### 基本的な使い方
+
+```python
+# 最初のページ — フォルダ内のファイルとサブフォルダを取得
+result = sharepoint_list_folder(
+    folder_path="https://company.sharepoint.com/sites/mysite/Shared Documents/Reports"
+)
+```
+
+**レスポンス:**
+```json
+{
+  "folders": [
+    {"name": "2023", "path": "https://company.sharepoint.com/sites/mysite/Shared Documents/Reports/2023", "modified": "2024-01-15T10:30:00Z"},
+    {"name": "2024", "path": "https://company.sharepoint.com/sites/mysite/Shared Documents/Reports/2024", "modified": "2024-06-01T09:00:00Z"}
+  ],
+  "files": [
+    {"name": "summary.pdf", "path": "https://company.sharepoint.com/sites/mysite/Shared Documents/Reports/summary.pdf", "size": 102400, "modified": "2024-06-01T09:00:00Z"}
+  ],
+  "next_token": null
+}
+```
+
+- `folders` は最初のページ（`next_token` を省略した呼び出し）にのみ含まれます。
+- `next_token` が `null` の場合は最終ページ。値がある場合は次の呼び出しに渡してください。
+
+### ページング
+
+```python
+# 1ページ目
+page1 = sharepoint_list_folder(folder_path="/sites/mysite/Shared Documents/Archive", max_results=50)
+
+# 2ページ目（page1["next_token"] が null でない場合のみ）
+if page1["next_token"]:
+    page2 = sharepoint_list_folder(
+        folder_path="/sites/mysite/Shared Documents/Archive",
+        max_results=50,
+        next_token=page1["next_token"],
+    )
+```
+
+### 一覧結果からファイルをダウンロード
+
+`sharepoint_list_folder` が返すファイルパスは `sharepoint_docs_download` にそのまま渡せます：
+
+```python
+# フォルダ内容を取得
+result = sharepoint_list_folder(folder_path="/sites/mysite/Shared Documents/Reports")
+
+# 最初のファイルをダウンロード
+file_path = result["files"][0]["path"]
+content = sharepoint_docs_download(file_path=file_path)
+```
+
+### サーバー相対URLも使用可能
+
+フルURLとサーバー相対URLの両方に対応しています：
+
+```python
+# フルURL
+sharepoint_list_folder(folder_path="https://company.sharepoint.com/sites/mysite/Shared Documents")
+
+# サーバー相対URL
+sharepoint_list_folder(folder_path="/sites/mysite/Shared Documents")
 ```
 
 ## Excel操作の使用例

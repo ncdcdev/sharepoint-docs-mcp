@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- `sharepoint_list_folder` tool for direct folder browsing (#65)
+  - Lists files and subfolders directly from SharePoint/OneDrive, bypassing the search index
+  - Useful when files are not indexed or not discoverable via `sharepoint_docs_search`
+  - Supports pagination via continuation token (`next_token`) using SharePoint's `$skiptoken` mechanism
+  - File paths in results are compatible with `sharepoint_docs_download`
+  - Supports both full URLs and server-relative URLs
+  - Can be disabled via `SHAREPOINT_DISABLED_TOOLS=sharepoint_list_folder`
+
 ## [0.5.0] - 2026-02-11
 
 ### Added

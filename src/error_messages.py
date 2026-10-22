@@ -21,6 +21,7 @@ class ErrorCategory(Enum):
     EXCEL_SHEET_NOT_FOUND = "excel_sheet_not_found"
     EXCEL_INVALID_RANGE = "excel_invalid_range"
     EXCEL_INVALID_FILE = "excel_invalid_file"
+    FOLDER_NOT_FOUND = "folder_not_found"
     UNKNOWN = "unknown"
 
 
@@ -212,6 +213,22 @@ def get_excel_invalid_file_error(original_error: Exception) -> SharePointError:
     )
 
 
+def get_folder_not_found_error(
+    folder_path: str | None, original_error: Exception
+) -> SharePointError:
+    """Generate folder not found error message"""
+    if folder_path:
+        message = f"The specified folder was not found: {folder_path}"
+    else:
+        message = "The requested folder was not found."
+    return SharePointError(
+        category=ErrorCategory.FOLDER_NOT_FOUND,
+        message=message,
+        solution="Please verify the folder path is correct. You can use sharepoint_docs_search to find a file in the target folder, then derive the folder path from its path field.",
+        original_error=original_error,
+    )
+
+
 def get_unknown_error(original_error: Exception) -> SharePointError:
     """Generate unknown error message"""
     return SharePointError(
@@ -285,6 +302,8 @@ def handle_sharepoint_error(
             return get_authorization_error(error)
         elif status_code == 404 and context == "download":
             return get_file_not_found_error(None, error, is_onedrive_file)
+        elif status_code == 404 and context == "list":
+            return get_folder_not_found_error(None, error)
 
     # Classification by error message content
     if any(
